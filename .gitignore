@@ -1,0 +1,74 @@
+#design
+design/
+
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Diagnostic reports
+report.*.json
+
+# Runtime data
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# Dependency directories
+node_modules/
+
+# Build output
+build/
+dist/
+out/
+release/
+release-builds/
+/tmp/
+/temp/
+
+# Electron packaging
+*.asar
+
+# Coverage reports
+coverage/
+*.lcov
+.nyc_output/
+
+# TypeScript / bundler cache
+*.tsbuildinfo
+.cache/
+
+# Environment & secrets
+.env
+.env.*
+!.env.example
+
+# Go build artifacts
+*.exe
+*.exe~
+*.test
+*.out
+backend/bin/
+/go-build/
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+
+# IDE & editor noise
+.vscode/
+!.vscode/extensions.json
+!.vscode/settings.json
+.idea/
+*.sw?
+*.swo
+*.swn
+
+# OS generated files
+.DS_Store
+Thumbs.db
