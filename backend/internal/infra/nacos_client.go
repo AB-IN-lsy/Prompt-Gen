@@ -40,7 +40,7 @@ var (
 	defaultNamespace = "public"
 )
 
-// NacosOptions represents connection options for Nacos config service.
+// NacosOptions 描述访问 Nacos 配置中心所需的连接参数。
 type NacosOptions struct {
 	Scheme      string
 	Host        string
@@ -53,7 +53,7 @@ type NacosOptions struct {
 	Timeout     time.Duration
 }
 
-// NewDefaultNacosOptions builds options from environment variables with safe fallbacks.
+// NewDefaultNacosOptions 从环境变量构建 Nacos 连接配置，未设置时采用默认值。
 func NewDefaultNacosOptions() (NacosOptions, error) {
 	config.LoadEnvFiles()
 
@@ -110,7 +110,7 @@ func NewDefaultNacosOptions() (NacosOptions, error) {
 	}, nil
 }
 
-// FetchNacosConfig logs in and retrieves configuration text via HTTP API.
+// FetchNacosConfig 登录 Nacos 并通过 HTTP API 获取配置文本。
 func FetchNacosConfig(ctx context.Context, opts NacosOptions, dataID, group string) (string, error) {
 	if strings.TrimSpace(dataID) == "" {
 		return "", fmt.Errorf("nacos dataID cannot be empty")
@@ -161,6 +161,7 @@ func FetchNacosConfig(ctx context.Context, opts NacosOptions, dataID, group stri
 	return string(body), nil
 }
 
+// nacosLogin 调用登录接口并返回 accessToken。
 func nacosLogin(ctx context.Context, client *http.Client, opts NacosOptions) (string, error) {
 	loginURL := buildBaseURL(opts) + "/v1/auth/login"
 	form := url.Values{}
@@ -199,6 +200,7 @@ func nacosLogin(ctx context.Context, client *http.Client, opts NacosOptions) (st
 	return payload.AccessToken, nil
 }
 
+// buildConfigURL 生成读取配置的完整 URL。
 func buildConfigURL(opts NacosOptions, dataID, group string) (string, error) {
 	base := buildBaseURL(opts) + "/v1/cs/configs"
 	u, err := url.Parse(base)
@@ -217,6 +219,7 @@ func buildConfigURL(opts NacosOptions, dataID, group string) (string, error) {
 	return u.String(), nil
 }
 
+// buildBaseURL 拼装请求的基础地址。
 func buildBaseURL(opts NacosOptions) string {
 	scheme := opts.Scheme
 	if scheme == "" {
@@ -231,6 +234,7 @@ func buildBaseURL(opts NacosOptions) string {
 	return fmt.Sprintf("%s://%s%s%s", scheme, opts.Host, portSegment, opts.ContextPath)
 }
 
+// normalizeContextPath 规范化 context path，确保格式一致。
 func normalizeContextPath(path string) string {
 	if path == "" {
 		return ""
@@ -241,6 +245,7 @@ func normalizeContextPath(path string) string {
 	return strings.TrimRight(path, "/")
 }
 
+// splitHostPort 拆分 endpoint 字符串，缺省端口时返回 8848。
 func splitHostPort(endpoint string) (string, uint64, error) {
 	if !strings.Contains(endpoint, ":") {
 		return endpoint, 8848, nil

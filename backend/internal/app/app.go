@@ -14,19 +14,27 @@ import (
 	"os"
 
 	"electron-go-app/backend/internal/config"
+	domain "electron-go-app/backend/internal/domain/user"
 	"electron-go-app/backend/internal/infra"
+
+	"gorm.io/gorm"
 )
 
+// AppConfig 描述应用启动所需的核心配置，如 Nacos 与 MySQL。
 type AppConfig struct {
 	Nacos infra.NacosOptions
 	MySQL infra.MySQLConfig
 }
 
+// Resources 封装运行期共享资源，包括 ORM 实例与原始数据库连接。
 type Resources struct {
 	Config AppConfig
-	DB     *sql.DB
+	DB     *gorm.DB
+	rawDB  *sql.DB
 }
 
+// Bootstrap 负责初始化配置、建立数据库连接并执行模型迁移。
+// 返回的 Resources 会被上层用于依赖注入和生命周期管理。
 func Bootstrap(ctx context.Context) (*Resources, error) {
 	config.LoadEnvFiles()
 
@@ -45,9 +53,13 @@ func Bootstrap(ctx context.Context) (*Resources, error) {
 		return nil, fmt.Errorf("load mysql config: %w", err)
 	}
 
-	db, err := infra.NewMySQLConn(mysqlCfg)
+	gormDB, rawDB, err := infra.NewGORMMySQL(mysqlCfg)
 	if err != nil {
 		return nil, fmt.Errorf("connect mysql: %w", err)
+	}
+
+	if err := gormDB.AutoMigrate(&domain.User{}); err != nil {
+		return nil, fmt.Errorf("auto migrate: %w", err)
 	}
 
 	return &Resources{
@@ -55,29 +67,33 @@ func Bootstrap(ctx context.Context) (*Resources, error) {
 			Nacos: nacosOpts,
 			MySQL: mysqlCfg,
 		},
-		DB: db,
+		DB:    gormDB,
+		rawDB: rawDB,
 	}, nil
 }
 
+// Close 释放底层数据库连接资源，供进程退出时调用。
 func (r *Resources) Close() error {
 	if r == nil {
 		return nil
 	}
-	if r.DB != nil {
-		if err := r.DB.Close(); err != nil {
+	if r.rawDB != nil {
+		if err := r.rawDB.Close(); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func (r *Resources) DBConn() *sql.DB {
+// DBConn 返回共享的 *gorm.DB，用于业务层构建仓储等依赖。
+func (r *Resources) DBConn() *gorm.DB {
 	if r == nil {
 		return nil
 	}
 	return r.DB
 }
 
+// WithShutdown 包裹带取消能力的执行函数，统一处理错误与收尾逻辑。
 func WithShutdown(ctx context.Context, cancel func(), fn func(context.Context) error) {
 	defer cancel()
 	if err := fn(ctx); err != nil {

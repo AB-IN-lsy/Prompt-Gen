@@ -17,6 +17,8 @@ import (
 	"electron-go-app/backend/internal/config"
 
 	_ "github.com/go-sql-driver/mysql"
+	mysqlDriver "gorm.io/driver/mysql"
+	"gorm.io/gorm"
 )
 
 const (
@@ -30,7 +32,7 @@ const (
 	defaultMySQLParams   = "charset=utf8mb4&parseTime=true&loc=Local"
 )
 
-// MySQLConfig holds database connection details resolved from Nacos.
+// MySQLConfig 描述从 Nacos 下发的数据库连接配置项。
 type MySQLConfig struct {
 	Host     string `json:"mysql.host"`
 	Port     int    `json:"mysql.port"`
@@ -40,7 +42,7 @@ type MySQLConfig struct {
 	Params   string `json:"mysql.params"`
 }
 
-// LoadMySQLConfig pulls and parses the MySQL configuration from Nacos.
+// LoadMySQLConfig 从 Nacos 拉取指定 group 的 MySQL 配置并解析。
 func LoadMySQLConfig(ctx context.Context, opts NacosOptions, group string) (MySQLConfig, error) {
 	config.LoadEnvFiles()
 
@@ -62,7 +64,7 @@ func LoadMySQLConfig(ctx context.Context, opts NacosOptions, group string) (MySQ
 	return cfg, nil
 }
 
-// NewMySQLConn opens a *sql.DB using the provided configuration.
+// NewMySQLConn 基于配置创建标准库 *sql.DB 连接。
 func NewMySQLConn(cfg MySQLConfig) (*sql.DB, error) {
 	dsn, err := BuildMySQLDSN(cfg)
 	if err != nil {
@@ -86,6 +88,36 @@ func NewMySQLConn(cfg MySQLConfig) (*sql.DB, error) {
 	return db, nil
 }
 
+// NewGORMMySQL 创建 GORM 连接并返回 ORM 与底层 *sql.DB，便于控制生命周期。
+func NewGORMMySQL(cfg MySQLConfig) (*gorm.DB, *sql.DB, error) {
+	dsn, err := BuildMySQLDSN(cfg)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	gormDB, err := gorm.Open(mysqlDriver.Open(dsn), &gorm.Config{})
+	if err != nil {
+		return nil, nil, fmt.Errorf("open gorm mysql: %w", err)
+	}
+
+	sqlDB, err := gormDB.DB()
+	if err != nil {
+		return nil, nil, fmt.Errorf("get sql db: %w", err)
+	}
+
+	sqlDB.SetConnMaxLifetime(60 * time.Minute)
+	sqlDB.SetMaxIdleConns(10)
+	sqlDB.SetMaxOpenConns(25)
+
+	if err := sqlDB.Ping(); err != nil {
+		_ = sqlDB.Close()
+		return nil, nil, fmt.Errorf("ping mysql: %w", err)
+	}
+
+	return gormDB, sqlDB, nil
+}
+
+// validateMySQLConfig 校验配置字段是否完整。
 func validateMySQLConfig(cfg MySQLConfig) error {
 	if cfg.Host == "" {
 		return fmt.Errorf("mysql host is required")
@@ -102,7 +134,7 @@ func validateMySQLConfig(cfg MySQLConfig) error {
 	return nil
 }
 
-// ParseMySQLConfig parses JSON configuration content, supplying defaults for missing optional fields.
+// ParseMySQLConfig 解析 JSON 文本并填充可选字段的默认值。
 func ParseMySQLConfig(data []byte) (MySQLConfig, error) {
 	var cfg MySQLConfig
 	if err := json.Unmarshal(data, &cfg); err != nil {
@@ -124,7 +156,7 @@ func ParseMySQLConfig(data []byte) (MySQLConfig, error) {
 	return cfg, nil
 }
 
-// BuildMySQLDSN renders a DSN string for the provided configuration after validation.
+// BuildMySQLDSN 在通过校验后拼接 MySQL DSN 字符串。
 func BuildMySQLDSN(cfg MySQLConfig) (string, error) {
 	if err := validateMySQLConfig(cfg); err != nil {
 		return "", err
