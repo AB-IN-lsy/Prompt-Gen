@@ -2,7 +2,7 @@
  * @Author: NEFU AB-IN
  * @Date: 2025-10-08 19:55:11
  * @FilePath: \electron-go-app\backend\cmd\server\main.go
- * @LastEditTime: 2025-10-08 19:55:16
+ * @LastEditTime: 2025-10-08 23:22:50
  */
 package main
 
@@ -19,9 +19,11 @@ import (
 	"electron-go-app/backend/internal/app"
 	"electron-go-app/backend/internal/handler"
 	"electron-go-app/backend/internal/infra/token"
+	"electron-go-app/backend/internal/middleware"
 	"electron-go-app/backend/internal/repository"
 	"electron-go-app/backend/internal/server"
 	authsvc "electron-go-app/backend/internal/service/auth"
+	usersvc "electron-go-app/backend/internal/service/user"
 )
 
 // main 为服务入口：初始化依赖、启动 HTTP 服务器并处理优雅停机。
@@ -54,11 +56,19 @@ func main() {
 
 	userRepo := repository.NewUserRepository(resources.DBConn())
 	jwtManager := token.NewJWTManager(jwtSecret, accessTTL, refreshTTL)
+
 	authService := authsvc.NewService(userRepo, jwtManager)
 	authHandler := handler.NewAuthHandler(authService)
 
+	userService := usersvc.NewService(userRepo)
+	userHandler := handler.NewUserHandler(userService)
+
+	authMiddleware := middleware.NewAuthMiddleware(jwtSecret)
+
 	router := server.NewRouter(server.RouterOptions{
 		AuthHandler: authHandler,
+		UserHandler: userHandler,
+		AuthMW:      authMiddleware,
 	})
 
 	srv := &http.Server{

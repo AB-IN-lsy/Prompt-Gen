@@ -12,6 +12,7 @@ import (
 	"electron-go-app/backend/internal/infra"
 )
 
+// TestParseMySQLConfigDefaults 验证解析配置时能补齐默认端口、数据库与参数。
 func TestParseMySQLConfigDefaults(t *testing.T) {
 	data := []byte(`{
         "mysql.host": "127.0.0.1",
@@ -37,6 +38,7 @@ func TestParseMySQLConfigDefaults(t *testing.T) {
 	}
 }
 
+// TestBuildMySQLDSN 构造完整 DSN，确保字段映射无误。
 func TestBuildMySQLDSN(t *testing.T) {
 	cfg := infra.MySQLConfig{
 		Host:     "127.0.0.1",
@@ -58,6 +60,7 @@ func TestBuildMySQLDSN(t *testing.T) {
 	}
 }
 
+// TestBuildMySQLDSNValidation 确认缺失必要字段时返回验证错误。
 func TestBuildMySQLDSNValidation(t *testing.T) {
 	_, err := infra.BuildMySQLDSN(infra.MySQLConfig{})
 	if err == nil {

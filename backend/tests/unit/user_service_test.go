@@ -18,6 +18,7 @@ import (
 	"gorm.io/gorm"
 )
 
+// setupUserService 使用内存 SQLite 构建用户仓储与服务，供单元测试隔离依赖。
 func setupUserService(t *testing.T) (*usersvc.Service, *repository.UserRepository, *gorm.DB) {
 	t.Helper()
 
@@ -35,6 +36,7 @@ func setupUserService(t *testing.T) (*usersvc.Service, *repository.UserRepositor
 	return svc, repo, db
 }
 
+// TestUserService_GetProfile 断言服务能够返回用户资料并填充默认设置。
 func TestUserService_GetProfile(t *testing.T) {
 	svc, repo, _ := setupUserService(t)
 
@@ -59,6 +61,7 @@ func TestUserService_GetProfile(t *testing.T) {
 	}
 }
 
+// TestUserService_UpdateSettings 验证更新设置后返回值与数据库落库一致。
 func TestUserService_UpdateSettings(t *testing.T) {
 	svc, repo, db := setupUserService(t)
 
@@ -97,6 +100,7 @@ func TestUserService_UpdateSettings(t *testing.T) {
 	}
 }
 
+// TestUserService_UserNotFound 确认查询或更新不存在用户时返回 ErrUserNotFound。
 func TestUserService_UserNotFound(t *testing.T) {
 	svc, _, _ := setupUserService(t)
 

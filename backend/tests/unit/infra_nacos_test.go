@@ -14,6 +14,7 @@ import (
 	"electron-go-app/backend/internal/infra"
 )
 
+// TestNewDefaultNacosOptions_RequiresEnv 确保缺少必要环境变量时抛出错误。
 func TestNewDefaultNacosOptions_RequiresEnv(t *testing.T) {
 	config.SetEnvFileLoadingForTest(false)
 	t.Cleanup(func() { config.SetEnvFileLoadingForTest(true) })
@@ -27,6 +28,7 @@ func TestNewDefaultNacosOptions_RequiresEnv(t *testing.T) {
 	}
 }
 
+// TestNewDefaultNacosOptions_LoadsValues 验证可以从环境变量组装完整的 Nacos 连接配置。
 func TestNewDefaultNacosOptions_LoadsValues(t *testing.T) {
 	config.SetEnvFileLoadingForTest(false)
 	t.Cleanup(func() { config.SetEnvFileLoadingForTest(true) })

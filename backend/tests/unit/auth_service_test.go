@@ -24,6 +24,7 @@ import (
 	"gorm.io/gorm/logger"
 )
 
+// newTestAuthService 创建内存版鉴权服务和仓储，便于单元测试隔离数据库依赖。
 func newTestAuthService(t *testing.T) (*auth.Service, *repository.UserRepository, *gorm.DB) {
 	t.Helper()
 
@@ -46,6 +47,7 @@ func newTestAuthService(t *testing.T) (*auth.Service, *repository.UserRepository
 	return service, repo, db
 }
 
+// TestAuthServiceRegisterAndLogin 覆盖注册成功、登录成功以及密码哈希与登录时间更新。
 func TestAuthServiceRegisterAndLogin(t *testing.T) {
 	svc, repo, _ := newTestAuthService(t)
 	ctx := context.Background()
@@ -100,6 +102,7 @@ func TestAuthServiceRegisterAndLogin(t *testing.T) {
 	}
 }
 
+// TestAuthServiceRegisterDuplicateEmailAndUsername 校验重复邮箱/用户名时返回对应错误。
 func TestAuthServiceRegisterDuplicateEmailAndUsername(t *testing.T) {
 	svc, _, _ := newTestAuthService(t)
 	ctx := context.Background()
@@ -132,6 +135,7 @@ func TestAuthServiceRegisterDuplicateEmailAndUsername(t *testing.T) {
 	}
 }
 
+// TestAuthServiceLoginInvalidCredentials 确认登录失败场景统一返回 ErrInvalidLogin。
 func TestAuthServiceLoginInvalidCredentials(t *testing.T) {
 	svc, _, _ := newTestAuthService(t)
 	ctx := context.Background()
