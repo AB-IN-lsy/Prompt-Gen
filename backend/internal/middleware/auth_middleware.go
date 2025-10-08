@@ -8,6 +8,7 @@ package middleware
 
 import (
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -45,13 +46,29 @@ func (m *AuthMiddleware) Handle() gin.HandlerFunc {
 			return
 		}
 
+		// claims 就是 JWT payload 中的键值对（MapClaims），常见字段包括 iss、exp、sub 等。
+		// 这里把它保存下来，后续 handler 可以根据需要取更多信息。
 		claims, ok := token.Claims.(jwt.MapClaims)
 		if !ok {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid token claims"})
 			return
 		}
-
 		c.Set("claims", claims)
+
+		// JWT 里的 sub（subject）通常存的是用户 ID。为了后续业务方便，这里尝试解析成数字，
+		// 并写入 Gin Context，路由中的 handler 可以直接通过 c.Get("userID") 取到当前登录用户。
+		if sub, ok := claims["sub"]; ok {
+			switch v := sub.(type) {
+			case string:
+				if id, err := strconv.ParseUint(v, 10, 64); err == nil {
+					c.Set("userID", uint(id))
+				}
+			case float64:
+				if v >= 0 {
+					c.Set("userID", uint(v))
+				}
+			}
+		}
 		c.Next()
 	}
 }

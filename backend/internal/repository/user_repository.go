@@ -29,6 +29,15 @@ func (r *UserRepository) Create(ctx context.Context, u *user.User) error {
 	return r.db.WithContext(ctx).Create(u).Error
 }
 
+// FindByID 根据主键查找用户。
+func (r *UserRepository) FindByID(ctx context.Context, id uint) (*user.User, error) {
+	var u user.User
+	if err := r.db.WithContext(ctx).First(&u, id).Error; err != nil {
+		return nil, err
+	}
+	return &u, nil
+}
+
 // FindByEmail 通过邮箱查找用户，若不存在返回 gorm.ErrRecordNotFound。
 func (r *UserRepository) FindByEmail(ctx context.Context, email string) (*user.User, error) {
 	var u user.User
@@ -50,4 +59,19 @@ func (r *UserRepository) FindByUsername(ctx context.Context, username string) (*
 // Update 按主键更新用户信息。
 func (r *UserRepository) Update(ctx context.Context, u *user.User) error {
 	return r.db.WithContext(ctx).Save(u).Error
+}
+
+// UpdateSettings 更新指定用户的设置字段。
+func (r *UserRepository) UpdateSettings(ctx context.Context, userID uint, settings string) error {
+	result := r.db.WithContext(ctx).
+		Model(&user.User{}).
+		Where("id = ?", userID).
+		Update("settings", settings)
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected == 0 {
+		return gorm.ErrRecordNotFound
+	}
+	return nil
 }

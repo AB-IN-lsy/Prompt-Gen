@@ -2,7 +2,7 @@
  * @Author: NEFU AB-IN
  * @Date: 2025-10-08 20:40:41
  * @FilePath: \electron-go-app\backend\internal\infra\token\jwt_manager.go
- * @LastEditTime: 2025-10-08 20:40:45
+ * @LastEditTime: 2025-10-08 23:05:40
  */
 package token
 
@@ -56,6 +56,8 @@ func (m *JWTManager) buildToken(user *domain.User, ttl time.Duration) (string, t
 
 	expiresAt := time.Now().Add(ttl)
 
+	// 这里使用 MapClaims，方便后续扩展自定义字段。
+	// 常见的标准字段包括 iss（签发者）、sub（主题）、aud（受众）、exp（过期时间）等。
 	claims := jwt.MapClaims{
 		"sub":      user.ID,
 		"username": user.Username,
