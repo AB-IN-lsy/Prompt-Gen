@@ -13,8 +13,10 @@ import (
 	"time"
 
 	domain "electron-go-app/backend/internal/domain/user"
+	appLogger "electron-go-app/backend/internal/infra/logger"
 	"electron-go-app/backend/internal/repository"
 
+	"go.uber.org/zap"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -42,11 +44,13 @@ type TokenManager interface {
 type Service struct {
 	users        *repository.UserRepository
 	tokenManager TokenManager
+	logger       *zap.SugaredLogger
 }
 
 // NewService 创建鉴权服务实例，并注入用户仓储与令牌管理器等核心依赖。
 func NewService(users *repository.UserRepository, tm TokenManager) *Service {
-	return &Service{users: users, tokenManager: tm}
+	baseLogger := appLogger.S().With("component", "auth.service")
+	return &Service{users: users, tokenManager: tm, logger: baseLogger}
 }
 
 // RegisterParams 封装注册接口所需的输入参数。
@@ -64,58 +68,89 @@ type LoginParams struct {
 
 // Register 完成注册流程：校验唯一性、加密密码、持久化用户并签发令牌。
 func (s *Service) Register(ctx context.Context, params RegisterParams) (*domain.User, TokenPair, error) {
+	log := s.scope("register").With(
+		"email", params.Email,
+		"username", params.Username,
+	)
+
+	log.Infow("register attempt")
+
 	if _, err := s.users.FindByEmail(ctx, params.Email); err == nil {
+		log.Warnw("email already registered")
 		return nil, TokenPair{}, ErrEmailTaken
 	}
 
 	if _, err := s.users.FindByUsername(ctx, params.Username); err == nil {
+		log.Warnw("username already taken")
 		return nil, TokenPair{}, ErrUsernameTaken
 	}
 
 	hash, err := hashPassword(params.Password)
 	if err != nil {
+		log.Errorw("hash password failed", "error", err)
 		return nil, TokenPair{}, fmt.Errorf("hash password: %w", err)
+	}
+
+	settingsJSON, err := domain.SettingsJSON(domain.DefaultSettings())
+	if err != nil {
+		log.Errorw("encode default settings failed", "error", err)
+		return nil, TokenPair{}, fmt.Errorf("default settings: %w", err)
 	}
 
 	user := &domain.User{
 		Username:     params.Username,
 		Email:        params.Email,
 		PasswordHash: hash,
+		Settings:     settingsJSON,
 	}
 
 	if err := s.users.Create(ctx, user); err != nil {
+		log.Errorw("create user failed", "error", err)
 		return nil, TokenPair{}, fmt.Errorf("create user: %w", err)
 	}
 
 	tokens, err := s.tokenManager.GenerateTokens(ctx, user)
 	if err != nil {
+		log.Errorw("generate tokens failed", "error", err, "user_id", user.ID)
 		return nil, TokenPair{}, fmt.Errorf("generate tokens: %w", err)
 	}
+
+	log.With("user_id", user.ID).Infow("user registered")
 
 	return user, tokens, nil
 }
 
 // Login 校验用户凭证，更新登录时间，并重新签发访问/刷新令牌。
 func (s *Service) Login(ctx context.Context, params LoginParams) (*domain.User, TokenPair, error) {
+	log := s.scope("login").With("email", params.Email)
+
+	log.Infow("login attempt")
+
 	user, err := s.users.FindByEmail(ctx, params.Email)
 	if err != nil {
+		log.Warnw("login email not found or repo error", "error", err)
 		return nil, TokenPair{}, ErrInvalidLogin
 	}
 
 	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(params.Password)); err != nil {
+		log.Warnw("password mismatch")
 		return nil, TokenPair{}, ErrInvalidLogin
 	}
 
 	now := time.Now()
 	user.LastLoginAt = &now
 	if err := s.users.Update(ctx, user); err != nil {
+		log.Errorw("update last login failed", "error", err, "user_id", user.ID)
 		return nil, TokenPair{}, fmt.Errorf("update last login: %w", err)
 	}
 
 	tokens, err := s.tokenManager.GenerateTokens(ctx, user)
 	if err != nil {
+		log.Errorw("generate tokens failed", "error", err, "user_id", user.ID)
 		return nil, TokenPair{}, fmt.Errorf("generate tokens: %w", err)
 	}
+
+	log.With("user_id", user.ID).Infow("login success")
 
 	return user, tokens, nil
 }
@@ -127,4 +162,15 @@ func hashPassword(password string) (string, error) {
 		return "", err
 	}
 	return string(out), nil
+}
+
+func (s *Service) ensureLogger() *zap.SugaredLogger {
+	if s.logger == nil {
+		s.logger = appLogger.S().With("component", "auth.service")
+	}
+	return s.logger
+}
+
+func (s *Service) scope(operation string) *zap.SugaredLogger {
+	return s.ensureLogger().With("operation", operation)
 }

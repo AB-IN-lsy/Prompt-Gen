@@ -9,7 +9,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"log"
 	"net/http"
 	"os"
 	"os/signal"
@@ -18,6 +17,7 @@ import (
 
 	"electron-go-app/backend/internal/app"
 	"electron-go-app/backend/internal/handler"
+	"electron-go-app/backend/internal/infra/logger"
 	"electron-go-app/backend/internal/infra/token"
 	"electron-go-app/backend/internal/middleware"
 	"electron-go-app/backend/internal/repository"
@@ -31,24 +31,31 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
+	zapLogger, err := logger.Init()
+	if err != nil {
+		panic(err)
+	}
+	defer logger.Sync()
+	sugar := zapLogger.Sugar()
+
 	resources, err := app.Bootstrap(ctx)
 	if err != nil {
-		log.Fatalf("bootstrap failed: %v", err)
+		sugar.Fatalw("bootstrap failed", "error", err)
 	}
 	defer func() {
 		if err := resources.Close(); err != nil {
-			log.Printf("resource cleanup error: %v", err)
+			sugar.Warnw("resource cleanup error", "error", err)
 		}
 	}()
 
 	port := os.Getenv("SERVER_PORT")
 	if port == "" {
-		port = "8080"
+		port = "9090"
 	}
 
 	jwtSecret := os.Getenv("JWT_SECRET")
 	if jwtSecret == "" {
-		log.Fatal("JWT_SECRET not configured")
+		sugar.Fatal("JWT_SECRET not configured")
 	}
 
 	accessTTL := parseDurationWithDefault(os.Getenv("JWT_ACCESS_TTL"), 15*time.Minute)
@@ -77,20 +84,20 @@ func main() {
 	}
 
 	go func() {
-		log.Printf("HTTP server listening on %s", srv.Addr)
+		sugar.Infow("http server listening", "addr", srv.Addr)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Fatalf("server listen: %v", err)
+			sugar.Fatalw("server listen failed", "error", err)
 		}
 	}()
 
 	<-ctx.Done()
-	log.Println("shutdown signal received")
+	sugar.Info("shutdown signal received")
 
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	if err := srv.Shutdown(shutdownCtx); err != nil {
-		log.Printf("server shutdown error: %v", err)
+		sugar.Errorw("server shutdown error", "error", err)
 	}
 }
 

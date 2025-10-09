@@ -31,9 +31,12 @@ import (
 )
 
 type userProfileResponse struct {
-	User struct {
-		ID uint `json:"id"`
-	} `json:"user"`
+	Success bool `json:"success"`
+	Data    struct {
+		User struct {
+			ID uint `json:"id"`
+		} `json:"user"`
+	} `json:"data"`
 }
 
 // setupRouter 构建完整的 Router（含 Auth/User handler 与 JWT 中间件），用于 HTTP 单测。
@@ -140,8 +143,12 @@ func TestRouter_UserEndpointsRequireJWT(t *testing.T) {
 			t.Fatalf("decode body: %v", err)
 		}
 
-		if body.User.ID != userID {
-			t.Fatalf("expected user id %d, got %d", userID, body.User.ID)
+		if !body.Success {
+			t.Fatalf("expected success=true")
+		}
+
+		if body.Data.User.ID != userID {
+			t.Fatalf("expected user id %d, got %d", userID, body.Data.User.ID)
 		}
 	})
 }

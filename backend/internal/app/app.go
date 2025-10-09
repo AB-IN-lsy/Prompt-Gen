@@ -10,12 +10,12 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"log"
 	"os"
 
 	"electron-go-app/backend/internal/config"
 	domain "electron-go-app/backend/internal/domain/user"
 	"electron-go-app/backend/internal/infra"
+	appLogger "electron-go-app/backend/internal/infra/logger"
 
 	"gorm.io/gorm"
 )
@@ -97,6 +97,6 @@ func (r *Resources) DBConn() *gorm.DB {
 func WithShutdown(ctx context.Context, cancel func(), fn func(context.Context) error) {
 	defer cancel()
 	if err := fn(ctx); err != nil {
-		log.Fatalf("application error: %v", err)
+		appLogger.S().Fatalw("application error", "error", err)
 	}
 }

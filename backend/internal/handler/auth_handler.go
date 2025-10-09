@@ -9,19 +9,24 @@ package handler
 import (
 	"net/http"
 
+	"electron-go-app/backend/internal/handler/response"
+	appLogger "electron-go-app/backend/internal/infra/logger"
 	"electron-go-app/backend/internal/service/auth"
 
 	"github.com/gin-gonic/gin"
+	"go.uber.org/zap"
 )
 
 // AuthHandler 负责对接 Gin，处理鉴权相关的 HTTP 请求。
 type AuthHandler struct {
 	service *auth.Service
+	logger  *zap.SugaredLogger
 }
 
 // NewAuthHandler 构造鉴权 handler，注入业务层服务做实际处理。
 func NewAuthHandler(service *auth.Service) *AuthHandler {
-	return &AuthHandler{service: service}
+	baseLogger := appLogger.S().With("component", "auth.handler")
+	return &AuthHandler{service: service, logger: baseLogger}
 }
 
 type registerRequest struct {
@@ -37,11 +42,16 @@ type loginRequest struct {
 
 // Register 处理用户注册的 HTTP 请求，验证参数并调用业务逻辑。
 func (h *AuthHandler) Register(c *gin.Context) {
+	log := h.scope("register")
+
 	var req registerRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		log.Warnw("invalid request body", "error", err)
+		response.Fail(c, http.StatusBadRequest, response.ErrBadRequest, err.Error(), nil)
 		return
 	}
+
+	log.Infow("register request", "email", req.Email, "username", req.Username)
 
 	user, tokens, err := h.service.Register(c.Request.Context(), auth.RegisterParams{
 		Username: req.Username,
@@ -50,29 +60,43 @@ func (h *AuthHandler) Register(c *gin.Context) {
 	})
 	if err != nil {
 		status := http.StatusInternalServerError
+		code := response.ErrInternal
 		switch err {
 		case auth.ErrEmailTaken:
 			status = http.StatusConflict
+			code = response.ErrConflict
+			log.Warnw("email already taken", "email", req.Email)
 		case auth.ErrUsernameTaken:
 			status = http.StatusConflict
+			code = response.ErrConflict
+			log.Warnw("username already taken", "username", req.Username)
+		default:
+			log.Errorw("register failed", "error", err)
 		}
-		c.JSON(status, gin.H{"error": err.Error()})
+		response.Fail(c, status, code, err.Error(), nil)
 		return
 	}
 
-	c.JSON(http.StatusCreated, gin.H{
+	log.Infow("register success", "user_id", user.ID)
+
+	response.Created(c, gin.H{
 		"user":   user,
 		"tokens": tokens,
-	})
+	}, nil)
 }
 
 // Login 处理用户登录请求，校验凭证并返回令牌。
 func (h *AuthHandler) Login(c *gin.Context) {
+	log := h.scope("login")
+
 	var req loginRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		log.Warnw("invalid request body", "error", err)
+		response.Fail(c, http.StatusBadRequest, response.ErrBadRequest, err.Error(), nil)
 		return
 	}
+
+	log.Infow("login request", "email", req.Email)
 
 	user, tokens, err := h.service.Login(c.Request.Context(), auth.LoginParams{
 		Email:    req.Email,
@@ -80,15 +104,33 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	})
 	if err != nil {
 		status := http.StatusInternalServerError
+		code := response.ErrInternal
 		if err == auth.ErrInvalidLogin {
 			status = http.StatusUnauthorized
+			code = response.ErrUnauthorized
+			log.Warnw("login failed: invalid credential", "email", req.Email)
+		} else {
+			log.Errorw("login failed", "error", err, "email", req.Email)
 		}
-		c.JSON(status, gin.H{"error": err.Error()})
+		response.Fail(c, status, code, err.Error(), nil)
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
+	log.Infow("login success", "user_id", user.ID)
+
+	response.Success(c, http.StatusOK, gin.H{
 		"user":   user,
 		"tokens": tokens,
-	})
+	}, nil)
+}
+
+func (h *AuthHandler) ensureLogger() *zap.SugaredLogger {
+	if h.logger == nil {
+		h.logger = appLogger.S().With("component", "auth.handler")
+	}
+	return h.logger
+}
+
+func (h *AuthHandler) scope(operation string) *zap.SugaredLogger {
+	return h.ensureLogger().With("operation", operation)
 }
