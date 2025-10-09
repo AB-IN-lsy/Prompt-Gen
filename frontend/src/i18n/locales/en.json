@@ -1,0 +1,149 @@
+{
+    "app": {
+        "name": "PromptGen"
+    },
+    "nav": {
+        "dashboard": "Dashboard",
+        "myPrompts": "My Prompts",
+        "workbench": "Prompt Workbench",
+        "settings": "Settings",
+        "help": "Help & Logs"
+    },
+    "appShell": {
+        "searchPlaceholder": "Search topics or keywords...",
+        "syncNow": "Sync now",
+        "logout": "Sign out"
+    },
+    "promptWorkbench": {
+        "keywordsTitle": "Keyword governance",
+        "keywordsSubtitle": "Sharpen your prompt focus",
+        "addKeyword": "Add keyword",
+        "inputPlaceholder": "Enter a keyword",
+        "positive": "Positive keyword",
+        "negative": "Negative keyword",
+        "topicDefault": "Frontend engineer interview",
+        "positiveSectionTitle": "Positive keywords",
+        "positiveHint": "Keep at least one item",
+        "negativeSectionTitle": "Negative keywords",
+        "emptySection": "No {{title}} yet. Use \"Add keyword\" to enrich it.",
+        "workbenchEyebrow": "Prompt workbench",
+        "workbenchTitle": "Craft your interview script",
+        "regenerate": "Regenerate",
+        "topicLabel": "Topic",
+        "modelLabel": "Model",
+        "draftLabel": "Prompt draft",
+        "draftPlaceholder": "Generate or edit your prompt...",
+        "autosave": "Auto save",
+        "autosaveSaving": "Saving...",
+        "autosaveSaved": "Latest changes saved automatically",
+        "cancel": "Cancel",
+        "saveDraft": "Save draft",
+        "publish": "Publish",
+        "weight": "Weight {{value}}"
+    },
+    "common": {
+        "language": "Language",
+        "confirm": "Confirm",
+        "close": "Close",
+        "loading": "Loading..."
+    },
+    "auth": {
+        "login": {
+            "title": "Welcome back",
+            "subtitle": "Sign in to continue crafting prompts",
+            "cta": "Sign in",
+            "switch": "Don't have an account?",
+            "switchCta": "Create one",
+            "success": "Signed in successfully"
+        },
+        "register": {
+            "title": "Create your PromptGen account",
+            "subtitle": "Join the workspace and start building prompts",
+            "cta": "Create account",
+            "switch": "Already registered?",
+            "switchCta": "Sign in",
+            "success": "Account created successfully"
+        },
+        "form": {
+            "username": "Username",
+            "email": "Email",
+            "password": "Password",
+            "captcha": "Captcha"
+        },
+        "validation": {
+            "usernameRequired": "Please enter a username.",
+            "usernameTooShort": "Username should be at least 2 characters.",
+            "emailInvalid": "Please enter a valid email address.",
+            "passwordRequired": "Please enter a password.",
+            "passwordTooShort": "Password should contain at least 8 characters.",
+            "captchaRequired": "Please enter the captcha code."
+        },
+        "captcha": {
+            "placeholder": "Enter the characters you see",
+            "refresh": "Refresh captcha",
+            "unavailable": "Captcha unavailable",
+            "alt": "Captcha image",
+            "required": "Please enter the captcha code",
+            "retrying": "Captcha failed to load, retrying ({{attempt}}/{{total}})…",
+            "failed": "Captcha couldn’t load. Click refresh to try again.",
+            "manualHint": "If the issue persists, please refresh the page or contact support."
+        }
+    },
+    "dashboard": {
+        "title": "Workspace dashboard",
+        "welcome": "Welcome back, {{name}}",
+        "subtitle": "Here's what's happening across your prompt workspace today.",
+        "createPrompt": "Create prompt",
+        "openWorkbench": "Open workbench",
+        "metrics": {
+            "activePrompts": "Active prompts",
+            "drafts": "Drafts awaiting review",
+            "successRate": "Average success rate"
+        },
+        "trend": {
+            "up": "+{{value}} vs last week",
+            "down": "-{{value}} vs last week"
+        },
+        "activity": {
+            "title": "Recent activity",
+            "empty": "No activity yet. Publish a prompt to see updates."
+        },
+        "activityItems": {
+            "promptPublished": "Published prompt “{{title}}”",
+            "promptUpdated": "Updated draft “{{title}}”",
+            "keywordAdded": "Added keyword “{{title}}”"
+        },
+        "performance": {
+            "title": "Prompt performance",
+            "cta": "See all analytics",
+            "columns": {
+                "prompt": "Prompt",
+                "model": "Model",
+                "conversion": "Conversion"
+            }
+        },
+        "insights": {
+            "title": "Keyword spotlight",
+            "subtitle": "Top performing keywords this week"
+        }
+    },
+    "settings": {
+        "title": "Settings",
+        "languageCardTitle": "Language",
+        "languageCardDescription": "Switch the interface language between English and Simplified Chinese.",
+        "languageSelectLabel": "Display language"
+    },
+    "errors": {
+        "generic": "Something went wrong. Please try again.",
+        "BAD_REQUEST": "The request was invalid.",
+        "UNAUTHORIZED": "Your session has expired. Please sign in again.",
+        "FORBIDDEN": "You don\u2019t have permission to perform this action.",
+        "NOT_FOUND": "The requested resource was not found.",
+        "CONFLICT": "The data you submitted conflicts with existing records.",
+        "TOO_MANY_REQUESTS": "You are sending requests too quickly. Please wait a moment.",
+        "INTERNAL_ERROR": "The server encountered an error.",
+        "CAPTCHA_INVALID": "The captcha code is incorrect.",
+        "CAPTCHA_EXPIRED": "The captcha has expired. Please request a new one.",
+        "CAPTCHA_REQUIRED": "Captcha verification is required."
+    }
+}

@@ -1,0 +1,149 @@
+{
+    "app": {
+        "name": "PromptGen"
+    },
+    "nav": {
+        "dashboard": "Dashboard",
+        "myPrompts": "我的 Prompt",
+        "workbench": "Prompt 工作台",
+        "settings": "设置",
+        "help": "帮助与日志"
+    },
+    "appShell": {
+        "searchPlaceholder": "搜索主题或关键词...",
+        "syncNow": "立即同步",
+        "logout": "退出登录"
+    },
+    "promptWorkbench": {
+        "keywordsTitle": "关键词治理",
+        "keywordsSubtitle": "调优提示词焦点",
+        "addKeyword": "添加关键词",
+        "inputPlaceholder": "输入关键词",
+        "positive": "正向关键词",
+        "negative": "负向关键词",
+        "topicDefault": "前端工程师面试",
+        "positiveSectionTitle": "正向关键词",
+        "positiveHint": "至少保留一项",
+        "negativeSectionTitle": "负向关键词",
+        "emptySection": "暂无{{title}}，可通过“添加关键词”迅速补充。",
+        "workbenchEyebrow": "Prompt 工作台",
+        "workbenchTitle": "打造你的面试脚本",
+        "regenerate": "再次生成",
+        "topicLabel": "主题",
+        "modelLabel": "模型选择",
+        "draftLabel": "Prompt 草稿",
+        "draftPlaceholder": "生成或编辑你的 Prompt...",
+        "autosave": "自动保存",
+        "autosaveSaving": "保存中...",
+        "autosaveSaved": "最新变更已自动保存",
+        "cancel": "取消",
+        "saveDraft": "保存草稿",
+        "publish": "发布",
+        "weight": "权重 {{value}}"
+    },
+    "common": {
+        "language": "语言",
+        "confirm": "确认",
+        "close": "关闭",
+        "loading": "加载中..."
+    },
+    "auth": {
+        "login": {
+            "title": "欢迎回来",
+            "subtitle": "登录后继续打造你的 Prompt",
+            "cta": "登录",
+            "switch": "还没有账号？",
+            "switchCta": "立即注册",
+            "success": "登录成功"
+        },
+        "register": {
+            "title": "注册 PromptGen 账号",
+            "subtitle": "加入工作台并开始构建提示词",
+            "cta": "创建账号",
+            "switch": "已经有账号？",
+            "switchCta": "直接登录",
+            "success": "账号创建成功"
+        },
+        "form": {
+            "username": "用户名",
+            "email": "邮箱",
+            "password": "密码",
+            "captcha": "验证码"
+        },
+        "validation": {
+            "usernameRequired": "请填写用户名",
+            "usernameTooShort": "用户名至少需要 2 个字符",
+            "emailInvalid": "请填写合法的邮箱地址",
+            "passwordRequired": "请填写密码",
+            "passwordTooShort": "密码至少需要 8 个字符",
+            "captchaRequired": "请填写验证码"
+        },
+        "captcha": {
+            "placeholder": "请输入图中的字符",
+            "refresh": "刷新验证码",
+            "unavailable": "暂无法获取验证码",
+            "alt": "验证码图片",
+            "required": "请填写上方的验证码",
+            "retrying": "验证码加载失败，正在自动重试 ({{attempt}}/{{total}})…",
+            "failed": "验证码仍未加载成功，请刷新后再试。",
+            "manualHint": "如多次失败，请刷新页面或联系管理员。"
+        }
+    },
+    "dashboard": {
+        "title": "工作台概览",
+        "welcome": "欢迎回来，{{name}}",
+        "subtitle": "了解今天 Prompt 工作台的关键动态。",
+        "createPrompt": "创建 Prompt",
+        "openWorkbench": "打开工作台",
+        "metrics": {
+            "activePrompts": "在线 Prompt",
+            "drafts": "待审核草稿",
+            "successRate": "平均成功率"
+        },
+        "trend": {
+            "up": "较上周提升 {{value}}",
+            "down": "较上周下降 {{value}}"
+        },
+        "activity": {
+            "title": "最新动态",
+            "empty": "暂时没有动态，发布一个 Prompt 吧。"
+        },
+        "activityItems": {
+            "promptPublished": "发布了 Prompt「{{title}}」",
+            "promptUpdated": "更新了草稿「{{title}}」",
+            "keywordAdded": "新增关键词「{{title}}」"
+        },
+        "performance": {
+            "title": "Prompt 表现",
+            "cta": "查看全部分析",
+            "columns": {
+                "prompt": "Prompt",
+                "model": "模型",
+                "conversion": "转化率"
+            }
+        },
+        "insights": {
+            "title": "关键词聚焦",
+            "subtitle": "本周表现最佳的关键词"
+        }
+    },
+    "settings": {
+        "title": "设置",
+        "languageCardTitle": "界面语言",
+        "languageCardDescription": "在英文与简体中文之间切换界面显示语言。",
+        "languageSelectLabel": "显示语言"
+    },
+    "errors": {
+        "generic": "发生异常，请稍后重试。",
+        "BAD_REQUEST": "请求参数有误，请检查后重试。",
+        "UNAUTHORIZED": "登录状态已过期，请重新登录。",
+        "FORBIDDEN": "您没有执行该操作的权限。",
+        "NOT_FOUND": "未找到相关资源。",
+        "CONFLICT": "提交的数据与现有记录冲突。",
+        "TOO_MANY_REQUESTS": "请求过于频繁，请稍后再试。",
+        "INTERNAL_ERROR": "服务器开小差了。",
+        "CAPTCHA_INVALID": "验证码不正确。",
+        "CAPTCHA_EXPIRED": "验证码已过期，请重新获取。",
+        "CAPTCHA_REQUIRED": "需要填写验证码。"
+    }
+}
