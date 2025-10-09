@@ -11,12 +11,14 @@ import (
 	"database/sql"
 	"fmt"
 	"os"
+	"strings"
 
 	"electron-go-app/backend/internal/config"
 	domain "electron-go-app/backend/internal/domain/user"
 	infra "electron-go-app/backend/internal/infra/client"
 	appLogger "electron-go-app/backend/internal/infra/logger"
 
+	"github.com/redis/go-redis/v9"
 	"gorm.io/gorm"
 )
 
@@ -24,6 +26,7 @@ import (
 type AppConfig struct {
 	Nacos infra.NacosOptions
 	MySQL infra.MySQLConfig
+	Redis *infra.RedisOptions
 }
 
 // Resources 封装运行期共享资源，包括 ORM 实例与原始数据库连接。
@@ -31,6 +34,7 @@ type Resources struct {
 	Config AppConfig
 	DB     *gorm.DB
 	rawDB  *sql.DB
+	Redis  *redis.Client
 }
 
 // Bootstrap 负责初始化配置、建立数据库连接并执行模型迁移。
@@ -62,13 +66,36 @@ func Bootstrap(ctx context.Context) (*Resources, error) {
 		return nil, fmt.Errorf("auto migrate: %w", err)
 	}
 
+	var (
+		redisOpts   *infra.RedisOptions
+		redisClient *redis.Client
+	)
+
+	// 如果设置了 Redis 端点，则尝试建立连接，为验证码等功能提供存储。
+	if endpoint := strings.TrimSpace(os.Getenv("REDIS_ENDPOINT")); endpoint != "" {
+		opts, err := infra.NewDefaultRedisOptions()
+		if err != nil {
+			return nil, fmt.Errorf("load redis config: %w", err)
+		}
+		client, err := infra.NewRedisClient(opts)
+		if err != nil {
+			return nil, fmt.Errorf("connect redis: %w", err)
+		}
+		redisOpts = &opts
+		redisClient = client
+	} else {
+		appLogger.S().Infow("redis not configured, captcha feature disabled")
+	}
+
 	return &Resources{
 		Config: AppConfig{
 			Nacos: nacosOpts,
 			MySQL: mysqlCfg,
+			Redis: redisOpts,
 		},
 		DB:    gormDB,
 		rawDB: rawDB,
+		Redis: redisClient,
 	}, nil
 }
 
@@ -79,6 +106,11 @@ func (r *Resources) Close() error {
 	}
 	if r.rawDB != nil {
 		if err := r.rawDB.Close(); err != nil {
+			return err
+		}
+	}
+	if r.Redis != nil {
+		if err := r.Redis.Close(); err != nil {
 			return err
 		}
 	}

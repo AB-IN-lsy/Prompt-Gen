@@ -19,7 +19,7 @@ import (
 
 	domain "electron-go-app/backend/internal/domain/user"
 	"electron-go-app/backend/internal/handler"
-	"electron-go-app/backend/internal/handler/response"
+	response "electron-go-app/backend/internal/infra/common"
 	"electron-go-app/backend/internal/infra/token"
 	"electron-go-app/backend/internal/middleware"
 	"electron-go-app/backend/internal/repository"
@@ -49,7 +49,7 @@ func setupAuthFlow(t *testing.T) *gin.Engine {
 	repo := repository.NewUserRepository(db)
 	secret := "integration-secret"
 	jwtManager := token.NewJWTManager(secret, time.Minute*5, time.Hour)
-	authService := authsvc.NewService(repo, jwtManager)
+	authService := authsvc.NewService(repo, jwtManager, nil)
 	userService := usersvc.NewService(repo)
 
 	authHandler := handler.NewAuthHandler(authService)

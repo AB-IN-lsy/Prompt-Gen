@@ -8,6 +8,7 @@ package handler
 
 import (
 	"net/http"
+	"strings"
 
 	response "electron-go-app/backend/internal/infra/common"
 	appLogger "electron-go-app/backend/internal/infra/logger"
@@ -30,9 +31,11 @@ func NewAuthHandler(service *auth.Service) *AuthHandler {
 }
 
 type registerRequest struct {
-	Username string `json:"username" binding:"required,min=3"`
-	Email    string `json:"email" binding:"required,email"`
-	Password string `json:"password" binding:"required,min=6"`
+	Username    string `json:"username" binding:"required,min=3"`
+	Email       string `json:"email" binding:"required,email"`
+	Password    string `json:"password" binding:"required,min=6"`
+	CaptchaID   string `json:"captcha_id"`
+	CaptchaCode string `json:"captcha_code"`
 }
 
 type loginRequest struct {
@@ -51,12 +54,22 @@ func (h *AuthHandler) Register(c *gin.Context) {
 		return
 	}
 
+	if h.service.CaptchaEnabled() {
+		if strings.TrimSpace(req.CaptchaID) == "" || strings.TrimSpace(req.CaptchaCode) == "" {
+			log.Warn("missing captcha fields")
+			response.Fail(c, http.StatusBadRequest, response.ErrCaptchaRequired, "captcha is required", nil)
+			return
+		}
+	}
+
 	log.Infow("register request", "email", req.Email, "username", req.Username)
 
 	user, tokens, err := h.service.Register(c.Request.Context(), auth.RegisterParams{
-		Username: req.Username,
-		Email:    req.Email,
-		Password: req.Password,
+		Username:    req.Username,
+		Email:       req.Email,
+		Password:    req.Password,
+		CaptchaID:   req.CaptchaID,
+		CaptchaCode: req.CaptchaCode,
 	})
 	if err != nil {
 		status := http.StatusInternalServerError
@@ -70,6 +83,18 @@ func (h *AuthHandler) Register(c *gin.Context) {
 			status = http.StatusConflict
 			code = response.ErrConflict
 			log.Warnw("username already taken", "username", req.Username)
+		case auth.ErrCaptchaRequired:
+			status = http.StatusBadRequest
+			code = response.ErrCaptchaRequired
+			log.Warn("captcha required but missing")
+		case auth.ErrCaptchaInvalid:
+			status = http.StatusBadRequest
+			code = response.ErrCaptchaInvalid
+			log.Warn("captcha invalid")
+		case auth.ErrCaptchaExpired:
+			status = http.StatusBadRequest
+			code = response.ErrCaptchaExpired
+			log.Warn("captcha expired")
 		default:
 			log.Errorw("register failed", "error", err)
 		}
@@ -121,6 +146,33 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	response.Success(c, http.StatusOK, gin.H{
 		"user":   user,
 		"tokens": tokens,
+	}, nil)
+}
+
+// Captcha 生成图形验证码并返回 base64 图片与标识。
+func (h *AuthHandler) Captcha(c *gin.Context) {
+	if !h.service.CaptchaEnabled() {
+		response.Fail(c, http.StatusNotFound, response.ErrNotFound, "captcha not configured", nil)
+		return
+	}
+
+	ip := c.ClientIP()
+	id, img, err := h.service.GenerateCaptcha(c.Request.Context(), ip)
+	if err != nil {
+		status := http.StatusInternalServerError
+		code := response.ErrInternal
+		if err == auth.ErrCaptchaRateLimited {
+			status = http.StatusTooManyRequests
+			code = response.ErrTooManyRequests
+		}
+		h.scope("captcha").Errorw("generate captcha failed", "error", err, "ip", ip)
+		response.Fail(c, status, code, err.Error(), nil)
+		return
+	}
+
+	response.Success(c, http.StatusOK, gin.H{
+		"captcha_id": id,
+		"image":      img,
 	}, nil)
 }
 

@@ -16,7 +16,7 @@ import (
 	"testing"
 	"time"
 
-	"electron-go-app/backend/internal/infra"
+	infra "electron-go-app/backend/internal/infra/client"
 )
 
 func TestNacosGetConfig(t *testing.T) {

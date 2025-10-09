@@ -42,7 +42,7 @@ func newTestAuthService(t *testing.T) (*auth.Service, *repository.UserRepository
 
 	repo := repository.NewUserRepository(db)
 	tokenManager := token.NewJWTManager("test-secret", time.Minute, 24*time.Hour)
-	service := auth.NewService(repo, tokenManager)
+	service := auth.NewService(repo, tokenManager, nil)
 
 	return service, repo, db
 }

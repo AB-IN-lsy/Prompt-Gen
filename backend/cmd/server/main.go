@@ -2,13 +2,12 @@
  * @Author: NEFU AB-IN
  * @Date: 2025-10-08 19:55:11
  * @FilePath: \electron-go-app\backend\cmd\server\main.go
- * @LastEditTime: 2025-10-08 23:22:50
+ * @LastEditTime: 2025-10-09 20:42:05
  */
 package main
 
 import (
 	"context"
-	"fmt"
 	"net/http"
 	"os"
 	"os/signal"
@@ -16,14 +15,10 @@ import (
 	"time"
 
 	"electron-go-app/backend/internal/app"
-	"electron-go-app/backend/internal/handler"
+	"electron-go-app/backend/internal/bootstrap"
 	"electron-go-app/backend/internal/infra/logger"
-	"electron-go-app/backend/internal/infra/token"
-	"electron-go-app/backend/internal/middleware"
-	"electron-go-app/backend/internal/repository"
-	"electron-go-app/backend/internal/server"
-	authsvc "electron-go-app/backend/internal/service/auth"
-	usersvc "electron-go-app/backend/internal/service/user"
+
+	"go.uber.org/zap"
 )
 
 // main 为服务入口：初始化依赖、启动 HTTP 服务器并处理优雅停机。
@@ -31,23 +26,77 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
+	logger := initLogger()
+	defer logger.Sync()
+	sugar := logger.Sugar()
+
+	resources := mustBootstrap(ctx, sugar)
+	defer closeResources(resources, sugar)
+
+	runtimeCfg := loadRuntimeConfig(sugar)
+	app, err := bootstrap.BuildApplication(ctx, sugar, resources, bootstrap.RuntimeConfig{
+		Port:       runtimeCfg.port,
+		JWTSecret:  runtimeCfg.jwtSecret,
+		AccessTTL:  runtimeCfg.accessTTL,
+		RefreshTTL: runtimeCfg.refreshTTL,
+	})
+	if err != nil {
+		sugar.Fatalw("build application failed", "error", err)
+	}
+
+	server := &http.Server{
+		Addr:    ":" + runtimeCfg.port,
+		Handler: app.Router,
+	}
+
+	go func() {
+		sugar.Infow("http server listening", "addr", server.Addr)
+		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			sugar.Fatalw("server listen failed", "error", err)
+		}
+	}()
+
+	<-ctx.Done()
+	sugar.Info("shutdown signal received")
+
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	if err := server.Shutdown(shutdownCtx); err != nil {
+		sugar.Errorw("server shutdown error", "error", err)
+	}
+}
+
+func initLogger() *zap.Logger {
 	zapLogger, err := logger.Init()
 	if err != nil {
 		panic(err)
 	}
-	defer logger.Sync()
-	sugar := zapLogger.Sugar()
+	return zapLogger
+}
 
+func mustBootstrap(ctx context.Context, sugar *zap.SugaredLogger) *app.Resources {
 	resources, err := app.Bootstrap(ctx)
 	if err != nil {
 		sugar.Fatalw("bootstrap failed", "error", err)
 	}
-	defer func() {
-		if err := resources.Close(); err != nil {
-			sugar.Warnw("resource cleanup error", "error", err)
-		}
-	}()
+	return resources
+}
 
+func closeResources(resources *app.Resources, sugar *zap.SugaredLogger) {
+	if err := resources.Close(); err != nil {
+		sugar.Warnw("resource cleanup error", "error", err)
+	}
+}
+
+type runtimeConfig struct {
+	port       string
+	jwtSecret  string
+	accessTTL  time.Duration
+	refreshTTL time.Duration
+}
+
+func loadRuntimeConfig(sugar *zap.SugaredLogger) runtimeConfig {
 	port := os.Getenv("SERVER_PORT")
 	if port == "" {
 		port = "9090"
@@ -61,43 +110,11 @@ func main() {
 	accessTTL := parseDurationWithDefault(os.Getenv("JWT_ACCESS_TTL"), 15*time.Minute)
 	refreshTTL := parseDurationWithDefault(os.Getenv("JWT_REFRESH_TTL"), 7*24*time.Hour)
 
-	userRepo := repository.NewUserRepository(resources.DBConn())
-	jwtManager := token.NewJWTManager(jwtSecret, accessTTL, refreshTTL)
-
-	authService := authsvc.NewService(userRepo, jwtManager)
-	authHandler := handler.NewAuthHandler(authService)
-
-	userService := usersvc.NewService(userRepo)
-	userHandler := handler.NewUserHandler(userService)
-
-	authMiddleware := middleware.NewAuthMiddleware(jwtSecret)
-
-	router := server.NewRouter(server.RouterOptions{
-		AuthHandler: authHandler,
-		UserHandler: userHandler,
-		AuthMW:      authMiddleware,
-	})
-
-	srv := &http.Server{
-		Addr:    fmt.Sprintf(":%s", port),
-		Handler: router,
-	}
-
-	go func() {
-		sugar.Infow("http server listening", "addr", srv.Addr)
-		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			sugar.Fatalw("server listen failed", "error", err)
-		}
-	}()
-
-	<-ctx.Done()
-	sugar.Info("shutdown signal received")
-
-	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	if err := srv.Shutdown(shutdownCtx); err != nil {
-		sugar.Errorw("server shutdown error", "error", err)
+	return runtimeConfig{
+		port:       port,
+		jwtSecret:  jwtSecret,
+		accessTTL:  accessTTL,
+		refreshTTL: refreshTTL,
 	}
 }
 

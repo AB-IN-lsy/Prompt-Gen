@@ -20,8 +20,8 @@ import (
 
 	domain "electron-go-app/backend/internal/domain/user"
 	"electron-go-app/backend/internal/handler"
-	"electron-go-app/backend/internal/handler/response"
-	"electron-go-app/backend/internal/infra"
+	"electron-go-app/backend/internal/infra/client"
+	response "electron-go-app/backend/internal/infra/common"
 	"electron-go-app/backend/internal/infra/token"
 	"electron-go-app/backend/internal/middleware"
 	"electron-go-app/backend/internal/repository"
@@ -41,14 +41,14 @@ func requireE2EEnabled(t *testing.T) {
 }
 
 // loadRemoteMySQLConfig 优先读取显式配置，其次走 Nacos 获取线上数据源。
-func loadRemoteMySQLConfig(t *testing.T, ctx context.Context) infra.MySQLConfig {
+func loadRemoteMySQLConfig(t *testing.T, ctx context.Context) client.MySQLConfig {
 	t.Helper()
 
 	if cfg, ok := mysqlConfigFromEnv(); ok {
 		return cfg
 	}
 
-	opts, err := infra.NewDefaultNacosOptions()
+	opts, err := client.NewDefaultNacosOptions()
 	if err != nil {
 		t.Fatalf("build nacos options: %v", err)
 	}
@@ -58,7 +58,7 @@ func loadRemoteMySQLConfig(t *testing.T, ctx context.Context) infra.MySQLConfig 
 		group = "DEFAULT_GROUP"
 	}
 
-	cfg, err := infra.LoadMySQLConfig(ctx, opts, group)
+	cfg, err := client.LoadMySQLConfig(ctx, opts, group)
 	if err != nil {
 		t.Fatalf("load mysql config: %v", err)
 	}
@@ -67,17 +67,17 @@ func loadRemoteMySQLConfig(t *testing.T, ctx context.Context) infra.MySQLConfig 
 }
 
 // mysqlConfigFromEnv 解析直连配置，便于在测试环境覆盖默认值。
-func mysqlConfigFromEnv() (infra.MySQLConfig, bool) {
+func mysqlConfigFromEnv() (client.MySQLConfig, bool) {
 	host := os.Getenv("MYSQL_TEST_HOST")
 	user := os.Getenv("MYSQL_TEST_USER")
 	pass := os.Getenv("MYSQL_TEST_PASS")
 	dbName := os.Getenv("MYSQL_TEST_DB")
 
 	if host == "" || user == "" || pass == "" || dbName == "" {
-		return infra.MySQLConfig{}, false
+		return client.MySQLConfig{}, false
 	}
 
-	cfg := infra.MySQLConfig{
+	cfg := client.MySQLConfig{
 		Host:     host,
 		Username: user,
 		Password: pass,
@@ -92,24 +92,24 @@ func mysqlConfigFromEnv() (infra.MySQLConfig, bool) {
 func connectRedis(t *testing.T, ctx context.Context) *redis.Client {
 	t.Helper()
 
-	opts, err := infra.NewDefaultRedisOptions()
+	opts, err := client.NewDefaultRedisOptions()
 	if err != nil {
 		t.Fatalf("build redis options: %v", err)
 	}
 
-	client, err := infra.NewRedisClient(opts)
+	redisClient, err := client.NewRedisClient(opts)
 	if err != nil {
 		t.Fatalf("connect redis: %v", err)
 	}
 
 	key := fmt.Sprintf("e2e:redis:ping:%d", time.Now().UnixNano())
-	if err := client.Set(ctx, key, "ok", time.Minute).Err(); err != nil {
+	if err := redisClient.Set(ctx, key, "ok", time.Minute).Err(); err != nil {
 		t.Fatalf("redis set: %v", err)
 	}
-	t.Cleanup(func() { _ = client.Del(context.Background(), key).Err() })
-	t.Cleanup(func() { _ = client.Close() })
+	t.Cleanup(func() { _ = redisClient.Del(context.Background(), key).Err() })
+	t.Cleanup(func() { _ = redisClient.Close() })
 
-	return client
+	return redisClient
 }
 
 // setupRemoteRouter 复用生产 Handler，但不真正启动 HTTP 端口。
@@ -118,7 +118,7 @@ func setupRemoteRouter(t *testing.T, gormRepo *repository.UserRepository, secret
 
 	gin.SetMode(gin.ReleaseMode)
 
-	authService := authsvc.NewService(gormRepo, token.NewJWTManager(secret, 5*time.Minute, 24*time.Hour))
+	authService := authsvc.NewService(gormRepo, token.NewJWTManager(secret, 5*time.Minute, 24*time.Hour), nil)
 	userService := usersvc.NewService(gormRepo)
 
 	authHandler := handler.NewAuthHandler(authService)
@@ -172,7 +172,7 @@ func TestRemoteAuthFlow(t *testing.T) {
 	// Step 1: 通过 ENV / Nacos 解析 MySQL 配置，与线上数据库建立连接。
 	cfg := loadRemoteMySQLConfig(t, ctx)
 	t.Logf("connecting mysql host=%s db=%s", cfg.Host, cfg.Database)
-	gormDB, sqlDB, err := infra.NewGORMMySQL(cfg)
+	gormDB, sqlDB, err := client.NewGORMMySQL(cfg)
 	if err != nil {
 		t.Fatalf("connect mysql: %v", err)
 	}

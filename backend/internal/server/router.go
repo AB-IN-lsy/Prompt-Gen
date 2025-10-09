@@ -39,6 +39,7 @@ func NewRouter(opts RouterOptions) *gin.Engine {
 	{
 		authGroup := api.Group("/auth")
 		{
+			authGroup.GET("/captcha", opts.AuthHandler.Captcha)
 			authGroup.POST("/register", opts.AuthHandler.Register)
 			authGroup.POST("/login", opts.AuthHandler.Login)
 		}

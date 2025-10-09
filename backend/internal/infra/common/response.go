@@ -29,6 +29,9 @@ const (
 	ErrConflict        ErrorCode = "CONFLICT"
 	ErrTooManyRequests ErrorCode = "TOO_MANY_REQUESTS"
 	ErrInternal        ErrorCode = "INTERNAL_ERROR"
+	ErrCaptchaInvalid  ErrorCode = "CAPTCHA_INVALID"
+	ErrCaptchaExpired  ErrorCode = "CAPTCHA_EXPIRED"
+	ErrCaptchaRequired ErrorCode = "CAPTCHA_REQUIRED"
 )
 
 // Error 描述错误响应的统一结构。
