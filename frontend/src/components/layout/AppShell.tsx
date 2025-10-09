@@ -5,7 +5,7 @@
  * @LastEditTime: 2025-10-09 22:43:50
  */
 import { NavLink, useNavigate } from "react-router-dom";
-import { ReactNode, useCallback } from "react";
+import { ReactNode, useCallback, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { cn } from "../../lib/utils";
 import { Search, Settings, HelpCircle, LayoutDashboard, Sparkles, LogOut, ListChecks } from "lucide-react";
@@ -36,6 +36,13 @@ export function AppShell({ children, rightSlot }: AppShellProps) {
         await logout();
         navigate("/login", { replace: true });
     }, [logout, navigate]);
+
+    const avatarInitial = useMemo(() => {
+        if (!profile?.user.username) {
+            return "";
+        }
+        return profile.user.username.charAt(0).toUpperCase();
+    }, [profile?.user.username]);
 
     return (
         <div className="flex h-screen w-screen bg-gradient-to-br from-[#F8F9FA] via-[#EEF2FF] to-[#E9EDFF] text-[var(--fg)]">
@@ -91,7 +98,17 @@ export function AppShell({ children, rightSlot }: AppShellProps) {
                             {t("appShell.syncNow")}
                         </Button>
                         <div className="flex h-9 items-center gap-3 rounded-full border border-white/60 bg-white/80 px-3 shadow-sm">
-                            <div className="h-7 w-7 rounded-full bg-primary/20" />
+                            {profile?.user.avatar_url ? (
+                                <img
+                                    src={profile.user.avatar_url}
+                                    alt={profile.user.username}
+                                    className="h-7 w-7 rounded-full object-cover"
+                                />
+                            ) : (
+                                <div className="flex h-7 w-7 items-center justify-center rounded-full bg-primary/20 text-xs font-semibold text-primary">
+                                    {avatarInitial}
+                                </div>
+                            )}
                             <span className="text-sm text-slate-600">{profile?.user.username}</span>
                         </div>
                     </div>

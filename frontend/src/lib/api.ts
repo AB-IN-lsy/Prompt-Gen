@@ -106,6 +106,7 @@ export interface AuthUser {
   id: number;
   username: string;
   email: string;
+  avatar_url?: string | null;
   last_login_at?: string | null;
   created_at?: string;
   updated_at?: string;
@@ -135,6 +136,15 @@ export interface RegisterRequest extends LoginRequest {
   username: string;
   captcha_id?: string;
   captcha_code?: string;
+  avatar_url?: string;
+}
+
+export interface UpdateCurrentUserRequest {
+  username?: string;
+  email?: string;
+  avatar_url?: string | null;
+  preferred_model?: string;
+  sync_enabled?: boolean;
 }
 
 export interface CaptchaResponse {
@@ -301,6 +311,21 @@ export async function register(payload: RegisterRequest): Promise<AuthResponse> 
   }
 }
 
+/** 上传头像文件并返回可公开访问的 URL。 */
+export async function uploadAvatar(file: File): Promise<string> {
+  const formData = new FormData();
+  formData.append("avatar", file);
+
+  try {
+    const response: AxiosResponse<{ avatar_url: string }> = await http.post("/uploads/avatar", formData, {
+      headers: { "Content-Type": "multipart/form-data" },
+    });
+    return response.data.avatar_url;
+  } catch (error) {
+    throw normaliseError(error);
+  }
+}
+
 /** 刷新 access token，通常由 http 拦截器内部调用。 */
 export async function refreshTokens(refreshToken: string): Promise<AuthTokens> {
   try {
@@ -326,6 +351,16 @@ export async function logout(refreshToken: string): Promise<void> {
 export async function fetchCurrentUser(): Promise<AuthProfile> {
   try {
     const response: AxiosResponse<AuthProfile> = await http.get("/users/me");
+    return response.data;
+  } catch (error) {
+    throw normaliseError(error);
+  }
+}
+
+/** 更新当前登录用户的基础资料和设置。 */
+export async function updateCurrentUser(payload: UpdateCurrentUserRequest): Promise<AuthProfile> {
+  try {
+    const response: AxiosResponse<AuthProfile> = await http.put("/users/me", payload);
     return response.data;
   } catch (error) {
     throw normaliseError(error);

@@ -3,7 +3,7 @@ import { jsx as _jsx, jsxs as _jsxs } from "react/jsx-runtime";
  * @Author: NEFU AB-IN
  * @Date: 2025-10-09 23:55:37
  * @FilePath: \electron-go-app\frontend\src\pages\Login.tsx
- * @LastEditTime: 2025-10-09 23:55:42
+ * @LastEditTime: 2025-10-10 00:59:05
  */
 import { useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
@@ -20,8 +20,10 @@ export default function LoginPage() {
     const { t } = useTranslation();
     const navigate = useNavigate();
     const [credentials, setCredentials] = useState({ email: "", password: "" });
+    // 行内校验的错误信息容器，按字段分别存储提示文案。
     const [fieldErrors, setFieldErrors] = useState({});
     const authenticate = useAuth((state) => state.authenticate);
+    // 单字段校验逻辑：在输入过程与提交前复用，确保提示一致。
     const validateField = (field, value) => {
         if (field === "email") {
             if (!value.trim()) {
@@ -42,6 +44,7 @@ export default function LoginPage() {
         }
         return undefined;
     };
+    // 提交前的整体校验，汇总所有字段错误。
     const validateAll = () => {
         return {
             email: validateField("email", credentials.email),
@@ -54,10 +57,12 @@ export default function LoginPage() {
             await authenticate(auth.tokens);
         },
         onSuccess: () => {
+            // 登录成功后的友好提示与跳转。
             toast.success(t("auth.login.success"));
             navigate("/prompt-workbench", { replace: true });
         },
         onError: (error) => {
+            // 后端错误优先显示字典翻译，兜底使用通用提示。
             let message = t("errors.generic");
             if (error instanceof ApiError) {
                 if (error.code) {
@@ -98,6 +103,7 @@ export default function LoginPage() {
         }
         return error.message ?? t("errors.generic");
     }, [error, t]);
+    // 禁用提交按钮的条件：请求中、存在校验错误或必填项为空。
     const isSubmitDisabled = mutation.isPending ||
         Object.values(fieldErrors).some(Boolean) ||
         !credentials.email.trim() ||

@@ -8,7 +8,7 @@
  * @fileoverview Axios instance pre-configured for the PromptGen backend contract.
  *
  * Features:
- *  - Base URL derived from `VITE_API_BASE_URL` (fallback `/api`).
+ *  - Base URL derived from `VITE_API_BASE_URL` (fallback `http://localhost:9090/api`).
  *  - Automatic `Authorization` header injection using the stored access token.
  *  - Envelope-aware response handling (unwraps `{ success, data, meta }`).
  *  - Normalised error mapping to `ApiError`.
@@ -17,7 +17,18 @@
 import axios from "axios";
 import { ApiError } from "./errors";
 import { clearTokenPair, getTokenPair, isAccessTokenExpired, setTokenPair } from "./tokenStorage";
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "/api";
+function resolveDefaultBaseUrl() {
+    const fallback = "http://localhost:9090/api";
+    const envBaseUrl = (import.meta.env?.VITE_API_BASE_URL ?? "");
+    if (envBaseUrl.trim().length > 0) {
+        return envBaseUrl;
+    }
+    if (typeof window === "undefined") {
+        return fallback;
+    }
+    return fallback;
+}
+const API_BASE_URL = resolveDefaultBaseUrl();
 const REQUEST_TIMEOUT = 8_000;
 // http 实例负责处理业务正常请求，默认走应用的统一 Base URL。
 const http = axios.create({

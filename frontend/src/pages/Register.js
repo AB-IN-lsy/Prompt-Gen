@@ -12,6 +12,7 @@ import { useTranslation } from "react-i18next";
 import { AuthLayout } from "../components/layout/AuthLayout";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
+import { AvatarUploader } from "../components/account/AvatarUploader";
 import { fetchCaptcha, register } from "../lib/api";
 import { ApiError } from "../lib/errors";
 import { useAuth } from "../hooks/useAuth";
@@ -29,11 +30,13 @@ export default function RegisterPage() {
         password: "",
         captcha_id: "",
         captcha_code: "",
+        avatar_url: undefined,
     });
     const [captcha, setCaptcha] = useState(null);
     const [captchaLoading, setCaptchaLoading] = useState(false);
     const [captchaStatus, setCaptchaStatus] = useState(null);
     const [retryInfo, setRetryInfo] = useState(null);
+    // 行内校验的错误提示集合，对应每个表单字段。
     const [fieldErrors, setFieldErrors] = useState({});
     const retryCountRef = useRef(0);
     const retryTimerRef = useRef(null);
@@ -56,6 +59,7 @@ export default function RegisterPage() {
             const data = await fetchCaptcha();
             setCaptcha({ id: data.captcha_id, image: data.image });
             setForm((prev) => ({ ...prev, captcha_id: data.captcha_id, captcha_code: "" }));
+            // 新验证码生成后清空验证码输入框的错误提示。
             setFieldErrors((prev) => ({ ...prev, captcha_code: undefined }));
             setCaptchaStatus(null);
             setRetryInfo(null);
@@ -101,6 +105,7 @@ export default function RegisterPage() {
                 password: form.password,
                 captcha_id: captcha.id,
                 captcha_code: form.captcha_code,
+                avatar_url: form.avatar_url,
             });
             await authenticate(auth.tokens);
         },
@@ -112,6 +117,26 @@ export default function RegisterPage() {
             if (error instanceof ApiError && ["CAPTCHA_INVALID", "CAPTCHA_EXPIRED"].includes(error.code ?? "")) {
                 void loadCaptcha();
             }
+            if (error instanceof ApiError && error.code === "CONFLICT") {
+                const details = error.details ?? {};
+                const conflictFields = new Set();
+                if (typeof details.field === "string") {
+                    conflictFields.add(details.field);
+                }
+                if (Array.isArray(details.fields)) {
+                    for (const field of details.fields) {
+                        if (typeof field === "string") {
+                            conflictFields.add(field);
+                        }
+                    }
+                }
+                setFieldErrors((prev) => ({
+                    ...prev,
+                    email: conflictFields.has("email") ? t("auth.validation.emailTaken") : prev.email,
+                    username: conflictFields.has("username") ? t("auth.validation.usernameTaken") : prev.username,
+                }));
+            }
+            // 统一的失败提示：优先使用错误码对应的翻译。
             let message = t("errors.generic");
             if (error instanceof ApiError) {
                 if (error.code) {
@@ -126,6 +151,7 @@ export default function RegisterPage() {
             toast.error(message);
         },
     });
+    // 按需校验单个字段，返回对应的错误提示文案。
     const validateField = (field, value) => {
         if (field === "username") {
             if (!value.trim()) {
@@ -159,6 +185,7 @@ export default function RegisterPage() {
         }
         return undefined;
     };
+    // 聚合所有字段的校验结果，提交时使用。
     const validateAllFields = () => {
         const nextErrors = {
             username: validateField("username", form.username),
@@ -200,6 +227,7 @@ export default function RegisterPage() {
         }
         return captcha.image.startsWith("data:") ? captcha.image : `data:image/png;base64,${captcha.image}`;
     }, [captcha]);
+    // 满足以下任一条件时禁用提交按钮，避免重复提交或数据不完整。
     const isSubmitDisabled = mutation.isPending ||
         captchaLoading ||
         !form.username.trim() ||
@@ -208,7 +236,10 @@ export default function RegisterPage() {
         !form.captcha_code?.trim() ||
         !captcha ||
         Object.values(fieldErrors).some(Boolean);
-    return (_jsxs(AuthLayout, { title: t("auth.register.title") ?? "", subtitle: t("auth.register.subtitle") ?? undefined, children: [_jsxs("form", { className: "space-y-5", onSubmit: handleSubmit, children: [_jsxs("div", { className: "space-y-2", children: [_jsx("label", { className: "text-sm font-medium text-slate-700", htmlFor: "username", children: t("auth.form.username") }), _jsx(Input, { id: "username", autoComplete: "username", required: true, value: form.username, onChange: (event) => {
+    return (_jsxs(AuthLayout, { title: t("auth.register.title") ?? "", subtitle: t("auth.register.subtitle") ?? undefined, children: [_jsxs("form", { className: "space-y-5", onSubmit: handleSubmit, children: [_jsx(AvatarUploader, { value: form.avatar_url ?? "", onChange: (value) => {
+                            setForm((prev) => ({ ...prev, avatar_url: value || undefined }));
+                            setFieldErrors((prev) => ({ ...prev, avatar_url: undefined }));
+                        } }), fieldErrors.avatar_url ? _jsx("p", { className: "text-xs text-red-500", children: fieldErrors.avatar_url }) : null, _jsxs("div", { className: "space-y-2", children: [_jsx("label", { className: "text-sm font-medium text-slate-700", htmlFor: "username", children: t("auth.form.username") }), _jsx(Input, { id: "username", autoComplete: "username", required: true, value: form.username, onChange: (event) => {
                                     const value = event.target.value;
                                     setForm((prev) => ({ ...prev, username: value }));
                                     setFieldErrors((prev) => ({ ...prev, username: validateField("username", value) }));

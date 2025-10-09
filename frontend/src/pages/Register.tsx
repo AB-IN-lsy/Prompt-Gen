@@ -12,6 +12,7 @@ import { useTranslation } from "react-i18next";
 import { AuthLayout } from "../components/layout/AuthLayout";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
+import { AvatarUploader } from "../components/account/AvatarUploader";
 import { fetchCaptcha, register, type RegisterRequest } from "../lib/api";
 import { ApiError } from "../lib/errors";
 import { useAuth } from "../hooks/useAuth";
@@ -37,6 +38,7 @@ export default function RegisterPage() {
         password: "",
         captcha_id: "",
         captcha_code: "",
+        avatar_url: undefined,
     });
     const [captcha, setCaptcha] = useState<CaptchaState | null>(null);
     const [captchaLoading, setCaptchaLoading] = useState(false);
@@ -48,6 +50,7 @@ export default function RegisterPage() {
         email?: string;
         password?: string;
         captcha_code?: string;
+        avatar_url?: string;
     }>({});
     const retryCountRef = useRef(0);
     const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -121,6 +124,7 @@ export default function RegisterPage() {
                 password: form.password,
                 captcha_id: captcha.id,
                 captcha_code: form.captcha_code,
+                avatar_url: form.avatar_url,
             });
             await authenticate(auth.tokens);
         },
@@ -131,6 +135,25 @@ export default function RegisterPage() {
         onError: (error) => {
             if (error instanceof ApiError && ["CAPTCHA_INVALID", "CAPTCHA_EXPIRED"].includes(error.code ?? "")) {
                 void loadCaptcha();
+            }
+            if (error instanceof ApiError && error.code === "CONFLICT") {
+                const details = (error.details as { field?: string; fields?: string[] } | undefined) ?? {};
+                const conflictFields = new Set<string>();
+                if (typeof details.field === "string") {
+                    conflictFields.add(details.field);
+                }
+                if (Array.isArray(details.fields)) {
+                    for (const field of details.fields) {
+                        if (typeof field === "string") {
+                            conflictFields.add(field);
+                        }
+                    }
+                }
+                setFieldErrors((prev) => ({
+                    ...prev,
+                    email: conflictFields.has("email") ? t("auth.validation.emailTaken") : prev.email,
+                    username: conflictFields.has("username") ? t("auth.validation.usernameTaken") : prev.username,
+                }));
             }
             // 统一的失败提示：优先使用错误码对应的翻译。
             let message = t("errors.generic");
@@ -242,6 +265,14 @@ export default function RegisterPage() {
     return (
         <AuthLayout title={t("auth.register.title") ?? ""} subtitle={t("auth.register.subtitle") ?? undefined}>
             <form className="space-y-5" onSubmit={handleSubmit}>
+                <AvatarUploader
+                    value={form.avatar_url ?? ""}
+                    onChange={(value) => {
+                        setForm((prev) => ({ ...prev, avatar_url: value || undefined }));
+                        setFieldErrors((prev) => ({ ...prev, avatar_url: undefined }));
+                    }}
+                />
+                {fieldErrors.avatar_url ? <p className="text-xs text-red-500">{fieldErrors.avatar_url}</p> : null}
                 <div className="space-y-2">
                     <label className="text-sm font-medium text-slate-700" htmlFor="username">
                         {t("auth.form.username")}

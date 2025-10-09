@@ -9,6 +9,8 @@ import { fetchCurrentUser, logout as apiLogout } from "../lib/api";
 import { clearTokenPair, getTokenPair, setTokenPair } from "../lib/tokenStorage";
 import { normaliseError } from "../lib/http";
 import { ApiError } from "../lib/errors";
+import { toast } from "sonner";
+import i18n from "../i18n";
 export const useAuth = create((set, get) => ({
     profile: null,
     isInitialized: false,
@@ -73,6 +75,7 @@ export const useAuth = create((set, get) => ({
         finally {
             clearTokenPair();
             set({ profile: null, isInitialized: true });
+            toast.success(i18n.t("appShell.logoutSuccess"));
         }
     },
 }));

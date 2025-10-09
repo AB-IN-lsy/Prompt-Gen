@@ -12,7 +12,18 @@
     "appShell": {
         "searchPlaceholder": "Search topics or keywords...",
         "syncNow": "Sync now",
-        "logout": "Sign out"
+        "logout": "Sign out",
+        "logoutSuccess": "Signed out successfully"
+    },
+    "avatarUploader": {
+        "title": "Avatar",
+        "description": "PNG, JPG or WEBP up to 5 MB are supported.",
+        "upload": "Upload avatar",
+        "change": "Change avatar",
+        "remove": "Remove",
+        "uploading": "Uploading...",
+        "uploadSuccess": "Avatar uploaded",
+        "uploadError": "Failed to upload the avatar. Please try again."
     },
     "promptWorkbench": {
         "keywordsTitle": "Keyword governance",
@@ -73,7 +84,9 @@
         "validation": {
             "usernameRequired": "Please enter a username.",
             "usernameTooShort": "Username should be at least 2 characters.",
+            "usernameTaken": "This username is already in use.",
             "emailInvalid": "Please enter a valid email address.",
+            "emailTaken": "This email address has already been registered.",
             "passwordRequired": "Please enter a password.",
             "passwordTooShort": "Password should contain at least 8 characters.",
             "captchaRequired": "Please enter the captcha code."
@@ -129,9 +142,30 @@
     },
     "settings": {
         "title": "Settings",
+        "subtitle": "Update your profile and workspace preferences.",
         "languageCardTitle": "Language",
         "languageCardDescription": "Switch the interface language between English and Simplified Chinese.",
-        "languageSelectLabel": "Display language"
+        "languageSelectLabel": "Display language",
+        "profileCard": {
+            "title": "Profile",
+            "description": "Update your username, email and prompt preferences.",
+            "username": "Username",
+            "email": "Email",
+            "preferredModel": "Preferred model",
+            "preferredModelPlaceholder": "e.g. deepseek, gpt-4o, claude",
+            "syncEnabled": "Cloud sync",
+            "syncEnabledLabel": "Keep prompt settings in sync across devices",
+            "save": "Save profile"
+        },
+        "profileSaveSuccess": "Profile updated",
+        "syncEnabledOn": "Enabled",
+        "syncEnabledOff": "Disabled",
+        "errors": {
+            "usernameRequired": "Please enter a username.",
+            "emailInvalid": "Please enter a valid email address.",
+            "emailTaken": "Email already in use by another account.",
+            "usernameTaken": "Username already in use by another account."
+        }
     },
     "errors": {
         "generic": "Something went wrong. Please try again.",

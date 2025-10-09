@@ -12,7 +12,18 @@
     "appShell": {
         "searchPlaceholder": "搜索主题或关键词...",
         "syncNow": "立即同步",
-        "logout": "退出登录"
+        "logout": "退出登录",
+        "logoutSuccess": "已安全退出登录"
+    },
+    "avatarUploader": {
+        "title": "头像",
+        "description": "支持 PNG、JPG、WEBP 等格式，大小不超过 5 MB。",
+        "upload": "上传头像",
+        "change": "重新上传",
+        "remove": "移除头像",
+        "uploading": "上传中...",
+        "uploadSuccess": "头像上传成功",
+        "uploadError": "头像上传失败，请稍后再试"
     },
     "promptWorkbench": {
         "keywordsTitle": "关键词治理",
@@ -73,7 +84,9 @@
         "validation": {
             "usernameRequired": "请填写用户名",
             "usernameTooShort": "用户名至少需要 2 个字符",
+            "usernameTaken": "该用户名已被使用",
             "emailInvalid": "请填写合法的邮箱地址",
+            "emailTaken": "该邮箱已被注册",
             "passwordRequired": "请填写密码",
             "passwordTooShort": "密码至少需要 8 个字符",
             "captchaRequired": "请填写验证码"
@@ -129,9 +142,30 @@
     },
     "settings": {
         "title": "设置",
+        "subtitle": "更新账户资料和界面偏好。",
         "languageCardTitle": "界面语言",
         "languageCardDescription": "在英文与简体中文之间切换界面显示语言。",
-        "languageSelectLabel": "显示语言"
+        "languageSelectLabel": "显示语言",
+        "profileCard": {
+            "title": "个人资料",
+            "description": "修改用户名、邮箱、偏好模型等信息。",
+            "username": "用户名",
+            "email": "邮箱",
+            "preferredModel": "偏好模型",
+            "preferredModelPlaceholder": "例如 deepseek、gpt-4o 等",
+            "syncEnabled": "云同步",
+            "syncEnabledLabel": "在多设备之间同步提示词设置",
+            "save": "保存资料"
+        },
+        "profileSaveSuccess": "资料已更新",
+        "syncEnabledOn": "已开启",
+        "syncEnabledOff": "已关闭",
+        "errors": {
+            "usernameRequired": "请填写用户名",
+            "emailInvalid": "请输入合法的邮箱地址",
+            "emailTaken": "该邮箱已被其他账号使用",
+            "usernameTaken": "该用户名已被其他账号使用"
+        }
     },
     "errors": {
         "generic": "发生异常，请稍后重试。",

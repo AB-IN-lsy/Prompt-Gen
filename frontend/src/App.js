@@ -31,7 +31,8 @@ export default function App() {
     useEffect(() => {
         void initialize();
     }, [initialize]);
-    if (!isInitialized && initializing) {
+    // 初始化期间保持加载态，避免在资料未拉取完成前误触发路由重定向。
+    if (!isInitialized || initializing) {
         return (_jsx("div", { className: "flex min-h-screen items-center justify-center bg-gradient-to-br from-[#F8F9FA] via-[#EEF2FF] to-[#E9EDFF]", children: _jsx("span", { className: "text-sm text-slate-500", children: t("common.loading") }) }));
     }
     if (!isAuthenticated) {

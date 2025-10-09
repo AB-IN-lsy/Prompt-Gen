@@ -3,7 +3,7 @@ import { jsx as _jsx, jsxs as _jsxs } from "react/jsx-runtime";
  * @Author: NEFU AB-IN
  * @Date: 2025-10-09 22:43:18
  * @FilePath: \electron-go-app\frontend\src\main.tsx
- * @LastEditTime: 2025-10-09 22:43:22
+ * @LastEditTime: 2025-10-10 00:56:11
  */
 import React from "react";
 import ReactDOM from "react-dom/client";
