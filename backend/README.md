@@ -82,7 +82,7 @@ Copy-Item ..\..\.env.example ..\..\.env.local -Force
 | `POST` | `/api/auth/refresh` | 刷新访问令牌 | JSON：`refresh_token` |
 | `POST` | `/api/auth/logout` | 撤销刷新令牌 | JSON：`refresh_token` |
 | `GET` | `/api/users/me` | 获取当前登录用户信息 | 需附带 `Authorization: Bearer <token>` |
-| `PUT` | `/api/users/me` | 更新当前用户信息 | JSON：`username`、`email`、`avatar_url`、`settings`；同样需要登录 |
+| `PUT` | `/api/users/me` | 更新当前用户信息与偏好设置 | JSON：`username`、`email`、`avatar_url`、`preferred_model`、`sync_enabled` |
 | `POST` | `/api/uploads/avatar` | 上传头像文件并返回静态地址 | 需登录；multipart 表单：`avatar` 文件字段 |
 
 ### 静态资源与上传目录
@@ -179,6 +179,80 @@ Copy-Item ..\..\.env.example ..\..\.env.local -Force
 - **成功响应**：`204`（无内容）。此后该刷新令牌无法再换取新的 access token。
 - **常见错误**：请求缺少或提供了无效的刷新令牌 → `400 / 401`。
 
+#### GET /api/users/me
+
+- **用途**：返回当前登录用户的基础资料和偏好设置，前端初始化与刷新页面时会调用。
+- **请求头**：`Authorization: Bearer <access_token>`。
+- **成功响应**：`200`
+
+  ```json
+  {
+    "success": true,
+    "data": {
+      "user": {
+        "id": 1,
+        "username": "alice",
+        "email": "alice@example.com",
+        "avatar_url": "/static/avatars/9be0d0c6.png",
+        "last_login_at": "2025-10-10T00:11:22Z"
+      },
+      "settings": {
+        "preferred_model": "gpt-4o-mini",
+        "sync_enabled": true
+      }
+    }
+  }
+  ```
+
+- **常见错误**：访问令牌缺失或过期 → `401`。
+
+#### PUT /api/users/me
+
+- **用途**：更新用户名、邮箱、头像或模型偏好；请求体只需携带需要修改的字段。
+- **请求体示例**：
+
+  ```json
+  {
+    "username": "alice-dev",
+    "email": "alice.dev@example.com",
+    "preferred_model": "deepseek",
+    "sync_enabled": false,
+    "avatar_url": ""
+  }
+  ```
+
+  > 当 `avatar_url` 传入空字符串时，后端会清除数据库中的头像地址，实现“移除头像”。
+
+- **成功响应**：`200`，返回更新后的 `user` 与 `settings`。
+- **常见错误**：
+  - 邮箱或用户名被其他账号占用 → `409`，`error.details.fields` 会列出冲突字段。
+  - 请求体为空或字段格式不正确 → `400`。
+
+#### POST /api/uploads/avatar
+
+- **用途**：把前端选中的头像上传到 `public/avatars`，返回可以立即使用的静态 URL。
+- **请求体**（multipart/form-data）：`avatar` 文件字段，支持 PNG/JPG/WEBP，大小 ≤ 5 MB。
+- **成功响应**：`201`
+
+  ```json
+  {
+    "success": true,
+    "data": {
+      "avatar_url": "/static/avatars/6b94de26.png"
+    }
+  }
+  ```
+
+- **常见错误**：
+  - 未上传文件或大小为 0 → `400`。
+  - 文件超出大小限制或 MIME 类型不被允许 → `400`。
+  - 存储目录创建失败或磁盘不可写 → `500`。
+
+#### GET /static/avatars/<filename>
+
+- **用途**：直接访问用户上传的头像资源；无需鉴权。
+- **静态托管**：由 `router.go` 的 `r.Static("/static", "./public")` 提供服务，可按需改为指向对象存储或 CDN。
+
 ## 启动与测试
 
 ```powershell
@@ -202,23 +276,62 @@ go test -tags integration ./tests/integration
 
 ```text
 backend/
-├─ cmd/server/           # 程序入口，负责加载配置与启动 HTTP 服务
+├─ cmd/
+│  └─ server/
+│     └─ main.go                 # 后端入口，负责加载配置与启动 HTTP Server
 ├─ internal/
-│  ├─ app/               # 应用启动流程：读取 Nacos、连接 MySQL、提供资源管理
-│  ├─ bootstrap/         # 组合业务依赖（仓储、服务、Handler、Router）
-│  ├─ config/            # .env 文件加载、测试辅助
-│  ├─ domain/            # 领域模型与实体定义
-│  ├─ handler/           # Gin Handler，处理 HTTP 请求
-│  ├─ infra/             # 基础设施层（Redis/Nacos/MySQL 客户端、验证码、日志、Token 等）
-│  ├─ middleware/        # Gin 中间件（如鉴权）
-│  ├─ repository/        # 数据访问层，封装 GORM 操作
-│  ├─ server/            # Gin Router 构建与公共路由配置
-│  └─ service/           # 业务服务层逻辑（Auth、User）
+│  ├─ app/
+│  │  └─ app.go                  # 资源生命周期管理（数据库、缓存等）
+│  ├─ bootstrap/
+│  │  └─ bootstrap.go            # 组装仓储、服务、Handler、Router
+│  ├─ config/
+│  │  └─ env_loader.go           # 加载 .env / 环境变量
+│  ├─ domain/
+│  │  └─ user/
+│  │     └─ entity.go            # User 实体与 Settings 结构
+│  ├─ handler/
+│  │  ├─ auth_handler.go         # /api/auth/* 接口
+│  │  ├─ user_handler.go         # /api/users/me 查询与更新
+│  │  └─ upload_handler.go       # /api/uploads/avatar 上传
+│  ├─ infra/
+│  │  ├─ captcha/
+│  │  │  ├─ config.go            # 验证码配置读取
+│  │  │  └─ manager.go           # 验证码生成、验证、限流
+│  │  ├─ client/
+│  │  │  ├─ mysql_client.go      # MySQL 连接初始化
+│  │  │  ├─ nacos_client.go      # Nacos 客户端
+│  │  │  └─ redis_client.go      # Redis 客户端
+│  │  ├─ common/response.go      # 统一响应体封装
+│  │  ├─ logger/logger.go        # Zap 日志初始化
+│  │  └─ token/
+│  │     ├─ jwt_manager.go       # Access Token 签发
+│  │     └─ refresh_store.go     # 刷新令牌存储（Redis/内存）
+│  ├─ middleware/
+│  │  └─ auth_middleware.go      # Bearer Token 鉴权
+│  ├─ repository/
+│  │  └─ user_repository.go      # User GORM 操作与唯一性检查
+│  ├─ server/
+│  │  └─ router.go               # Gin 路由、CORS、静态资源配置
+│  └─ service/
+│     ├─ auth/service.go         # 注册、登录、刷新、登出逻辑
+│     └─ user/service.go         # 用户资料、设置更新
 ├─ tests/
-│  ├─ unit/              # 单元测试，包含 Redis、验证码、服务层等测试用例
-│  ├─ integration/       # 需外部依赖的集成测试
-│  └─ e2e/               # 端到端测试脚本
-└─ design/               # 需求与流程文档
+│  ├─ unit/
+│  │  ├─ auth_service_test.go
+│  │  ├─ user_service_test.go
+│  │  ├─ captcha_manager_test.go
+│  │  └─ response_helper_test.go
+│  ├─ integration/
+│  │  ├─ auth_flow_integration_test.go
+│  │  ├─ mysql_integration_test.go
+│  │  ├─ nacos_integration_test.go
+│  │  └─ redis_integration_test.go
+│  └─ e2e/
+│     └─ auth_remote_e2e_test.go
+├─ public/
+│  └─ avatars/
+│     └─ .gitkeep                # 占位文件，运行时头像保存在此目录
+└─ design/                       # PRD、流程图等文档
 ```
 
-需要新增模块时，推荐按照上述分层模式扩展，保持 Handler、Service、Repository 等职责清晰。
+需要新增模块时，推荐按照上述分层模式扩展，保持 Handler、Service、Repository 等职责清晰，并优先在 `tests/` 中补充对应的单元/集成测试。
