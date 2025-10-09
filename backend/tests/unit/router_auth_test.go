@@ -66,7 +66,8 @@ func setupRouter(t *testing.T) (*gin.Engine, uint, string) {
 
 	secret := "test-secret"
 	jwtManager := token.NewJWTManager(secret, time.Minute, time.Hour)
-	authService := authsvc.NewService(repo, jwtManager, nil)
+	refreshStore := token.NewMemoryRefreshTokenStore()
+	authService := authsvc.NewService(repo, jwtManager, refreshStore, nil)
 	authHandler := handler.NewAuthHandler(authService)
 
 	userService := usersvc.NewService(repo)

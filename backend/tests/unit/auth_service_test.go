@@ -42,7 +42,8 @@ func newTestAuthService(t *testing.T) (*auth.Service, *repository.UserRepository
 
 	repo := repository.NewUserRepository(db)
 	tokenManager := token.NewJWTManager("test-secret", time.Minute, 24*time.Hour)
-	service := auth.NewService(repo, tokenManager, nil)
+	refreshStore := token.NewMemoryRefreshTokenStore()
+	service := auth.NewService(repo, tokenManager, refreshStore, nil)
 
 	return service, repo, db
 }
@@ -163,5 +164,49 @@ func TestAuthServiceLoginInvalidCredentials(t *testing.T) {
 	})
 	if !errors.Is(err, auth.ErrInvalidLogin) {
 		t.Fatalf("expected invalid login for unknown user, got %v", err)
+	}
+}
+
+// TestAuthServiceRefreshAndLogout 覆盖刷新令牌与登出逻辑。
+func TestAuthServiceRefreshAndLogout(t *testing.T) {
+	svc, _, _ := newTestAuthService(t)
+	ctx := context.Background()
+
+	_, tokens, err := svc.Register(ctx, auth.RegisterParams{
+		Username: "alice",
+		Email:    "alice@example.com",
+		Password: "password123",
+	})
+	if err != nil {
+		t.Fatalf("register: %v", err)
+	}
+
+	if tokens.RefreshToken == "" {
+		t.Fatalf("expected refresh token")
+	}
+
+	newTokens, err := svc.Refresh(ctx, tokens.RefreshToken)
+	if err != nil {
+		t.Fatalf("refresh: %v", err)
+	}
+
+	if newTokens.RefreshToken == tokens.RefreshToken {
+		t.Fatalf("expected refresh token rotation")
+	}
+
+	if _, err := svc.Refresh(ctx, tokens.RefreshToken); !errors.Is(err, auth.ErrRefreshTokenRevoked) {
+		t.Fatalf("expected revoked error, got %v", err)
+	}
+
+	if err := svc.Logout(ctx, newTokens.RefreshToken); err != nil {
+		t.Fatalf("logout: %v", err)
+	}
+
+	if _, err := svc.Refresh(ctx, newTokens.RefreshToken); !errors.Is(err, auth.ErrRefreshTokenRevoked) {
+		t.Fatalf("expected revoked after logout, got %v", err)
+	}
+
+	if err := svc.Logout(ctx, "invalid"); !errors.Is(err, auth.ErrRefreshTokenInvalid) {
+		t.Fatalf("expected invalid token error, got %v", err)
 	}
 }

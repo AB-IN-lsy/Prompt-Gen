@@ -49,7 +49,8 @@ func setupAuthFlow(t *testing.T) *gin.Engine {
 	repo := repository.NewUserRepository(db)
 	secret := "integration-secret"
 	jwtManager := token.NewJWTManager(secret, time.Minute*5, time.Hour)
-	authService := authsvc.NewService(repo, jwtManager, nil)
+	refreshStore := token.NewMemoryRefreshTokenStore()
+	authService := authsvc.NewService(repo, jwtManager, refreshStore, nil)
 	userService := usersvc.NewService(repo)
 
 	authHandler := handler.NewAuthHandler(authService)
@@ -120,6 +121,9 @@ func TestAuthFlow_RegisterLoginAndFetchProfile(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected user in register response")
 	}
+	if userMap["id"] == nil {
+		t.Fatalf("register response missing user id")
+	}
 
 	tokensMap, ok := dataMap["tokens"].(map[string]any)
 	if !ok {
@@ -169,9 +173,56 @@ func TestAuthFlow_RegisterLoginAndFetchProfile(t *testing.T) {
 		t.Fatalf("login access token missing")
 	}
 
-	// Step 3: call /api/users/me with JWT
+	refreshToken, _ := loginTokens["refresh_token"].(string)
+	if refreshToken == "" {
+		t.Fatalf("login refresh token missing")
+	}
+
+	// Step 3: refresh token
+	refreshResp := performJSONRequest(t, router, http.MethodPost, "/api/auth/refresh", map[string]any{
+		"refresh_token": refreshToken,
+	}, nil)
+
+	if refreshResp.Code != http.StatusOK {
+		t.Fatalf("refresh status = %d, body = %s", refreshResp.Code, refreshResp.Body.String())
+	}
+
+	var refreshBody response.Response
+	if err := json.Unmarshal(refreshResp.Body.Bytes(), &refreshBody); err != nil {
+		t.Fatalf("decode refresh body: %v", err)
+	}
+
+	if !refreshBody.Success {
+		t.Fatalf("refresh expected success=true: %s", refreshResp.Body.String())
+	}
+
+	refreshData, ok := refreshBody.Data.(map[string]any)
+	if !ok {
+		t.Fatalf("refresh data unexpected type: %T", refreshBody.Data)
+	}
+
+	refreshedTokens, ok := refreshData["tokens"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected tokens in refresh response")
+	}
+
+	newAccessToken, _ := refreshedTokens["access_token"].(string)
+	if newAccessToken == "" {
+		t.Fatalf("refresh access token missing")
+	}
+
+	newRefreshToken, _ := refreshedTokens["refresh_token"].(string)
+	if newRefreshToken == "" {
+		t.Fatalf("refresh token missing in response")
+	}
+
+	if newRefreshToken == refreshToken {
+		t.Fatalf("expected rotated refresh token")
+	}
+
+	// Step 4: call /api/users/me with JWT
 	meResp := performJSONRequest(t, router, http.MethodGet, "/api/users/me", nil, map[string]string{
-		"Authorization": "Bearer " + accessToken,
+		"Authorization": "Bearer " + newAccessToken,
 	})
 
 	if meResp.Code != http.StatusOK {
@@ -194,5 +245,23 @@ func TestAuthFlow_RegisterLoginAndFetchProfile(t *testing.T) {
 
 	if meData["user"] == nil {
 		t.Fatalf("me response missing user data")
+	}
+
+	// Step 5: logout
+	logoutResp := performJSONRequest(t, router, http.MethodPost, "/api/auth/logout", map[string]any{
+		"refresh_token": newRefreshToken,
+	}, nil)
+
+	if logoutResp.Code != http.StatusNoContent {
+		t.Fatalf("logout status = %d, body = %s", logoutResp.Code, logoutResp.Body.String())
+	}
+
+	// Step 6: refresh with revoked token should fail
+	revokedResp := performJSONRequest(t, router, http.MethodPost, "/api/auth/refresh", map[string]any{
+		"refresh_token": newRefreshToken,
+	}, nil)
+
+	if revokedResp.Code != http.StatusUnauthorized {
+		t.Fatalf("expected revoked refresh to be 401, got %d", revokedResp.Code)
 	}
 }

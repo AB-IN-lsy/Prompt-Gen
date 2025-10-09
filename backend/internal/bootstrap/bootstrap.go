@@ -43,12 +43,20 @@ func BuildApplication(ctx context.Context, logger *zap.SugaredLogger, resources 
 	userRepo := repository.NewUserRepository(resources.DBConn())
 	tokens := token.NewJWTManager(cfg.JWTSecret, cfg.AccessTTL, cfg.RefreshTTL)
 
+	var refreshStore authsvc.RefreshTokenStore
+	if resources.Redis != nil {
+		refreshStore = token.NewRedisRefreshTokenStore(resources.Redis, "")
+	} else {
+		refreshStore = token.NewMemoryRefreshTokenStore()
+		logger.Infow("using in-memory refresh token store; tokens won't persist across restarts")
+	}
+
 	captchaManager, err := initCaptchaManager(resources, logger)
 	if err != nil {
 		return nil, err
 	}
 
-	authService := authsvc.NewService(userRepo, tokens, captchaManager)
+	authService := authsvc.NewService(userRepo, tokens, refreshStore, captchaManager)
 	authHandler := handler.NewAuthHandler(authService)
 
 	userService := usersvc.NewService(userRepo)
@@ -73,7 +81,8 @@ func BuildApplication(ctx context.Context, logger *zap.SugaredLogger, resources 
 func initCaptchaManager(resources *app.Resources, logger *zap.SugaredLogger) (authsvc.CaptchaManager, error) {
 	captchaOpts, captchaEnabled, err := captcha.LoadOptionsFromEnv()
 	if err != nil {
-		logger.Fatalw("load captcha config failed", "error", err)
+		logger.Errorw("load captcha config failed", "error", err)
+		return nil, fmt.Errorf("load captcha config: %w", err)
 	}
 
 	if !captchaEnabled {

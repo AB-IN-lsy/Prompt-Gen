@@ -43,6 +43,10 @@ type loginRequest struct {
 	Password string `json:"password" binding:"required"`
 }
 
+type refreshRequest struct {
+	RefreshToken string `json:"refresh_token" binding:"required"`
+}
+
 // Register 处理用户注册的 HTTP 请求，验证参数并调用业务逻辑。
 func (h *AuthHandler) Register(c *gin.Context) {
 	log := h.scope("register")
@@ -147,6 +151,89 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		"user":   user,
 		"tokens": tokens,
 	}, nil)
+}
+
+// Refresh 处理刷新令牌请求。
+//
+// 前端链路示例：页面检测到 401 或 access token 过期 -> 调用该接口并携带 refresh token ->
+// 若成功，替换本地的 access/refresh token；若返回 401（刷新令牌过期/失效），提示用户重新登录。
+//
+// 该 Handler 只负责：
+//  1. 解析请求体，确保 refresh_token 字段存在；
+//  2. 调用 Service.Refresh，并根据不同错误类型映射为 400 / 401 / 500；
+//  3. 将新的 TokenPair 返回给前端。
+func (h *AuthHandler) Refresh(c *gin.Context) {
+	log := h.scope("refresh")
+
+	var req refreshRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		log.Warnw("invalid request body", "error", err)
+		response.Fail(c, http.StatusBadRequest, response.ErrBadRequest, err.Error(), nil)
+		return
+	}
+
+	tokens, err := h.service.Refresh(c.Request.Context(), req.RefreshToken)
+	if err != nil {
+		status := http.StatusInternalServerError
+		code := response.ErrInternal
+		switch err {
+		case auth.ErrRefreshTokenRequired:
+			status = http.StatusBadRequest
+			code = response.ErrBadRequest
+			log.Warn("missing refresh token")
+		case auth.ErrRefreshTokenInvalid, auth.ErrRefreshTokenRevoked:
+			status = http.StatusUnauthorized
+			code = response.ErrUnauthorized
+			log.Warn("refresh token invalid or revoked")
+		case auth.ErrRefreshTokenExpired:
+			status = http.StatusUnauthorized
+			code = response.ErrUnauthorized
+			log.Warn("refresh token expired")
+		default:
+			log.Errorw("refresh failed", "error", err)
+		}
+		response.Fail(c, status, code, err.Error(), nil)
+		return
+	}
+
+	response.Success(c, http.StatusOK, gin.H{"tokens": tokens}, nil)
+}
+
+// Logout 撤销刷新令牌。
+//
+// 链路示例：用户点击“退出登录”按钮 -> 前端发送持有的 refresh token ->
+// 服务端调用 Service.Logout 删除存储记录 -> 返回 204，前端清理本地状态。
+// 若刷新令牌已失效/格式错误，会返回 400/401，提示前端不用再尝试。
+func (h *AuthHandler) Logout(c *gin.Context) {
+	log := h.scope("logout")
+
+	var req refreshRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		log.Warnw("invalid request body", "error", err)
+		response.Fail(c, http.StatusBadRequest, response.ErrBadRequest, err.Error(), nil)
+		return
+	}
+
+	if err := h.service.Logout(c.Request.Context(), req.RefreshToken); err != nil {
+		status := http.StatusInternalServerError
+		code := response.ErrInternal
+		switch err {
+		case auth.ErrRefreshTokenRequired:
+			status = http.StatusBadRequest
+			code = response.ErrBadRequest
+			log.Warn("missing refresh token")
+		case auth.ErrRefreshTokenInvalid:
+			status = http.StatusUnauthorized
+			code = response.ErrUnauthorized
+			log.Warn("refresh token invalid")
+		default:
+			log.Errorw("logout failed", "error", err)
+		}
+		response.Fail(c, status, code, err.Error(), nil)
+		return
+	}
+
+	response.NoContent(c)
 }
 
 // Captcha 生成图形验证码并返回 base64 图片与标识。

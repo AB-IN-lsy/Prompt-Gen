@@ -38,10 +38,12 @@ func NewRouter(opts RouterOptions) *gin.Engine {
 	api := r.Group("/api")
 	{
 		authGroup := api.Group("/auth")
-		{
+		if opts.AuthHandler != nil {
 			authGroup.GET("/captcha", opts.AuthHandler.Captcha)
 			authGroup.POST("/register", opts.AuthHandler.Register)
 			authGroup.POST("/login", opts.AuthHandler.Login)
+			authGroup.POST("/refresh", opts.AuthHandler.Refresh)
+			authGroup.POST("/logout", opts.AuthHandler.Logout)
 		}
 
 		// /api/users 下的路由需要登录才能访问，所以单独分组，再挂载 JWT 鉴权中间件。
