@@ -2,7 +2,7 @@
  * @Author: NEFU AB-IN
  * @Date: 2025-10-08 19:54:47
  * @FilePath: \electron-go-app\backend\internal\app\app.go
- * @LastEditTime: 2025-10-08 19:54:51
+ * @LastEditTime: 2025-10-09 19:39:43
  */
 package app
 
@@ -14,7 +14,7 @@ import (
 
 	"electron-go-app/backend/internal/config"
 	domain "electron-go-app/backend/internal/domain/user"
-	"electron-go-app/backend/internal/infra"
+	infra "electron-go-app/backend/internal/infra/client"
 	appLogger "electron-go-app/backend/internal/infra/logger"
 
 	"gorm.io/gorm"

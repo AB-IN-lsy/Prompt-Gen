@@ -1,12 +1,11 @@
 package unit
 
 import (
+	response "electron-go-app/backend/internal/infra/common"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
-
-	"electron-go-app/backend/internal/handler/response"
 
 	"github.com/gin-gonic/gin"
 )

@@ -2,7 +2,7 @@
  * @Author: NEFU AB-IN
  * @Date: 2025-10-08 17:59:47
  * @FilePath: \electron-go-app\backend\tests\unit\infra_nacos_test.go
- * @LastEditTime: 2025-10-08 17:59:52
+ * @LastEditTime: 2025-10-09 19:37:21
  */
 package unit
 
@@ -11,7 +11,7 @@ import (
 	"testing"
 
 	"electron-go-app/backend/internal/config"
-	"electron-go-app/backend/internal/infra"
+	infra "electron-go-app/backend/internal/infra/client"
 )
 
 // TestNewDefaultNacosOptions_RequiresEnv 确保缺少必要环境变量时抛出错误。

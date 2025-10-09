@@ -2,14 +2,14 @@
  * @Author: NEFU AB-IN
  * @Date: 2025-10-08 18:00:02
  * @FilePath: \electron-go-app\backend\tests\unit\infra_mysql_test.go
- * @LastEditTime: 2025-10-08 18:00:07
+ * @LastEditTime: 2025-10-09 19:37:07
  */
 package unit
 
 import (
 	"testing"
 
-	"electron-go-app/backend/internal/infra"
+	infra "electron-go-app/backend/internal/infra/client"
 )
 
 // TestParseMySQLConfigDefaults 验证解析配置时能补齐默认端口、数据库与参数。

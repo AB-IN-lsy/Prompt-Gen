@@ -2,14 +2,19 @@
  * @Author: NEFU AB-IN
  * @Date: 2025-10-08 20:41:15
  * @FilePath: \electron-go-app\backend\internal\middleware\auth_middleware.go
- * @LastEditTime: 2025-10-08 20:41:20
+ * @LastEditTime: 2025-10-09 19:36:01
  */
 package middleware
 
 import (
+	"encoding/json"
+	"errors"
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
+
+	response "electron-go-app/backend/internal/infra/common"
 
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
@@ -30,33 +35,57 @@ func (m *AuthMiddleware) Handle() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		authHeader := c.GetHeader("Authorization")
 		if authHeader == "" || !strings.HasPrefix(strings.ToLower(authHeader), "bearer ") {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "missing authorization header"})
+			response.Fail(c, http.StatusUnauthorized, response.ErrUnauthorized, "missing authorization header", nil)
+			c.Abort()
 			return
 		}
 
 		tokenString := strings.TrimSpace(authHeader[7:])
-		token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
+		claims := jwt.MapClaims{}
+		token, err := jwt.ParseWithClaims(tokenString, claims, func(token *jwt.Token) (interface{}, error) {
 			if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
 				return nil, jwt.ErrInvalidKeyType
 			}
 			return []byte(m.secret), nil
 		})
-		if err != nil || !token.Valid {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid token"})
+		if err != nil {
+			if errors.Is(err, jwt.ErrTokenExpired) {
+				response.Fail(c, http.StatusUnauthorized, response.ErrUnauthorized, "token expired", nil)
+			} else {
+				response.Fail(c, http.StatusUnauthorized, response.ErrUnauthorized, "invalid token", err.Error())
+			}
+			c.Abort()
+			return
+		}
+		if !token.Valid {
+			response.Fail(c, http.StatusUnauthorized, response.ErrUnauthorized, "invalid token", nil)
+			c.Abort()
 			return
 		}
 
-		// claims 就是 JWT payload 中的键值对（MapClaims），常见字段包括 iss、exp、sub 等。
-		// 这里把它保存下来，后续 handler 可以根据需要取更多信息。
-		claims, ok := token.Claims.(jwt.MapClaims)
-		if !ok {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid token claims"})
-			return
+		if expVal, ok := claims["exp"]; ok {
+			var exp int64
+			switch v := expVal.(type) {
+			case float64:
+				exp = int64(v)
+			case json.Number:
+				if parsed, err := v.Int64(); err == nil {
+					exp = parsed
+				}
+			case string:
+				if parsed, err := strconv.ParseInt(v, 10, 64); err == nil {
+					exp = parsed
+				}
+			}
+			if exp != 0 && time.Now().Unix() >= exp {
+				response.Fail(c, http.StatusUnauthorized, response.ErrUnauthorized, "token expired", nil)
+				c.Abort()
+				return
+			}
 		}
+
 		c.Set("claims", claims)
 
-		// JWT 里的 sub（subject）通常存的是用户 ID。为了后续业务方便，这里尝试解析成数字，
-		// 并写入 Gin Context，路由中的 handler 可以直接通过 c.Get("userID") 取到当前登录用户。
 		if sub, ok := claims["sub"]; ok {
 			switch v := sub.(type) {
 			case string:

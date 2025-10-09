@@ -13,7 +13,7 @@ import (
 	"time"
 
 	"electron-go-app/backend/internal/config"
-	"electron-go-app/backend/internal/infra"
+	infra "electron-go-app/backend/internal/infra/client"
 
 	miniredis "github.com/alicebob/miniredis/v2"
 )

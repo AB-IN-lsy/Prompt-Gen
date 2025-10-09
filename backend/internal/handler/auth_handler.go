@@ -9,7 +9,7 @@ package handler
 import (
 	"net/http"
 
-	"electron-go-app/backend/internal/handler/response"
+	response "electron-go-app/backend/internal/infra/common"
 	appLogger "electron-go-app/backend/internal/infra/logger"
 	"electron-go-app/backend/internal/service/auth"
 
