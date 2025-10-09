@@ -10,6 +10,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	domain "electron-go-app/backend/internal/domain/user"
 	"electron-go-app/backend/internal/repository"
@@ -30,10 +31,23 @@ func NewService(users *repository.UserRepository) *Service {
 // ErrUserNotFound 表示请求的用户不存在。
 var ErrUserNotFound = errors.New("user not found")
 
+// ErrEmailTaken 表示邮箱已被其他用户占用。
+var ErrEmailTaken = errors.New("email already in use")
+
+// ErrUsernameTaken 表示用户名已被其他用户占用。
+var ErrUsernameTaken = errors.New("username already in use")
+
 // Profile 封装返回的用户资料与设置。
 type Profile struct {
 	User     *domain.User    `json:"user"`
 	Settings domain.Settings `json:"settings"`
+}
+
+// UpdateProfileParams 封装可以更新的基础信息字段。
+type UpdateProfileParams struct {
+	Username  *string
+	Email     *string
+	AvatarURL *string
 }
 
 // GetProfile 返回指定用户的资料与设置。
@@ -78,4 +92,51 @@ func (s *Service) UpdateSettings(ctx context.Context, userID uint, settings doma
 
 	u.Settings = raw
 	return Profile{User: u, Settings: settings}, nil
+}
+
+// UpdateProfile 更新用户的基础资料（用户名、邮箱、头像等）。
+func (s *Service) UpdateProfile(ctx context.Context, userID uint, params UpdateProfileParams) (Profile, error) {
+	updates := map[string]interface{}{}
+
+	if params.Username != nil {
+		username := strings.TrimSpace(*params.Username)
+		if username != "" {
+			exists, err := s.users.ExistsOtherByUsername(ctx, username, userID)
+			if err != nil {
+				return Profile{}, fmt.Errorf("check username: %w", err)
+			}
+			if exists {
+				return Profile{}, ErrUsernameTaken
+			}
+			updates["username"] = username
+		}
+	}
+
+	if params.Email != nil {
+		email := strings.TrimSpace(*params.Email)
+		if email != "" {
+			exists, err := s.users.ExistsOtherByEmail(ctx, email, userID)
+			if err != nil {
+				return Profile{}, fmt.Errorf("check email: %w", err)
+			}
+			if exists {
+				return Profile{}, ErrEmailTaken
+			}
+			updates["email"] = email
+		}
+	}
+
+	if params.AvatarURL != nil {
+		avatar := strings.TrimSpace(*params.AvatarURL)
+		updates["avatar_url"] = avatar
+	}
+
+	if err := s.users.UpdateProfileFields(ctx, userID, updates); err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return Profile{}, ErrUserNotFound
+		}
+		return Profile{}, fmt.Errorf("update profile: %w", err)
+	}
+
+	return s.GetProfile(ctx, userID)
 }

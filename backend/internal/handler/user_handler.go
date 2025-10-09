@@ -2,12 +2,13 @@
  * @Author: NEFU AB-IN
  * @Date: 2025-10-08 22:38:26
  * @FilePath: \electron-go-app\backend\internal\handler\user_handler.go
- * @LastEditTime: 2025-10-08 22:38:31
+ * @LastEditTime: 2025-10-10 02:42:06
  */
 package handler
 
 import (
 	"net/http"
+	"strings"
 
 	response "electron-go-app/backend/internal/infra/common"
 	appLogger "electron-go-app/backend/internal/infra/logger"
@@ -62,13 +63,16 @@ func (h *UserHandler) GetMe(c *gin.Context) {
 	response.Success(c, http.StatusOK, profile, nil)
 }
 
-// UpdateSettingsRequest 描述更新设置的请求体。
-type UpdateSettingsRequest struct {
-	PreferredModel string `json:"preferred_model" binding:"omitempty,min=1"`
-	SyncEnabled    *bool  `json:"sync_enabled"`
+// UpdateMeRequest 描述更新当前登录用户资料与设置的请求体。
+type UpdateMeRequest struct {
+	Username       *string `json:"username" binding:"omitempty,min=2,max=64"`
+	Email          *string `json:"email" binding:"omitempty,email"`
+	AvatarURL      *string `json:"avatar_url"`
+	PreferredModel string  `json:"preferred_model" binding:"omitempty,min=1"`
+	SyncEnabled    *bool   `json:"sync_enabled"`
 }
 
-// UpdateMe 更新当前登录用户的设置。
+// UpdateMe 更新当前登录用户的设置与基础信息。
 func (h *UserHandler) UpdateMe(c *gin.Context) {
 	log := h.scope("update_me")
 
@@ -81,14 +85,24 @@ func (h *UserHandler) UpdateMe(c *gin.Context) {
 
 	log = log.With("user_id", userID)
 
-	var req UpdateSettingsRequest
+	var req UpdateMeRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		log.Warnw("invalid request body", "error", err)
 		response.Fail(c, http.StatusBadRequest, response.ErrBadRequest, err.Error(), nil)
 		return
 	}
 
-	log.Infow("update request", "preferred_model", req.PreferredModel, "sync_enabled", req.SyncEnabled)
+	usernameLog := ""
+	if req.Username != nil {
+		usernameLog = strings.TrimSpace(*req.Username)
+	}
+	emailLog := ""
+	if req.Email != nil {
+		emailLog = strings.TrimSpace(*req.Email)
+	}
+	avatarProvided := req.AvatarURL != nil
+
+	log.Infow("update request", "username", usernameLog, "email", emailLog, "avatar_provided", avatarProvided, "preferred_model", req.PreferredModel, "sync_enabled", req.SyncEnabled)
 
 	profile, err := h.service.GetProfile(c.Request.Context(), userID)
 	if err != nil {
@@ -105,7 +119,61 @@ func (h *UserHandler) UpdateMe(c *gin.Context) {
 		return
 	}
 
-	settings := profile.Settings
+	current := profile
+
+	profileUpdates := usersvc.UpdateProfileParams{}
+	if req.Username != nil {
+		username := strings.TrimSpace(*req.Username)
+		if username == "" {
+			response.Fail(c, http.StatusBadRequest, response.ErrBadRequest, "username cannot be empty", gin.H{"field": "username"})
+			return
+		}
+		profileUpdates.Username = &username
+	}
+	if req.Email != nil {
+		email := strings.TrimSpace(*req.Email)
+		if email == "" {
+			response.Fail(c, http.StatusBadRequest, response.ErrBadRequest, "email cannot be empty", gin.H{"field": "email"})
+			return
+		}
+		profileUpdates.Email = &email
+	}
+	if req.AvatarURL != nil {
+		avatar := strings.TrimSpace(*req.AvatarURL)
+		profileUpdates.AvatarURL = &avatar
+	}
+
+	if profileUpdates.Username != nil || profileUpdates.Email != nil || profileUpdates.AvatarURL != nil {
+		updatedProfile, updateErr := h.service.UpdateProfile(c.Request.Context(), userID, profileUpdates)
+		if updateErr != nil {
+			status := http.StatusInternalServerError
+			code := response.ErrInternal
+			var details gin.H
+			switch updateErr {
+			case usersvc.ErrUserNotFound:
+				status = http.StatusNotFound
+				code = response.ErrNotFound
+				log.Warnw("user not found on profile update")
+			case usersvc.ErrEmailTaken:
+				status = http.StatusConflict
+				code = response.ErrConflict
+				details = gin.H{"field": "email"}
+				log.Warnw("profile update conflict", "error", updateErr)
+			case usersvc.ErrUsernameTaken:
+				status = http.StatusConflict
+				code = response.ErrConflict
+				details = gin.H{"field": "username"}
+				log.Warnw("profile update conflict", "error", updateErr)
+			default:
+				log.Errorw("update profile failed", "error", updateErr)
+			}
+			response.Fail(c, status, code, updateErr.Error(), details)
+			return
+		}
+		current = updatedProfile
+	}
+
+	settings := current.Settings
 	if req.PreferredModel != "" {
 		settings.PreferredModel = req.PreferredModel
 	}
@@ -113,24 +181,27 @@ func (h *UserHandler) UpdateMe(c *gin.Context) {
 		settings.SyncEnabled = *req.SyncEnabled
 	}
 
-	updated, err := h.service.UpdateSettings(c.Request.Context(), userID, settings)
-	if err != nil {
-		status := http.StatusInternalServerError
-		code := response.ErrInternal
-		if err == usersvc.ErrUserNotFound {
-			status = http.StatusNotFound
-			code = response.ErrNotFound
-			log.Warnw("user not found on update")
-		} else {
-			log.Errorw("update settings failed", "error", err)
+	if req.PreferredModel != "" || req.SyncEnabled != nil {
+		updatedSettings, updateErr := h.service.UpdateSettings(c.Request.Context(), userID, settings)
+		if updateErr != nil {
+			status := http.StatusInternalServerError
+			code := response.ErrInternal
+			if updateErr == usersvc.ErrUserNotFound {
+				status = http.StatusNotFound
+				code = response.ErrNotFound
+				log.Warnw("user not found on settings update")
+			} else {
+				log.Errorw("update settings failed", "error", updateErr)
+			}
+			response.Fail(c, status, code, updateErr.Error(), nil)
+			return
 		}
-		response.Fail(c, status, code, err.Error(), nil)
-		return
+		current = updatedSettings
 	}
 
-	log.Infow("update settings success", "preferred_model", updated.Settings.PreferredModel, "sync_enabled", updated.Settings.SyncEnabled)
+	log.Infow("update success", "username", current.User.Username, "email", current.User.Email, "preferred_model", current.Settings.PreferredModel, "sync_enabled", current.Settings.SyncEnabled)
 
-	response.Success(c, http.StatusOK, updated, nil)
+	response.Success(c, http.StatusOK, current, nil)
 }
 
 func (h *UserHandler) ensureLogger() *zap.SugaredLogger {

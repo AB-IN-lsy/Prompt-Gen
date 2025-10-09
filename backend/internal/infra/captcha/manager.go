@@ -132,11 +132,18 @@ func (m *Manager) Generate(ctx context.Context, ip string) (string, string, erro
 
 	id, content, answer := m.driver.GenerateIdQuestionAnswer()
 
+	item, err := m.driver.DrawCaptcha(content)
+	if err != nil {
+		return "", "", fmt.Errorf("draw captcha: %w", err)
+	}
+
+	b64 := item.EncodeB64string()
+
 	if err := m.store.Set(ctx, m.key(id), strings.ToLower(answer), m.ttl).Err(); err != nil {
 		return "", "", fmt.Errorf("store captcha: %w", err)
 	}
 
-	return id, content, nil
+	return id, b64, nil
 }
 
 // Verify 对比用户提交的验证码答案，成功时删除缓存，失败时返回明确错误。

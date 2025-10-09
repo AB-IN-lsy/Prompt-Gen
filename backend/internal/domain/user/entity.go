@@ -16,6 +16,7 @@ type User struct {
 	ID           uint       `gorm:"primaryKey" json:"id"`
 	Username     string     `gorm:"size:64;uniqueIndex" json:"username"`
 	Email        string     `gorm:"size:255;uniqueIndex" json:"email"`
+	AvatarURL    string     `gorm:"size:512" json:"avatar_url"` // 用户头像的公开访问地址
 	PasswordHash string     `gorm:"size:255" json:"-"`
 	Settings     string     `gorm:"type:text" json:"settings"`
 	LastLoginAt  *time.Time `json:"last_login_at"`

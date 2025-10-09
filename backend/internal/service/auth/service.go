@@ -24,17 +24,18 @@ import (
 )
 
 var (
-	ErrEmailTaken           = errors.New("email already registered")
-	ErrUsernameTaken        = errors.New("username already taken")
-	ErrInvalidLogin         = errors.New("invalid email or password")
-	ErrCaptchaRequired      = errors.New("captcha is required")
-	ErrCaptchaInvalid       = errors.New("captcha verification failed")
-	ErrCaptchaExpired       = errors.New("captcha expired or not found")
-	ErrCaptchaRateLimited   = errors.New("captcha requests too frequent")
-	ErrRefreshTokenInvalid  = errors.New("refresh token is invalid")
-	ErrRefreshTokenExpired  = errors.New("refresh token expired")
-	ErrRefreshTokenRevoked  = errors.New("refresh token revoked")
-	ErrRefreshTokenRequired = errors.New("refresh token is required")
+	ErrEmailTaken            = errors.New("email already registered")
+	ErrUsernameTaken         = errors.New("username already taken")
+	ErrEmailAndUsernameTaken = errors.New("email and username already taken")
+	ErrInvalidLogin          = errors.New("invalid email or password")
+	ErrCaptchaRequired       = errors.New("captcha is required")
+	ErrCaptchaInvalid        = errors.New("captcha verification failed")
+	ErrCaptchaExpired        = errors.New("captcha expired or not found")
+	ErrCaptchaRateLimited    = errors.New("captcha requests too frequent")
+	ErrRefreshTokenInvalid   = errors.New("refresh token is invalid")
+	ErrRefreshTokenExpired   = errors.New("refresh token expired")
+	ErrRefreshTokenRevoked   = errors.New("refresh token revoked")
+	ErrRefreshTokenRequired  = errors.New("refresh token is required")
 )
 
 // CaptchaManager 聚合验证码生成与校验能力，便于在服务层替换实现。
@@ -101,6 +102,7 @@ type RegisterParams struct {
 	Username    string
 	Email       string
 	Password    string
+	AvatarURL   string
 	CaptchaID   string
 	CaptchaCode string
 }
@@ -142,23 +144,36 @@ func (s *Service) Register(ctx context.Context, params RegisterParams) (*domain.
 		}
 	}
 
-	// 先确认邮箱是否占用。三种分支：找到 -> 直接返回 ErrEmailTaken；未找到 -> 继续；
-	// 其他数据库错误 -> 立即中断并返回，避免在异常场景下继续注册。
+	// 先确认邮箱/用户名是否占用：若任一字段在库中已存在，记录标记，稍后统一返回。
+	emailTaken := false
 	if _, err := s.users.FindByEmail(ctx, params.Email); err == nil {
-		log.Warnw("email already registered")
-		return nil, TokenPair{}, ErrEmailTaken
+		emailTaken = true
 	} else if !errors.Is(err, gorm.ErrRecordNotFound) {
 		log.Errorw("check email unique failed", "error", err)
 		return nil, TokenPair{}, fmt.Errorf("check email unique: %w", err)
 	}
 
-	// 用户名校验沿用同样的三段式判断，确保真正的数据库错误不会被吞掉。
+	usernameTaken := false
 	if _, err := s.users.FindByUsername(ctx, params.Username); err == nil {
-		log.Warnw("username already taken")
-		return nil, TokenPair{}, ErrUsernameTaken
+		usernameTaken = true
 	} else if !errors.Is(err, gorm.ErrRecordNotFound) {
 		log.Errorw("check username unique failed", "error", err)
 		return nil, TokenPair{}, fmt.Errorf("check username unique: %w", err)
+	}
+
+	if emailTaken && usernameTaken {
+		log.Warnw("email and username already taken", "email", params.Email, "username", params.Username)
+		return nil, TokenPair{}, ErrEmailAndUsernameTaken
+	}
+
+	if emailTaken {
+		log.Warnw("email already registered")
+		return nil, TokenPair{}, ErrEmailTaken
+	}
+
+	if usernameTaken {
+		log.Warnw("username already taken")
+		return nil, TokenPair{}, ErrUsernameTaken
 	}
 
 	hash, err := hashPassword(params.Password)
@@ -173,9 +188,12 @@ func (s *Service) Register(ctx context.Context, params RegisterParams) (*domain.
 		return nil, TokenPair{}, fmt.Errorf("default settings: %w", err)
 	}
 
+	avatar := strings.TrimSpace(params.AvatarURL)
+
 	user := &domain.User{
 		Username:     params.Username,
 		Email:        params.Email,
+		AvatarURL:    avatar,
 		PasswordHash: hash,
 		Settings:     settingsJSON,
 	}

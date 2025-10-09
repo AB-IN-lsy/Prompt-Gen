@@ -54,9 +54,10 @@ func TestAuthServiceRegisterAndLogin(t *testing.T) {
 	ctx := context.Background()
 
 	user, tokens, err := svc.Register(ctx, auth.RegisterParams{
-		Username: "alice",
-		Email:    "alice@example.com",
-		Password: "password123",
+		Username:  "alice",
+		Email:     "alice@example.com",
+		Password:  "password123",
+		AvatarURL: "https://cdn.example.com/avatar/alice.png",
 	})
 	if err != nil {
 		t.Fatalf("register: %v", err)
@@ -101,6 +102,9 @@ func TestAuthServiceRegisterAndLogin(t *testing.T) {
 	if stored.LastLoginAt == nil {
 		t.Fatalf("expected stored user to contain last login timestamp")
 	}
+	if stored.AvatarURL != "https://cdn.example.com/avatar/alice.png" {
+		t.Fatalf("expected avatar url to persist, got %s", stored.AvatarURL)
+	}
 }
 
 // TestAuthServiceRegisterDuplicateEmailAndUsername 校验重复邮箱/用户名时返回对应错误。
@@ -133,6 +137,15 @@ func TestAuthServiceRegisterDuplicateEmailAndUsername(t *testing.T) {
 	})
 	if !errors.Is(err, auth.ErrUsernameTaken) {
 		t.Fatalf("expected username taken error, got %v", err)
+	}
+
+	_, _, err = svc.Register(ctx, auth.RegisterParams{
+		Username: "alice",
+		Email:    "alice@example.com",
+		Password: "password123",
+	})
+	if !errors.Is(err, auth.ErrEmailAndUsernameTaken) {
+		t.Fatalf("expected both email and username taken error, got %v", err)
 	}
 }
 

@@ -10,6 +10,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"path/filepath"
 	"time"
 
 	"electron-go-app/backend/internal/app"
@@ -62,12 +63,16 @@ func BuildApplication(ctx context.Context, logger *zap.SugaredLogger, resources 
 	userService := usersvc.NewService(userRepo)
 	userHandler := handler.NewUserHandler(userService)
 
+	uploadStorage := filepath.Join("public", "avatars")
+	uploadHandler := handler.NewUploadHandler(uploadStorage)
+
 	authMiddleware := middleware.NewAuthMiddleware(cfg.JWTSecret)
 
 	router := server.NewRouter(server.RouterOptions{
-		AuthHandler: authHandler,
-		UserHandler: userHandler,
-		AuthMW:      authMiddleware,
+		AuthHandler:   authHandler,
+		UserHandler:   userHandler,
+		UploadHandler: uploadHandler,
+		AuthMW:        authMiddleware,
 	})
 
 	return &Application{

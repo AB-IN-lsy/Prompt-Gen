@@ -2,7 +2,7 @@
  * @Author: NEFU AB-IN
  * @Date: 2025-10-08 20:42:09
  * @FilePath: \electron-go-app\backend\internal\handler\auth_handler.go
- * @LastEditTime: 2025-10-08 21:15:23
+ * @LastEditTime: 2025-10-10 02:49:19
  */
 package handler
 
@@ -34,6 +34,7 @@ type registerRequest struct {
 	Username    string `json:"username" binding:"required,min=3"`
 	Email       string `json:"email" binding:"required,email"`
 	Password    string `json:"password" binding:"required,min=6"`
+	AvatarURL   string `json:"avatar_url" binding:"omitempty"`
 	CaptchaID   string `json:"captcha_id"`
 	CaptchaCode string `json:"captcha_code"`
 }
@@ -72,21 +73,30 @@ func (h *AuthHandler) Register(c *gin.Context) {
 		Username:    req.Username,
 		Email:       req.Email,
 		Password:    req.Password,
+		AvatarURL:   req.AvatarURL,
 		CaptchaID:   req.CaptchaID,
 		CaptchaCode: req.CaptchaCode,
 	})
 	if err != nil {
 		status := http.StatusInternalServerError
 		code := response.ErrInternal
+		var details gin.H
 		switch err {
+		case auth.ErrEmailAndUsernameTaken:
+			status = http.StatusConflict
+			code = response.ErrConflict
+			log.Warnw("email and username already taken", "email", req.Email, "username", req.Username)
+			details = gin.H{"fields": []string{"email", "username"}}
 		case auth.ErrEmailTaken:
 			status = http.StatusConflict
 			code = response.ErrConflict
 			log.Warnw("email already taken", "email", req.Email)
+			details = gin.H{"field": "email"}
 		case auth.ErrUsernameTaken:
 			status = http.StatusConflict
 			code = response.ErrConflict
 			log.Warnw("username already taken", "username", req.Username)
+			details = gin.H{"field": "username"}
 		case auth.ErrCaptchaRequired:
 			status = http.StatusBadRequest
 			code = response.ErrCaptchaRequired
@@ -102,7 +112,7 @@ func (h *AuthHandler) Register(c *gin.Context) {
 		default:
 			log.Errorw("register failed", "error", err)
 		}
-		response.Fail(c, status, code, err.Error(), nil)
+		response.Fail(c, status, code, err.Error(), details)
 		return
 	}
 

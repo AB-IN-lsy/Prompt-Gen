@@ -2,6 +2,16 @@
 
 本项目提供 Electron 桌面端所需的 Go 后端服务，负责用户注册、登录、验证码获取以及用户信息维护。
 
+## 最近进展
+
+- 新增用户头像字段 `avatar_url`，支持上传后通过 `PUT /api/users/me` 保存。
+- 新增 `POST /api/uploads/avatar` 接口，可接收 multipart 头像并返回可访问的静态地址。
+- 默认开放 `/static/**` 路由映射到 `backend/public` 目录，供头像等资源直接访问。
+- 用户资料更新接口现会在保存前检查用户名、邮箱冲突，并返回更明确的错误。
+- 注册接口在邮箱、用户名同时冲突时会通过 `error.details.fields` 返回完整字段列表，方便前端逐项提示。
+- `PUT /api/users/me` 支持显式传入空字符串清空头像，便于用户撤销已上传的头像图片。
+- 单元测试覆盖 `UserService.UpdateProfile`，确保资料更新逻辑稳定。
+
 ## 环境变量
 
 ### 运行必需
@@ -40,17 +50,46 @@
 Copy-Item ..\..\.env.example ..\..\.env.local -Force
 ```
 
+## 跨域访问（CORS）
+
+### 为什么需要它？
+
+浏览器有一道“同源策略”安全限制：页面只能访问和自己协议、域名、端口完全相同的接口。我们的场景里存在多个“来源”：
+
+1. `npm run dev` 启动的 Vite 页面对外地址是 `http://localhost:5173`。
+2. `npm run preview` 会在 `http://localhost:4173` 启动模拟生产的静态服务器。
+3. Electron 开发模式下，主窗口直接载入 Vite 地址；打包后则会以 `file://...` 形式打开本地 `dist/index.html`。此时浏览器发送的 `Origin` 会变成 `null`。
+
+后端监听在 `http://localhost:9090`，上述来源在访问 `/api/...` 时都属于“跨域”。如果没有额外配置，浏览器会拒绝这些请求，表现为前端收到 `CORS error` 或直接失败。
+
+### 项目中的处理方式
+
+我们在 `internal/server/router.go` 中启用了 [CORS（Cross-Origin Resource Sharing）](https://developer.mozilla.org/zh-CN/docs/Web/HTTP/CORS) 中间件，并允许以下来源访问：
+
+- `http://localhost:<任何端口>`（覆盖 5173、4173 及其他本地调试端口）
+- `http://127.0.0.1:<任何端口>`（同上，只是访问方式不同）
+- `null`（Electron 以 `file://` 打开页面时浏览器带上的特殊值）
+
+中间件会自动添加 `Access-Control-Allow-Origin`、`Access-Control-Allow-Methods` 等响应头，从而告诉浏览器“这类跨域请求是允许的”。如需联调更多域名，只需扩展 `AllowOriginFunc` 或改为读取环境变量即可。
+
 ## 对外 API
 
 | 方法 | 路径 | 描述 | 请求参数 |
 | --- | --- | --- | --- |
 | `GET` | `/api/auth/captcha` | 获取图形验证码 | 无；按客户端 IP 控制限流 |
-| `POST` | `/api/auth/register` | 用户注册 | JSON：`username`、`email`、`password`、`captcha_id`、`captcha_code`（验证码开启时必填） |
+| `POST` | `/api/auth/register` | 用户注册 | JSON：`username`、`email`、`password`、`avatar_url`、`captcha_id`、`captcha_code`（验证码开启时必填） |
 | `POST` | `/api/auth/login` | 用户登录 | JSON：`email`、`password` |
 | `POST` | `/api/auth/refresh` | 刷新访问令牌 | JSON：`refresh_token` |
 | `POST` | `/api/auth/logout` | 撤销刷新令牌 | JSON：`refresh_token` |
 | `GET` | `/api/users/me` | 获取当前登录用户信息 | 需附带 `Authorization: Bearer <token>` |
-| `PUT` | `/api/users/me` | 更新当前用户信息 | JSON：`username`、`email`、`settings`；同样需要登录 |
+| `PUT` | `/api/users/me` | 更新当前用户信息 | JSON：`username`、`email`、`avatar_url`、`settings`；同样需要登录 |
+| `POST` | `/api/uploads/avatar` | 上传头像文件并返回静态地址 | 需登录；multipart 表单：`avatar` 文件字段 |
+
+### 静态资源与上传目录
+
+- 服务器启动时会将 `/static/**` 映射到项目内的 `backend/public` 目录，头像上传默认写入 `backend/public/avatars`。
+- 可以根据需要挂载到对象存储或 CDN，只需替换 `UploadHandler` 的写入逻辑并调整返回的 URL。
+- 若运行在容器环境，请确保挂载该目录或改为外部存储，以免应用重启后上传内容丢失。
 
 接口返回统一结构：`success`、`data`、`error`、`meta`。错误码见 `internal/infra/common/response.go`。
 

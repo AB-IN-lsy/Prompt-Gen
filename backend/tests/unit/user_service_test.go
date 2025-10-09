@@ -22,7 +22,8 @@ import (
 func setupUserService(t *testing.T) (*usersvc.Service, *repository.UserRepository, *gorm.DB) {
 	t.Helper()
 
-	db, err := gorm.Open(sqlite.Open("file::memory:?cache=shared"), &gorm.Config{})
+	dsn := "file:" + t.Name() + "?mode=memory&cache=shared"
+	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{})
 	if err != nil {
 		t.Fatalf("failed to open sqlite: %v", err)
 	}
@@ -111,5 +112,59 @@ func TestUserService_UserNotFound(t *testing.T) {
 	_, err := svc.UpdateSettings(context.Background(), 42, domain.DefaultSettings())
 	if err != usersvc.ErrUserNotFound {
 		t.Fatalf("expected ErrUserNotFound on update, got %v", err)
+	}
+}
+
+// TestUserService_UpdateProfile 验证基础信息更新与冲突检测。
+func TestUserService_UpdateProfile(t *testing.T) {
+	svc, repo, db := setupUserService(t)
+
+	userA := &domain.User{Username: "alice", Email: "alice@example.com"}
+	if err := repo.Create(context.Background(), userA); err != nil {
+		t.Fatalf("create userA: %v", err)
+	}
+	userB := &domain.User{Username: "bob", Email: "bob@example.com"}
+	if err := repo.Create(context.Background(), userB); err != nil {
+		t.Fatalf("create userB: %v", err)
+	}
+
+	newUsername := "alice_new"
+	newEmail := "alice_new@example.com"
+	avatar := "https://example.com/avatar.png"
+
+	profile, err := svc.UpdateProfile(context.Background(), userA.ID, usersvc.UpdateProfileParams{
+		Username:  &newUsername,
+		Email:     &newEmail,
+		AvatarURL: &avatar,
+	})
+	if err != nil {
+		t.Fatalf("UpdateProfile returned error: %v", err)
+	}
+	if profile.User.Username != newUsername {
+		t.Fatalf("expected username updated, got %s", profile.User.Username)
+	}
+	if profile.User.Email != newEmail {
+		t.Fatalf("expected email updated, got %s", profile.User.Email)
+	}
+	if profile.User.AvatarURL != avatar {
+		t.Fatalf("expected avatar updated, got %s", profile.User.AvatarURL)
+	}
+
+	var stored domain.User
+	if err := db.First(&stored, userA.ID).Error; err != nil {
+		t.Fatalf("reload userA: %v", err)
+	}
+	if stored.Username != newUsername || stored.Email != newEmail || stored.AvatarURL != avatar {
+		t.Fatalf("stored user mismatch: %+v", stored)
+	}
+
+	dupUsername := "bob"
+	if _, err := svc.UpdateProfile(context.Background(), userA.ID, usersvc.UpdateProfileParams{Username: &dupUsername}); err != usersvc.ErrUsernameTaken {
+		t.Fatalf("expected ErrUsernameTaken, got %v", err)
+	}
+
+	dupEmail := "bob@example.com"
+	if _, err := svc.UpdateProfile(context.Background(), userA.ID, usersvc.UpdateProfileParams{Email: &dupEmail}); err != usersvc.ErrEmailTaken {
+		t.Fatalf("expected ErrEmailTaken, got %v", err)
 	}
 }

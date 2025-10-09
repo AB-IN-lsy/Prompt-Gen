@@ -2,18 +2,21 @@ package server
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"electron-go-app/backend/internal/handler"
 	"electron-go-app/backend/internal/middleware"
 
+	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 )
 
 type RouterOptions struct {
-	AuthHandler *handler.AuthHandler
-	UserHandler *handler.UserHandler
-	AuthMW      *middleware.AuthMiddleware
+	AuthHandler   *handler.AuthHandler
+	UserHandler   *handler.UserHandler
+	UploadHandler *handler.UploadHandler
+	AuthMW        *middleware.AuthMiddleware
 }
 
 func NewRouter(opts RouterOptions) *gin.Engine {
@@ -22,6 +25,29 @@ func NewRouter(opts RouterOptions) *gin.Engine {
 
 	// gin 中间件配置
 	r.Use(gin.Recovery())
+	r.Use(cors.New(cors.Config{
+		AllowAllOrigins:  false,
+		AllowMethods:     []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
+		AllowHeaders:     []string{"Origin", "Content-Type", "Accept", "Authorization"},
+		ExposeHeaders:    []string{"Content-Length", "Content-Type"},
+		AllowCredentials: false,
+		MaxAge:           12 * time.Hour,
+		AllowOriginFunc: func(origin string) bool {
+			if origin == "" {
+				return false
+			}
+			if origin == "null" {
+				return true
+			}
+			if strings.HasPrefix(origin, "http://localhost:") {
+				return true
+			}
+			if strings.HasPrefix(origin, "http://127.0.0.1:") {
+				return true
+			}
+			return false
+		},
+	}))
 	r.Use(gin.LoggerWithConfig(gin.LoggerConfig{
 		Formatter: gin.LogFormatter(func(params gin.LogFormatterParams) string {
 			return fmt.Sprintf("%s - [%s] \"%s %s\" %d %s\n",
@@ -34,6 +60,8 @@ func NewRouter(opts RouterOptions) *gin.Engine {
 			)
 		}),
 	}))
+
+	r.Static("/static", "./public")
 
 	api := r.Group("/api")
 	{
@@ -55,6 +83,14 @@ func NewRouter(opts RouterOptions) *gin.Engine {
 		if opts.UserHandler != nil {
 			userGroup.GET("/me", opts.UserHandler.GetMe)
 			userGroup.PUT("/me", opts.UserHandler.UpdateMe)
+		}
+
+		if opts.UploadHandler != nil {
+			uploads := api.Group("/uploads")
+			if opts.AuthMW != nil {
+				uploads.Use(opts.AuthMW.Handle())
+			}
+			uploads.POST("/avatar", opts.UploadHandler.UploadAvatar)
 		}
 	}
 

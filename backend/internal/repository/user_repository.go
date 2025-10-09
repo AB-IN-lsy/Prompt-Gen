@@ -8,6 +8,7 @@ package repository
 
 import (
 	"context"
+	"strings"
 
 	"electron-go-app/backend/internal/domain/user"
 
@@ -74,4 +75,66 @@ func (r *UserRepository) UpdateSettings(ctx context.Context, userID uint, settin
 		return gorm.ErrRecordNotFound
 	}
 	return nil
+}
+
+// UpdateProfileFields 按需更新用户的基础信息字段。
+func (r *UserRepository) UpdateProfileFields(ctx context.Context, userID uint, fields map[string]interface{}) error {
+	if len(fields) == 0 {
+		return nil
+	}
+
+	// 预处理字段：避免空字符串写入数据库导致违反非空约束或出现无意义数据。
+	for key, value := range fields {
+		if str, ok := value.(string); ok {
+			trimmed := strings.TrimSpace(str)
+			if key == "avatar_url" {
+				// 头像允许清空，因此仅同步去除首尾空格。
+				fields[key] = trimmed
+				continue
+			}
+			if trimmed == "" {
+				delete(fields, key)
+			} else if trimmed != str {
+				fields[key] = trimmed
+			}
+		}
+	}
+
+	if len(fields) == 0 {
+		return nil
+	}
+
+	result := r.db.WithContext(ctx).
+		Model(&user.User{}).
+		Where("id = ?", userID).
+		Updates(fields)
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected == 0 {
+		return gorm.ErrRecordNotFound
+	}
+	return nil
+}
+
+// ExistsOtherByEmail 检查是否存在除指定用户外使用该邮箱的记录。
+func (r *UserRepository) ExistsOtherByEmail(ctx context.Context, email string, excludeID uint) (bool, error) {
+	var count int64
+	if err := r.db.WithContext(ctx).Model(&user.User{}).
+		Where("email = ? AND id <> ?", email, excludeID).
+		Count(&count).Error; err != nil {
+		return false, err
+	}
+	return count > 0, nil
+}
+
+// ExistsOtherByUsername 检查是否存在除指定用户外使用该用户名的记录。
+func (r *UserRepository) ExistsOtherByUsername(ctx context.Context, username string, excludeID uint) (bool, error) {
+	var count int64
+	if err := r.db.WithContext(ctx).Model(&user.User{}).
+		Where("username = ? AND id <> ?", username, excludeID).
+		Count(&count).Error; err != nil {
+		return false, err
+	}
+	return count > 0, nil
 }
