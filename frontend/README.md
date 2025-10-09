@@ -1,0 +1,100 @@
+# PromptGen 前端
+
+基于 Vite + React + TypeScript 构建的 Electron 前端界面，提供仪表盘、提示词工作台、设置中心等功能，并整合 React Query、Zustand 与 i18next 完成数据管理与多语言支持。
+
+## 已实现功能概览
+
+- **用户注册/登录**：注册页集成图形验证码，支持自动重试、行内校验与失败提示；登录页同样提供行内校验，并通过全局通知（Toast）反馈成功或错误状态。
+- **仪表盘**：`Dashboard.tsx` 提供工作台概览，包括关键指标卡、近期活动、提示词表现表格、关键词洞察等模块，当前以 Mock 数据占位，便于后续接入真实接口。
+- **Prompt 工作台**：支持关键词治理、Prompt 草稿编辑、模型选择等核心交互，具备自动保存与关键词正/负向拆分。
+- **设置中心**：语言切换与状态持久化，调用 `useAppSettings` Store。
+- **应用外壳**：`AppShell` 搭建统一导航、顶部工具栏、账户信息与退出功能。
+
+## 快速开始
+
+```powershell
+# 安装依赖
+npm install
+
+# 开发模式（默认使用 Vite Dev Server）
+npm run dev
+
+# 构建生产包
+npm run build
+
+# 本地预览构建结果
+npm run preview
+```
+
+## 目录结构概览
+
+```text
+frontend/
+├─ package.json
+├─ postcss.config.js
+├─ tailwind.config.ts
+├─ tsconfig*.json
+├─ vite.config.*
+└─ src/
+   ├─ main.tsx                     # React 应用入口，挂载 QueryClient 与浏览器路由
+   ├─ App.tsx                      # 根路由配置，统一注入布局组件
+   ├─ index.css                    # 全局样式（Tailwind + 自定义变量）
+   ├─ components/
+   │  ├─ layout/
+   │  │  ├─ AppShell.tsx           # 顶部工具栏 + 侧边导航的应用外壳
+   │  │  └─ AuthLayout.tsx         # 登录/注册页的独立布局
+   │  └─ ui/                       # 轻量 UI 组件（Button、Input、GlassCard 等）
+   ├─ pages/
+   │  ├─ Dashboard.tsx             # 仪表盘页面，展示指标卡、动态与提示词表现
+   │  ├─ Login.tsx                 # 登录表单，内置行内校验与 Toast 成功/失败提示
+   │  ├─ Register.tsx              # 注册表单，内置验证码刷新、自动重试与行内校验提示
+   │  ├─ PromptWorkbench.tsx       # 提示词工作台，整合关键词管理与草稿编辑
+   │  └─ Settings.tsx              # 设置页，当前主要用于语言切换
+   ├─ hooks/
+   │  ├─ useAppSettings.ts         # 管理语言等全局设置的 Zustand Store
+   │  ├─ useAuth.ts                # 认证状态 Store，负责初始化、登录、登出
+   │  └─ usePromptWorkbench.ts     # 提示词工作台的业务状态 Store
+   ├─ lib/
+   │  ├─ api.ts                    # 针对后端业务接口的封装（关键词、草稿、生成等）
+   │  ├─ http.ts                   # Axios 实例与 Token 刷新、错误归一化逻辑
+   │  ├─ errors.ts                 # 统一的 ApiError 定义
+   │  ├─ tokenStorage.ts           # Token 持久化与过期判断
+   │  └─ utils.ts                  # 常用工具（className 合并等）
+   ├─ i18n/
+   │  ├─ index.ts                  # i18next 初始化、语言探测与持久化
+   │  └─ locales/                  # 多语言文案资源（中文、英文）
+   └─ lib/types 等其它业务文件
+```
+
+## 核心模块说明
+
+- **数据获取与缓存**：`lib/http.ts` 负责统一的 Axios 设置、响应解包和 401 刷新；业务接口以 `lib/api.ts` 为入口，配合 React Query 在页面中使用。
+- **状态管理**：`hooks/usePromptWorkbench.ts`、`hooks/useAppSettings.ts` 使用 Zustand 管理跨组件状态并提供严格的更新函数。
+- **界面布局**：`components/layout/AppShell.tsx` 定义全局导航壳，所有页面走 `App.tsx` 进入；页面内 UI 统一复用 `components/ui/` 中的基础控件。
+- **认证流程**：`hooks/useAuth.ts` 负责在启动时校验 token、刷新用户资料、执行登出；`Login.tsx`/`Register.tsx` 通过 `useAuth.authenticate` 串联登录/注册后的资料拉取；`App.tsx` 根据登录态切换路由。
+- **国际化**：`i18n/index.ts` 初始化翻译实例并读取 `locales/` 下的文案；`Settings.tsx` 通过 store 调用 `setLanguage` 完成切换与持久化。
+
+## 身份认证与路由
+
+1. 首次打开页面时，`App.tsx` 会调用 `useAuth.initialize()`：若本地存在 token 会自动请求 `/users/me`，成功后进入受保护页面，否则跳转登录页。
+2. 登录或注册成功后，`useAuth.authenticate()` 会保存令牌并重新请求 `/users/me` 以刷新头像、用户名和个性化设置，然后导航到 Prompt 工作台。
+3. `AppShell` 顶部展示当前用户名并提供退出按钮；退出会调用 `/auth/logout`、清理本地 token，并重定向到 `/login`。
+4. 所有受保护路由在未登录状态下都会重定向到 `/login`，防止用户绕过权限访问。
+
+## 开发约定
+
+- 使用 TypeScript，建议在新增文件时同步补全类型定义。
+- 所有对后端的请求都应通过 `lib/api.ts` 暴露的函数完成，避免散落的 Axios 调用。
+- 新增页面时，把路由注册在 `App.tsx` 并复用 `AppShell` 外壳，保持导航一致。
+- 文案统一维护在 `i18n/locales/*`，新增 key 请同步提供中英双语翻译。
+- 若扩展 UI 组件，请优先考虑 `components/ui/` 目录，保持复用性。
+
+## 后续改进建议
+
+- **统一移除 JS 旧实现**：`src/pages` 与 `src/hooks` 仍保留 `.js` 版本，确认无依赖后可删除，避免与 TS 文件产生漂移。
+- **表单体验增强**：为登录/注册表单补充即时校验、密码可见切换、全局 toast 等手势反馈。
+- **验证码与安全**：根据实际接口返回码细化错误提示，并在失败次数过多时加入额外保护措施。
+- 引入拖拽库（如 dnd-kit）实现关键词排序与权重调整的可视化操作。
+- 在 `PromptWorkbench` 中补充请求/保存的 Toast 反馈，增强错误提示体验。
+- 接入 Dashboard / My Prompts 实时数据接口，替换 mock 数据并增加骨架屏。
+- 对国际化文案进行分模块拆分，减少单一 JSON 文件的体积与维护难度。
