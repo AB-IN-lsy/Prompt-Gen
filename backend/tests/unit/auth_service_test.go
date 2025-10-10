@@ -14,6 +14,7 @@ import (
 	"time"
 
 	domain "electron-go-app/backend/internal/domain/user"
+	"electron-go-app/backend/internal/infra/captcha"
 	"electron-go-app/backend/internal/infra/token"
 	"electron-go-app/backend/internal/repository"
 	auth "electron-go-app/backend/internal/service/auth"
@@ -30,8 +31,34 @@ func (testEmailSender) SendVerification(_ context.Context, _ *domain.User, _ str
 	return nil
 }
 
+type fakeCaptcha struct {
+	expectedID   string
+	expectedCode string
+	returnErr    error
+	verifyCalls  int
+}
+
+func (f *fakeCaptcha) Generate(_ context.Context, _ string) (string, string, int, error) {
+	return "stub", "", -1, nil
+}
+
+func (f *fakeCaptcha) Verify(_ context.Context, id string, answer string) error {
+	f.verifyCalls++
+	if f.returnErr != nil {
+		return f.returnErr
+	}
+	if id != f.expectedID || answer != f.expectedCode {
+		return errors.New("unexpected captcha payload")
+	}
+	return nil
+}
+
 // newTestAuthService 创建内存版鉴权服务和仓储，便于单元测试隔离数据库依赖。
-func newTestAuthService(t *testing.T) (*auth.Service, *repository.UserRepository, *gorm.DB) {
+func newTestAuthService(t *testing.T) (*auth.Service, *repository.UserRepository, *repository.EmailVerificationRepository, *gorm.DB) {
+	return newTestAuthServiceWithCaptcha(t, nil)
+}
+
+func newTestAuthServiceWithCaptcha(t *testing.T, cm auth.CaptchaManager) (*auth.Service, *repository.UserRepository, *repository.EmailVerificationRepository, *gorm.DB) {
 	t.Helper()
 
 	dsn := fmt.Sprintf("file:%s?mode=memory&cache=shared", t.Name())
@@ -42,6 +69,13 @@ func newTestAuthService(t *testing.T) (*auth.Service, *repository.UserRepository
 		t.Fatalf("open sqlite: %v", err)
 	}
 
+	sqlDB, err := db.DB()
+	if err != nil {
+		t.Fatalf("get sql db: %v", err)
+	}
+	sqlDB.SetMaxOpenConns(1)
+	sqlDB.SetMaxIdleConns(1)
+
 	if err := db.AutoMigrate(&domain.User{}, &domain.EmailVerificationToken{}); err != nil {
 		t.Fatalf("auto migrate: %v", err)
 	}
@@ -50,14 +84,14 @@ func newTestAuthService(t *testing.T) (*auth.Service, *repository.UserRepository
 	verificationRepo := repository.NewEmailVerificationRepository(db)
 	tokenManager := token.NewJWTManager("test-secret", time.Minute, 24*time.Hour)
 	refreshStore := token.NewMemoryRefreshTokenStore()
-	service := auth.NewService(repo, verificationRepo, tokenManager, refreshStore, nil, testEmailSender{})
+	service := auth.NewService(repo, verificationRepo, tokenManager, refreshStore, cm, testEmailSender{})
 
-	return service, repo, db
+	return service, repo, verificationRepo, db
 }
 
 // TestAuthServiceRegisterAndLogin 覆盖注册成功、登录成功以及密码哈希与登录时间更新。
 func TestAuthServiceRegisterAndLogin(t *testing.T) {
-	svc, repo, _ := newTestAuthService(t)
+	svc, repo, _, _ := newTestAuthService(t)
 	ctx := context.Background()
 
 	user, tokens, err := svc.Register(ctx, auth.RegisterParams{
@@ -120,7 +154,7 @@ func TestAuthServiceRegisterAndLogin(t *testing.T) {
 
 // TestAuthServiceRegisterDuplicateEmailAndUsername 校验重复邮箱/用户名时返回对应错误。
 func TestAuthServiceRegisterDuplicateEmailAndUsername(t *testing.T) {
-	svc, _, _ := newTestAuthService(t)
+	svc, _, _, _ := newTestAuthService(t)
 	ctx := context.Background()
 
 	_, _, err := svc.Register(ctx, auth.RegisterParams{
@@ -160,9 +194,55 @@ func TestAuthServiceRegisterDuplicateEmailAndUsername(t *testing.T) {
 	}
 }
 
+func TestAuthServiceRegisterRequiresCaptcha(t *testing.T) {
+	fake := &fakeCaptcha{expectedID: "captcha-id", expectedCode: "13579"}
+	svc, _, _, _ := newTestAuthServiceWithCaptcha(t, fake)
+	ctx := context.Background()
+
+	_, _, err := svc.Register(ctx, auth.RegisterParams{
+		Username: "alice",
+		Email:    "alice@example.com",
+		Password: "password123",
+	})
+	if !errors.Is(err, auth.ErrCaptchaRequired) {
+		t.Fatalf("expected ErrCaptchaRequired, got %v", err)
+	}
+
+	fake.returnErr = captcha.ErrCaptchaMismatch
+
+	_, _, err = svc.Register(ctx, auth.RegisterParams{
+		Username:    "alice",
+		Email:       "alice@example.com",
+		Password:    "password123",
+		CaptchaID:   "captcha-id",
+		CaptchaCode: "wrong",
+	})
+	if !errors.Is(err, auth.ErrCaptchaInvalid) {
+		t.Fatalf("expected ErrCaptchaInvalid, got %v", err)
+	}
+
+	fake.returnErr = nil
+	fake.verifyCalls = 0
+
+	_, _, err = svc.Register(ctx, auth.RegisterParams{
+		Username:    "alice",
+		Email:       "alice@example.com",
+		Password:    "password123",
+		CaptchaID:   "captcha-id",
+		CaptchaCode: "13579",
+	})
+	if err != nil {
+		t.Fatalf("register with captcha failed: %v", err)
+	}
+	if fake.verifyCalls == 0 {
+		t.Fatalf("expected captcha verification to be invoked")
+	}
+
+}
+
 // TestAuthServiceLoginInvalidCredentials 确认登录失败场景统一返回 ErrInvalidLogin。
 func TestAuthServiceLoginInvalidCredentials(t *testing.T) {
-	svc, repo, _ := newTestAuthService(t)
+	svc, repo, _, _ := newTestAuthService(t)
 	ctx := context.Background()
 
 	user, _, err := svc.Register(ctx, auth.RegisterParams{
@@ -197,7 +277,7 @@ func TestAuthServiceLoginInvalidCredentials(t *testing.T) {
 
 // TestAuthServiceRefreshAndLogout 覆盖刷新令牌与登出逻辑。
 func TestAuthServiceRefreshAndLogout(t *testing.T) {
-	svc, _, _ := newTestAuthService(t)
+	svc, _, _, _ := newTestAuthService(t)
 	ctx := context.Background()
 
 	_, tokens, err := svc.Register(ctx, auth.RegisterParams{

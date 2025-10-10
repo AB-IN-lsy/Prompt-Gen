@@ -12,6 +12,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strings"
 	"testing"
 
 	domain "electron-go-app/backend/internal/domain/user"
@@ -43,6 +44,13 @@ func newTestModelService(t *testing.T) (*modelsvc.Service, *gorm.DB, *repository
 	if err != nil {
 		t.Fatalf("open sqlite: %v", err)
 	}
+
+	sqlDB, err := db.DB()
+	if err != nil {
+		t.Fatalf("get sql db: %v", err)
+	}
+	sqlDB.SetMaxOpenConns(1)
+	sqlDB.SetMaxIdleConns(1)
 
 	if err := db.AutoMigrate(&domain.User{}, &domain.UserModelCredential{}); err != nil {
 		t.Fatalf("auto migrate: %v", err)
@@ -140,6 +148,71 @@ func TestModelServiceCreateDuplicate(t *testing.T) {
 	})
 	if !errors.Is(err, modelsvc.ErrDuplicatedModelKey) {
 		t.Fatalf("expected duplicated model key error, got %v", err)
+	}
+}
+
+func TestModelServiceCreateValidation(t *testing.T) {
+	svc, _, _, userID := newTestModelService(t)
+	ctx := context.Background()
+
+	cases := []struct {
+		name    string
+		input   modelsvc.CreateInput
+		wantErr string
+	}{
+		{
+			name: "missing provider",
+			input: modelsvc.CreateInput{
+				Provider:    "",
+				ModelKey:    "primary",
+				DisplayName: "Account",
+				BaseURL:     "https://example.com",
+				APIKey:      "sk-1",
+			},
+			wantErr: "provider is required",
+		},
+		{
+			name: "missing model key",
+			input: modelsvc.CreateInput{
+				Provider:    "openai",
+				ModelKey:    "  ",
+				DisplayName: "Account",
+				BaseURL:     "https://example.com",
+				APIKey:      "sk-2",
+			},
+			wantErr: "model_key is required",
+		},
+		{
+			name: "missing display name",
+			input: modelsvc.CreateInput{
+				Provider:    "openai",
+				ModelKey:    "primary",
+				DisplayName: "",
+				BaseURL:     "https://example.com",
+				APIKey:      "sk-3",
+			},
+			wantErr: "display_name is required",
+		},
+		{
+			name: "missing api key",
+			input: modelsvc.CreateInput{
+				Provider:    "openai",
+				ModelKey:    "primary",
+				DisplayName: "Account",
+				BaseURL:     "https://example.com",
+				APIKey:      " ",
+			},
+			wantErr: "api_key is required",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := svc.Create(ctx, userID, tc.input)
+			if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
+				t.Fatalf("expected error containing %q, got %v", tc.wantErr, err)
+			}
+		})
 	}
 }
 
@@ -310,6 +383,79 @@ func TestModelServiceDisableClearsPreferred(t *testing.T) {
 	}
 	if parsed.PreferredModel == "primary" {
 		t.Fatalf("expected preferred model cleared after disable")
+	}
+}
+
+func TestModelServiceUpdateStatusNormalizesInput(t *testing.T) {
+	svc, _, userRepo, userID := newTestModelService(t)
+	ctx := context.Background()
+
+	cred, err := svc.Create(ctx, userID, modelsvc.CreateInput{
+		Provider:    "openai",
+		ModelKey:    "primary",
+		DisplayName: "OpenAI",
+		BaseURL:     "",
+		APIKey:      "sk-001",
+		ExtraConfig: map[string]any{"region": "us"},
+	})
+	if err != nil {
+		t.Fatalf("create credential: %v", err)
+	}
+
+	settings := domain.Settings{PreferredModel: "primary", SyncEnabled: true}
+	raw, _ := domain.SettingsJSON(settings)
+	if err := userRepo.UpdateSettings(ctx, userID, raw); err != nil {
+		t.Fatalf("assign preferred model: %v", err)
+	}
+
+	status := " DISABLED "
+	updated, err := svc.Update(ctx, userID, cred.ID, modelsvc.UpdateInput{Status: &status})
+	if err != nil {
+		t.Fatalf("update credential: %v", err)
+	}
+	if updated.Status != "disabled" {
+		t.Fatalf("expected normalized status 'disabled', got %s", updated.Status)
+	}
+
+	profileSettings, err := userRepo.FindByID(ctx, userID)
+	if err != nil {
+		t.Fatalf("reload user: %v", err)
+	}
+	parsed, err := domain.ParseSettings(profileSettings.Settings)
+	if err != nil {
+		t.Fatalf("parse settings: %v", err)
+	}
+	if parsed.PreferredModel == "primary" {
+		t.Fatalf("expected preferred model cleared after normalized disable")
+	}
+}
+
+func TestModelServiceUpdatePreservesExtraWhenNil(t *testing.T) {
+	svc, _, _, userID := newTestModelService(t)
+	ctx := context.Background()
+
+	cred, err := svc.Create(ctx, userID, modelsvc.CreateInput{
+		Provider:    "openai",
+		ModelKey:    "primary",
+		DisplayName: "OpenAI",
+		BaseURL:     "",
+		APIKey:      "sk-001",
+		ExtraConfig: map[string]any{"default_model": "gpt-4o"},
+	})
+	if err != nil {
+		t.Fatalf("create credential: %v", err)
+	}
+
+	newName := "OpenAI Updated"
+	updated, err := svc.Update(ctx, userID, cred.ID, modelsvc.UpdateInput{DisplayName: &newName})
+	if err != nil {
+		t.Fatalf("update credential: %v", err)
+	}
+	if updated.DisplayName != newName {
+		t.Fatalf("expected display name updated")
+	}
+	if updated.ExtraConfig["default_model"] != "gpt-4o" {
+		t.Fatalf("expected extra config to remain unchanged")
 	}
 }
 

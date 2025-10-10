@@ -29,6 +29,13 @@ func setupUserService(t *testing.T) (*usersvc.Service, *repository.UserRepositor
 		t.Fatalf("failed to open sqlite: %v", err)
 	}
 
+	sqlDB, err := db.DB()
+	if err != nil {
+		t.Fatalf("failed to get sql db: %v", err)
+	}
+	sqlDB.SetMaxOpenConns(1)
+	sqlDB.SetMaxIdleConns(1)
+
 	if err := db.AutoMigrate(&domain.User{}, &domain.UserModelCredential{}); err != nil {
 		t.Fatalf("failed to migrate: %v", err)
 	}
@@ -268,5 +275,89 @@ func TestUserService_UpdateSettings_EmptyPreferredModelResetsToDefault(t *testin
 
 	if profile.Settings.PreferredModel != domain.DefaultSettings().PreferredModel {
 		t.Fatalf("expected default preferred model, got %s", profile.Settings.PreferredModel)
+	}
+}
+
+func TestUserService_UpdateProfile_TrimsWhitespace(t *testing.T) {
+	svc, repo, db := setupUserService(t)
+
+	user := &domain.User{Username: "origin", Email: "origin@example.com"}
+	if err := repo.Create(context.Background(), user); err != nil {
+		t.Fatalf("create user: %v", err)
+	}
+
+	username := "   trimmed   "
+	email := "  trimmed@example.com  "
+	avatar := "  https://example.com/avatar.png  "
+
+	profile, err := svc.UpdateProfile(context.Background(), user.ID, usersvc.UpdateProfileParams{
+		Username:  &username,
+		Email:     &email,
+		AvatarURL: &avatar,
+	})
+	if err != nil {
+		t.Fatalf("UpdateProfile returned error: %v", err)
+	}
+
+	if profile.User.Username != "trimmed" {
+		t.Fatalf("expected username trimmed, got %s", profile.User.Username)
+	}
+	if profile.User.Email != "trimmed@example.com" {
+		t.Fatalf("expected email trimmed, got %s", profile.User.Email)
+	}
+	if profile.User.AvatarURL != "https://example.com/avatar.png" {
+		t.Fatalf("expected avatar trimmed, got %s", profile.User.AvatarURL)
+	}
+
+	var stored domain.User
+	if err := db.First(&stored, user.ID).Error; err != nil {
+		t.Fatalf("reload user: %v", err)
+	}
+	if stored.Username != "trimmed" || stored.Email != "trimmed@example.com" {
+		t.Fatalf("stored values not trimmed: %+v", stored)
+	}
+}
+
+func TestUserService_UpdateProfile_IgnoresWhitespaceOnlyInput(t *testing.T) {
+	svc, repo, db := setupUserService(t)
+
+	user := &domain.User{Username: "origin", Email: "origin@example.com"}
+	if err := repo.Create(context.Background(), user); err != nil {
+		t.Fatalf("create user: %v", err)
+	}
+
+	blank := "   "
+	empty := ""
+	if _, err := svc.UpdateProfile(context.Background(), user.ID, usersvc.UpdateProfileParams{
+		Username: &blank,
+		Email:    &empty,
+	}); err != nil {
+		t.Fatalf("UpdateProfile returned error: %v", err)
+	}
+
+	var stored domain.User
+	if err := db.First(&stored, user.ID).Error; err != nil {
+		t.Fatalf("reload user: %v", err)
+	}
+	if stored.Username != "origin" || stored.Email != "origin@example.com" {
+		t.Fatalf("expected no changes when input whitespace/empty: %+v", stored)
+	}
+}
+
+func TestUserService_UpdateSettings_AllowsDefaultWithoutCredentials(t *testing.T) {
+	svc, repo, _ := setupUserService(t)
+
+	user := &domain.User{Username: "origin", Email: "origin@example.com"}
+	if err := repo.Create(context.Background(), user); err != nil {
+		t.Fatalf("create user: %v", err)
+	}
+
+	defaultSettings := domain.Settings{PreferredModel: domain.DefaultSettings().PreferredModel, SyncEnabled: true}
+	profile, err := svc.UpdateSettings(context.Background(), user.ID, defaultSettings)
+	if err != nil {
+		t.Fatalf("UpdateSettings returned error: %v", err)
+	}
+	if profile.Settings.PreferredModel != domain.DefaultSettings().PreferredModel {
+		t.Fatalf("expected preferred model to remain default, got %s", profile.Settings.PreferredModel)
 	}
 }
