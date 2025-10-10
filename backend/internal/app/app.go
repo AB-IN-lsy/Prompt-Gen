@@ -63,7 +63,7 @@ func InitResources(ctx context.Context) (*Resources, error) {
 	}
 
 	// 保证核心模型已经同步到数据库，避免后续查询报错。
-	if err := gormDB.AutoMigrate(&domain.User{}, &domain.EmailVerificationToken{}); err != nil {
+	if err := gormDB.AutoMigrate(&domain.User{}, &domain.EmailVerificationToken{}, &domain.UserModelCredential{}); err != nil {
 		return nil, fmt.Errorf("auto migrate: %w", err)
 	}
 

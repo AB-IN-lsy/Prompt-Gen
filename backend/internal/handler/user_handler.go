@@ -186,14 +186,25 @@ func (h *UserHandler) UpdateMe(c *gin.Context) {
 		if updateErr != nil {
 			status := http.StatusInternalServerError
 			code := response.ErrInternal
+			var details gin.H
 			if updateErr == usersvc.ErrUserNotFound {
 				status = http.StatusNotFound
 				code = response.ErrNotFound
 				log.Warnw("user not found on settings update")
+			} else if updateErr == usersvc.ErrPreferredModelNotFound {
+				status = http.StatusBadRequest
+				code = response.ErrBadRequest
+				details = gin.H{"field": "preferred_model"}
+				log.Warnw("preferred model not found", "preferred_model", req.PreferredModel)
+			} else if updateErr == usersvc.ErrPreferredModelDisabled {
+				status = http.StatusBadRequest
+				code = response.ErrBadRequest
+				details = gin.H{"field": "preferred_model"}
+				log.Warnw("preferred model disabled", "preferred_model", req.PreferredModel)
 			} else {
 				log.Errorw("update settings failed", "error", updateErr)
 			}
-			response.Fail(c, status, code, updateErr.Error(), nil)
+			response.Fail(c, status, code, updateErr.Error(), details)
 			return
 		}
 		current = updatedSettings

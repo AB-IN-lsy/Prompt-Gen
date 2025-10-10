@@ -61,6 +61,7 @@ func setupRouter(t *testing.T) (*gin.Engine, uint, string) {
 	}
 
 	repo := repository.NewUserRepository(db)
+	modelRepo := repository.NewModelCredentialRepository(db)
 	verificationRepo := repository.NewEmailVerificationRepository(db)
 
 	user := &domain.User{
@@ -77,7 +78,7 @@ func setupRouter(t *testing.T) (*gin.Engine, uint, string) {
 	authService := authsvc.NewService(repo, verificationRepo, jwtManager, refreshStore, nil, noopEmailSender{})
 	authHandler := handler.NewAuthHandler(authService, nil, 0, 0)
 
-	userService := usersvc.NewService(repo)
+	userService := usersvc.NewService(repo, modelRepo)
 	userHandler := handler.NewUserHandler(userService)
 
 	authMW := middleware.NewAuthMiddleware(secret)

@@ -16,6 +16,7 @@ type RouterOptions struct {
 	AuthHandler   *handler.AuthHandler
 	UserHandler   *handler.UserHandler
 	UploadHandler *handler.UploadHandler
+	ModelHandler  *handler.ModelHandler
 	AuthMW        *middleware.AuthMiddleware
 }
 
@@ -85,6 +86,17 @@ func NewRouter(opts RouterOptions) *gin.Engine {
 		if opts.UserHandler != nil {
 			userGroup.GET("/me", opts.UserHandler.GetMe)
 			userGroup.PUT("/me", opts.UserHandler.UpdateMe)
+		}
+
+		if opts.ModelHandler != nil {
+			models := api.Group("/models")
+			if opts.AuthMW != nil {
+				models.Use(opts.AuthMW.Handle())
+			}
+			models.GET("", opts.ModelHandler.List)
+			models.POST("", opts.ModelHandler.Create)
+			models.PUT("/:id", opts.ModelHandler.Update)
+			models.DELETE("/:id", opts.ModelHandler.Delete)
 		}
 
 		if opts.UploadHandler != nil {

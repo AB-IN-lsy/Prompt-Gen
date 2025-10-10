@@ -2,7 +2,7 @@
  * @Author: NEFU AB-IN
  * @Date: 2025-10-10 23:45:51
  * @FilePath: \electron-go-app\frontend\scripts\no-js-check.mjs
- * @LastEditTime: 2025-10-10 23:47:16
+ * @LastEditTime: 2025-10-10 23:50:18
  */
 import { readdirSync } from "node:fs";
 import { dirname, join, relative } from "node:path";

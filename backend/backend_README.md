@@ -17,6 +17,10 @@
 - 邮箱验证与图形验证码接口返回剩余尝试次数（`remaining_attempts`），被限流时附带冷却秒数（`retry_after_seconds`），便于前端展示剩余机会与等待时间。
 - 邮件发送新增阿里云 DirectMail 发信器，优先使用 DirectMail，未配置时自动回退到 SMTP。
 - 启动流程拆分为 `internal/app.InitResources`（负责连接/迁移）与 `internal/bootstrap.BuildApplication`（负责装配依赖），提升职责清晰度。
+- 新增 `/api/models` 系列接口，支持模型凭据的创建、查看、更新与删除，API Key 会在入库前加密。
+- 引入 `MODEL_CREDENTIAL_MASTER_KEY` 环境变量，使用 AES-256-GCM 加解密用户提交的模型凭据。
+- 数据库自动迁移包含 `user_model_credentials` 表，服务启动即可创建所需数据结构。
+- 模型凭据禁用或删除时，会自动清理用户偏好的 `preferred_model`，避免指向不可用的模型；`PUT /api/users/me` 也会验证偏好模型是否存在并已启用。
 
 ## 环境变量
 
@@ -32,6 +36,7 @@
 | `NACOS_USERNAME` / `NACOS_PASSWORD` | Nacos 登录凭证 |
 | `NACOS_GROUP` / `NACOS_NAMESPACE` | Nacos 读取 MySQL 配置所用的分组与命名空间 |
 | `MYSQL_CONFIG_DATA_ID` / `MYSQL_CONFIG_GROUP` | Nacos 中 MySQL 配置的 DataId 与 Group |
+| `MODEL_CREDENTIAL_MASTER_KEY` | 32 字节主密钥（需使用 Base64 编码后写入），用于加解密模型 API Key |
 
 ### 验证码与 Redis
 
@@ -133,6 +138,10 @@ go run ./backend/cmd/sendmail -to you@example.com -name "测试账号"
 | `GET` | `/api/users/me` | 获取当前登录用户信息 | 需附带 `Authorization: Bearer <token>` |
 | `PUT` | `/api/users/me` | 更新当前用户信息与偏好设置 | JSON：`username`、`email`、`avatar_url`、`preferred_model`、`sync_enabled` |
 | `POST` | `/api/uploads/avatar` | 上传头像文件并返回静态地址 | 需登录；multipart 表单：`avatar` 文件字段 |
+| `GET` | `/api/models` | 列出当前用户的模型凭据 | 需登录 |
+| `POST` | `/api/models` | 新增模型凭据并加密存储 | JSON：`provider`、`label`、`api_key`、`metadata` |
+| `PUT` | `/api/models/:id` | 更新模型凭据（可替换 API Key） | JSON：`label`、`api_key`、`metadata` |
+| `DELETE` | `/api/models/:id` | 删除模型凭据 | 无 |
 
 ### 静态资源与上传目录
 
@@ -350,6 +359,64 @@ go run ./backend/cmd/sendmail -to you@example.com -name "测试账号"
 - **用途**：直接访问用户上传的头像资源；无需鉴权。
 - **静态托管**：由 `router.go` 的 `r.Static("/static", "./public")` 提供服务，可按需改为指向对象存储或 CDN。
 
+> **提示**：当某个模型凭据被删除或禁用时，若用户当前的 `preferred_model` 指向该模型，服务会自动回退到默认值（`deepseek`）。更新偏好时如果请求的模型不存在或处于禁用状态，会返回 `400 Bad Request` 并在 `error.details.field` 中标出 `preferred_model`。
+
+#### GET /api/models
+
+- **用途**：返回当前登录用户已配置的所有模型凭据，便于前端渲染模型列表。
+- **成功响应**：`200`
+
+  ```json
+  {
+    "success": true,
+    "data": {
+      "models": [
+        {
+          "id": 1,
+          "provider": "openai",
+          "label": "GPT-4o",
+          "metadata": {
+            "default_model": "gpt-4o-mini"
+          }
+        }
+      ]
+    }
+  }
+  ```
+
+- **常见错误**：尚未登录 → `401`；数据库不可用 → `500`。
+
+#### POST /api/models
+
+- **用途**：创建新的模型凭据。服务端会使用 `MODEL_CREDENTIAL_MASTER_KEY` 对 `api_key` 进行 AES-256-GCM 加密后入库。
+- **请求体示例**：
+
+  ```json
+  {
+    "provider": "openai",
+    "label": "主账号",
+    "api_key": "sk-***",
+    "metadata": {
+      "default_model": "gpt-4o-mini"
+    }
+  }
+  ```
+
+- **成功响应**：`201`，返回新建记录的 ID。
+- **常见错误**：缺少必填字段 → `400`；主密钥未配置 → `500`。
+
+#### PUT /api/models/:id
+
+- **用途**：更新模型标签、元数据或替换 API Key。若传入新的 `api_key`，会重新加密替换旧值；如果字段为空则保持现值。
+- **成功响应**：`200`，返回更新后的模型信息。
+- **常见错误**：记录不存在 → `404`；主密钥未配置 → `500`。
+
+#### DELETE /api/models/:id
+
+- **用途**：删除指定模型凭据，常用于清理无效或过期的密钥。
+- **成功响应**：`204`。
+- **常见错误**：记录不存在 → `404`。
+
 ## 启动与测试
 
 ```powershell
@@ -366,6 +433,8 @@ go test ./...
 cd backend
 go test -tags integration ./tests/integration
 ```
+
+> **说明：** 单元测试会使用内存版 SQLite 驱动，避免依赖外部数据库，同时也用于验证自动迁移能正确创建 `user_model_credentials` 等表结构。
 
 如需运行带外部依赖的集成测试，请确保 Nacos / MySQL 就绪并补全对应环境变量。
 
@@ -402,18 +471,21 @@ backend/
 │  │  │  └─ redis_client.go      # Redis 客户端
 │  │  ├─ common/response.go      # 统一响应体封装
 │  │  ├─ logger/logger.go        # Zap 日志初始化
+│  │  ├─ security/cipher.go      # AES-256-GCM 加解密工具
 │  │  └─ token/
 │  │     ├─ jwt_manager.go       # Access Token 签发
 │  │     └─ refresh_store.go     # 刷新令牌存储（Redis/内存）
 │  ├─ middleware/
 │  │  └─ auth_middleware.go      # Bearer Token 鉴权
 │  ├─ repository/
-│  │  └─ user_repository.go      # User GORM 操作与唯一性检查
+│  │  ├─ user_repository.go      # User GORM 操作与唯一性检查
+│  │  └─ model_credential_repository.go # 模型凭据持久化
 │  ├─ server/
 │  │  └─ router.go               # Gin 路由、CORS、静态资源配置
 │  └─ service/
 │     ├─ auth/service.go         # 注册、登录、刷新、登出逻辑
-│     └─ user/service.go         # 用户资料、设置更新
+│     ├─ user/service.go         # 用户资料、设置更新
+│     └─ model/service.go        # 模型凭据加密与业务逻辑
 ├─ tests/
 │  ├─ unit/
 │  │  ├─ auth_service_test.go

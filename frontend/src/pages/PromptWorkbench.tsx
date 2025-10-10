@@ -2,12 +2,13 @@
  * @Author: NEFU AB-IN
  * @Date: 2025-10-09 22:47:19
  * @FilePath: \electron-go-app\frontend\src\pages\PromptWorkbench.tsx
- * @LastEditTime: 2025-10-09 22:47:24
+ * @LastEditTime: 2025-10-11 00:19:57
  */
 import { ChangeEvent, useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { LoaderCircle, Plus, Sparkles } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { toast } from "sonner";
 
 import { GlassCard } from "../components/ui/glass-card";
 import { Input } from "../components/ui/input";
@@ -15,9 +16,11 @@ import { Button } from "../components/ui/button";
 import { Badge } from "../components/ui/badge";
 import { Textarea } from "../components/ui/textarea";
 import { cn } from "../lib/utils";
-import { regeneratePrompt, fetchKeywords, saveDraft } from "../lib/api";
+import { regeneratePrompt, fetchKeywords, saveDraft, updateCurrentUser } from "../lib/api";
+import { ApiError } from "../lib/errors";
 import type { Keyword, PromptKeywordRef } from "../lib/api";
 import { usePromptWorkbench } from "../hooks/usePromptWorkbench";
+import { useAuth } from "../hooks/useAuth";
 
 const TOPIC_FALLBACK = "前端工程师面试";
 
@@ -39,6 +42,9 @@ export default function PromptWorkbenchPage() {
         isSaving,
         setSaving,
     } = usePromptWorkbench();
+
+    const profile = useAuth((state) => state.profile);
+    const setProfile = useAuth((state) => state.setProfile);
 
     const [newKeyword, setNewKeyword] = useState("");
     const [polarity, setPolarity] = useState<"positive" | "negative">("positive");
@@ -64,6 +70,16 @@ export default function PromptWorkbenchPage() {
         }
     }, [keywordData, setKeywords]);
 
+    useEffect(() => {
+        const preferred = profile?.settings?.preferred_model;
+        if (preferred === "deepseek" || preferred === "gpt-5") {
+            const currentModel = usePromptWorkbench.getState().model;
+            if (currentModel !== preferred) {
+                setModel(preferred);
+            }
+        }
+    }, [profile?.settings?.preferred_model, setModel]);
+
     // 转换关键词数据结构，方便和后端交互保持一致。
     const toPromptKeywordRefs = (keywords: Keyword[]): PromptKeywordRef[] =>
         keywords.map((item) => ({
@@ -71,6 +87,15 @@ export default function PromptWorkbenchPage() {
             word: item.word,
             weight: item.weight,
         }));
+
+    const modelPreferenceMutation = useMutation({
+        mutationFn: (nextModel: "deepseek" | "gpt-5") => updateCurrentUser({ preferred_model: nextModel }),
+        onSuccess: (updatedProfile) => setProfile(updatedProfile),
+        onError: (error: unknown) => {
+            const message = error instanceof ApiError ? error.message ?? t("errors.generic") : t("errors.generic");
+            toast.error(message);
+        },
+    });
 
     // 触发 AI 生成逻辑，成功后替换当前草稿。
     const generateMutation = useMutation({
@@ -103,6 +128,18 @@ export default function PromptWorkbenchPage() {
     });
 
     const hasPositive = positiveKeywords.length > 0;
+
+    const handleModelSelect = (nextModel: "deepseek" | "gpt-5") => {
+        if (model === nextModel) {
+            return;
+        }
+        setModel(nextModel);
+        const preferred = profile?.settings?.preferred_model;
+        if (!profile || preferred === nextModel) {
+            return;
+        }
+        modelPreferenceMutation.mutate(nextModel);
+    };
 
     const handleAddKeyword = () => {
         if (!newKeyword.trim()) return;
@@ -145,7 +182,12 @@ export default function PromptWorkbenchPage() {
                             onChange={(event: ChangeEvent<HTMLInputElement>) => setNewKeyword(event.target.value)}
                             placeholder={t("promptWorkbench.inputPlaceholder")}
                         />
-                        <Button variant="secondary" size="sm" onClick={handleAddKeyword}>
+                        <Button
+                            variant="secondary"
+                            size="default"
+                            className="min-w-[132px] justify-center px-5"
+                            onClick={handleAddKeyword}
+                        >
                             <Plus className="mr-1.5 h-4 w-4" />
                             {t("promptWorkbench.addKeyword")}
                         </Button>
@@ -222,7 +264,7 @@ export default function PromptWorkbenchPage() {
                                     model === "deepseek" && "border-transparent bg-primary text-white",
                                 )}
                                 variant={model === "deepseek" ? "default" : "outline"}
-                                onClick={() => setModel("deepseek")}
+                                onClick={() => handleModelSelect("deepseek")}
                             >
                                 DeepSeek
                             </Badge>
@@ -232,7 +274,7 @@ export default function PromptWorkbenchPage() {
                                     model === "gpt-5" && "border-transparent bg-secondary text-white",
                                 )}
                                 variant={model === "gpt-5" ? "default" : "outline"}
-                                onClick={() => setModel("gpt-5")}
+                                onClick={() => handleModelSelect("gpt-5")}
                             >
                                 GPT-5
                             </Badge>

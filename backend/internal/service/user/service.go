@@ -20,12 +20,13 @@ import (
 
 // Service 负责用户资料的查询与更新。
 type Service struct {
-	users *repository.UserRepository
+	users  *repository.UserRepository
+	models *repository.ModelCredentialRepository
 }
 
 // NewService 构造用户服务层实例。
-func NewService(users *repository.UserRepository) *Service {
-	return &Service{users: users}
+func NewService(users *repository.UserRepository, models *repository.ModelCredentialRepository) *Service {
+	return &Service{users: users, models: models}
 }
 
 // ErrUserNotFound 表示请求的用户不存在。
@@ -70,6 +71,9 @@ func (s *Service) GetProfile(ctx context.Context, userID uint) (Profile, error) 
 
 // UpdateSettings 更新用户设置并返回最新资料。
 func (s *Service) UpdateSettings(ctx context.Context, userID uint, settings domain.Settings) (Profile, error) {
+	if err := s.ensurePreferredModel(ctx, userID, settings.PreferredModel); err != nil {
+		return Profile{}, err
+	}
 	raw, err := domain.SettingsJSON(settings)
 	if err != nil {
 		return Profile{}, fmt.Errorf("encode settings: %w", err)
@@ -91,7 +95,11 @@ func (s *Service) UpdateSettings(ctx context.Context, userID uint, settings doma
 	}
 
 	u.Settings = raw
-	return Profile{User: u, Settings: settings}, nil
+	parsedSettings, err := domain.ParseSettings(raw)
+	if err != nil {
+		return Profile{}, fmt.Errorf("parse updated settings: %w", err)
+	}
+	return Profile{User: u, Settings: parsedSettings}, nil
 }
 
 // UpdateProfile 更新用户的基础资料（用户名、邮箱、头像等）。
@@ -139,4 +147,36 @@ func (s *Service) UpdateProfile(ctx context.Context, userID uint, params UpdateP
 	}
 
 	return s.GetProfile(ctx, userID)
+}
+
+// ErrPreferredModelNotFound 表示偏好模型不存在。
+var ErrPreferredModelNotFound = errors.New("preferred model not found")
+
+// ErrPreferredModelDisabled 表示偏好模型处于禁用状态。
+var ErrPreferredModelDisabled = errors.New("preferred model disabled")
+
+func (s *Service) ensurePreferredModel(ctx context.Context, userID uint, modelKey string) error {
+	if s.models == nil {
+		return nil
+	}
+	trimmed := strings.TrimSpace(modelKey)
+	if trimmed == "" {
+		return nil
+	}
+	defaultKey := domain.DefaultSettings().PreferredModel
+	if trimmed == defaultKey {
+		return nil
+	}
+	// 仅允许用户选择自己名下且启用的模型。
+	credential, err := s.models.FindByModelKey(ctx, userID, trimmed)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return ErrPreferredModelNotFound
+		}
+		return fmt.Errorf("find preferred model: %w", err)
+	}
+	if !strings.EqualFold(credential.Status, "enabled") {
+		return ErrPreferredModelDisabled
+	}
+	return nil
 }
