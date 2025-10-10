@@ -2,7 +2,7 @@
  * @Author: NEFU AB-IN
  * @Date: 2025-10-09 23:56:00
  * @FilePath: \electron-go-app\frontend\src\pages\Register.tsx
- * @LastEditTime: 2025-10-10 00:46:53
+ * @LastEditTime: 2025-10-10 23:24:42
  */
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
@@ -130,6 +130,7 @@ export default function RegisterPage() {
         },
         onSuccess: () => {
             toast.success(t("auth.register.success"));
+            toast.info(t("auth.verification.sent", "验证邮件已发送，请前往邮箱完成确认。"));
             navigate("/prompt-workbench", { replace: true });
         },
         onError: (error) => {
@@ -274,7 +275,7 @@ export default function RegisterPage() {
                 />
                 {fieldErrors.avatar_url ? <p className="text-xs text-red-500">{fieldErrors.avatar_url}</p> : null}
                 <div className="space-y-2">
-                    <label className="text-sm font-medium text-slate-700" htmlFor="username">
+                    <label className="text-sm font-medium text-slate-700 dark:text-slate-200" htmlFor="username">
                         {t("auth.form.username")}
                     </label>
                     <Input
@@ -291,7 +292,7 @@ export default function RegisterPage() {
                     {fieldErrors.username ? <p className="text-xs text-red-500">{fieldErrors.username}</p> : null}
                 </div>
                 <div className="space-y-2">
-                    <label className="text-sm font-medium text-slate-700" htmlFor="email">
+                    <label className="text-sm font-medium text-slate-700 dark:text-slate-200" htmlFor="email">
                         {t("auth.form.email")}
                     </label>
                     <Input
@@ -309,7 +310,7 @@ export default function RegisterPage() {
                     {fieldErrors.email ? <p className="text-xs text-red-500">{fieldErrors.email}</p> : null}
                 </div>
                 <div className="space-y-2">
-                    <label className="text-sm font-medium text-slate-700" htmlFor="password">
+                    <label className="text-sm font-medium text-slate-700 dark:text-slate-200" htmlFor="password">
                         {t("auth.form.password")}
                     </label>
                     <Input
@@ -327,7 +328,7 @@ export default function RegisterPage() {
                     {fieldErrors.password ? <p className="text-xs text-red-500">{fieldErrors.password}</p> : null}
                 </div>
                 <div className="space-y-2">
-                    <label className="text-sm font-medium text-slate-700" htmlFor="captcha">
+                    <label className="text-sm font-medium text-slate-700 dark:text-slate-200" htmlFor="captcha">
                         {t("auth.form.captcha")}
                     </label>
                     <div className="flex flex-wrap items-center gap-3">
@@ -335,10 +336,10 @@ export default function RegisterPage() {
                             <img
                                 src={captchaSrc}
                                 alt={t("auth.captcha.alt") ?? "Captcha"}
-                                className="h-14 w-32 rounded-xl border border-white/60 bg-white/80 object-cover shadow-sm"
+                                className="h-14 w-32 rounded-xl border border-white/60 bg-white/80 object-cover shadow-sm transition-colors dark:border-slate-800 dark:bg-slate-900/70"
                             />
                         ) : (
-                            <div className="flex h-14 w-32 items-center justify-center rounded-xl border border-dashed border-slate-200 bg-white/50 text-xs text-slate-400">
+                            <div className="flex h-14 w-32 items-center justify-center rounded-xl border border-dashed border-slate-200 bg-white/50 text-xs text-slate-400 transition-colors dark:border-slate-700 dark:bg-slate-900/50 dark:text-slate-500">
                                 {t("auth.captcha.unavailable")}
                             </div>
                         )}
@@ -392,7 +393,7 @@ export default function RegisterPage() {
                     {mutation.isPending ? t("common.loading") : t("auth.register.cta")}
                 </Button>
             </form>
-            <div className="text-center text-sm text-slate-500">
+            <div className="text-center text-sm text-slate-500 dark:text-slate-400">
                 {t("auth.register.switch")} {" "}
                 <Link to="/login" className="font-medium text-primary hover:underline">
                     {t("auth.register.switchCta")}

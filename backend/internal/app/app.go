@@ -37,9 +37,9 @@ type Resources struct {
 	Redis  *redis.Client
 }
 
-// Bootstrap 负责初始化配置、建立数据库连接并执行模型迁移。
-// 返回的 Resources 会被上层用于依赖注入和生命周期管理。
-func Bootstrap(ctx context.Context) (*Resources, error) {
+// InitResources 负责读取远端配置、建立数据库/Redis 连接并执行模型迁移。
+// 返回的 Resources 会交由业务层（`internal/bootstrap`）继续组装依赖。
+func InitResources(ctx context.Context) (*Resources, error) {
 	config.LoadEnvFiles()
 
 	nacosOpts, err := infra.NewDefaultNacosOptions()
@@ -62,7 +62,8 @@ func Bootstrap(ctx context.Context) (*Resources, error) {
 		return nil, fmt.Errorf("connect mysql: %w", err)
 	}
 
-	if err := gormDB.AutoMigrate(&domain.User{}); err != nil {
+	// 保证核心模型已经同步到数据库，避免后续查询报错。
+	if err := gormDB.AutoMigrate(&domain.User{}, &domain.EmailVerificationToken{}); err != nil {
 		return nil, fmt.Errorf("auto migrate: %w", err)
 	}
 
@@ -71,7 +72,7 @@ func Bootstrap(ctx context.Context) (*Resources, error) {
 		redisClient *redis.Client
 	)
 
-	// 如果设置了 Redis 端点，则尝试建立连接，为验证码等功能提供存储。
+	// 如果设置了 Redis 端点，则尝试建立连接，为验证码、限流、刷新令牌等功能提供存储。
 	if endpoint := strings.TrimSpace(os.Getenv("REDIS_ENDPOINT")); endpoint != "" {
 		opts, err := infra.NewDefaultRedisOptions()
 		if err != nil {

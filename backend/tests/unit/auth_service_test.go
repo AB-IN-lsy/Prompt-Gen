@@ -24,6 +24,12 @@ import (
 	"gorm.io/gorm/logger"
 )
 
+type testEmailSender struct{}
+
+func (testEmailSender) SendVerification(_ context.Context, _ *domain.User, _ string) error {
+	return nil
+}
+
 // newTestAuthService 创建内存版鉴权服务和仓储，便于单元测试隔离数据库依赖。
 func newTestAuthService(t *testing.T) (*auth.Service, *repository.UserRepository, *gorm.DB) {
 	t.Helper()
@@ -36,14 +42,15 @@ func newTestAuthService(t *testing.T) (*auth.Service, *repository.UserRepository
 		t.Fatalf("open sqlite: %v", err)
 	}
 
-	if err := db.AutoMigrate(&domain.User{}); err != nil {
+	if err := db.AutoMigrate(&domain.User{}, &domain.EmailVerificationToken{}); err != nil {
 		t.Fatalf("auto migrate: %v", err)
 	}
 
 	repo := repository.NewUserRepository(db)
+	verificationRepo := repository.NewEmailVerificationRepository(db)
 	tokenManager := token.NewJWTManager("test-secret", time.Minute, 24*time.Hour)
 	refreshStore := token.NewMemoryRefreshTokenStore()
-	service := auth.NewService(repo, tokenManager, refreshStore, nil)
+	service := auth.NewService(repo, verificationRepo, tokenManager, refreshStore, nil, testEmailSender{})
 
 	return service, repo, db
 }
@@ -61,6 +68,10 @@ func TestAuthServiceRegisterAndLogin(t *testing.T) {
 	})
 	if err != nil {
 		t.Fatalf("register: %v", err)
+	}
+
+	if err := repo.MarkEmailVerified(ctx, user.ID, time.Now()); err != nil {
+		t.Fatalf("mark email verified: %v", err)
 	}
 
 	if user.ID == 0 {
@@ -151,16 +162,20 @@ func TestAuthServiceRegisterDuplicateEmailAndUsername(t *testing.T) {
 
 // TestAuthServiceLoginInvalidCredentials 确认登录失败场景统一返回 ErrInvalidLogin。
 func TestAuthServiceLoginInvalidCredentials(t *testing.T) {
-	svc, _, _ := newTestAuthService(t)
+	svc, repo, _ := newTestAuthService(t)
 	ctx := context.Background()
 
-	_, _, err := svc.Register(ctx, auth.RegisterParams{
+	user, _, err := svc.Register(ctx, auth.RegisterParams{
 		Username: "alice",
 		Email:    "alice@example.com",
 		Password: "password123",
 	})
 	if err != nil {
 		t.Fatalf("register: %v", err)
+	}
+
+	if err := repo.MarkEmailVerified(ctx, user.ID, time.Now()); err != nil {
+		t.Fatalf("mark email verified: %v", err)
 	}
 
 	_, _, err = svc.Login(ctx, auth.LoginParams{

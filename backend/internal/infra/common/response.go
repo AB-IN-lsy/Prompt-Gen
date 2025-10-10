@@ -22,16 +22,19 @@ import (
 type ErrorCode string
 
 const (
-	ErrBadRequest      ErrorCode = "BAD_REQUEST"
-	ErrUnauthorized    ErrorCode = "UNAUTHORIZED"
-	ErrForbidden       ErrorCode = "FORBIDDEN"
-	ErrNotFound        ErrorCode = "NOT_FOUND"
-	ErrConflict        ErrorCode = "CONFLICT"
-	ErrTooManyRequests ErrorCode = "TOO_MANY_REQUESTS"
-	ErrInternal        ErrorCode = "INTERNAL_ERROR"
-	ErrCaptchaInvalid  ErrorCode = "CAPTCHA_INVALID"
-	ErrCaptchaExpired  ErrorCode = "CAPTCHA_EXPIRED"
-	ErrCaptchaRequired ErrorCode = "CAPTCHA_REQUIRED"
+	ErrBadRequest               ErrorCode = "BAD_REQUEST"
+	ErrUnauthorized             ErrorCode = "UNAUTHORIZED"
+	ErrForbidden                ErrorCode = "FORBIDDEN"
+	ErrNotFound                 ErrorCode = "NOT_FOUND"
+	ErrConflict                 ErrorCode = "CONFLICT"
+	ErrTooManyRequests          ErrorCode = "TOO_MANY_REQUESTS"
+	ErrInternal                 ErrorCode = "INTERNAL_ERROR"
+	ErrCaptchaInvalid           ErrorCode = "CAPTCHA_INVALID"
+	ErrCaptchaExpired           ErrorCode = "CAPTCHA_EXPIRED"
+	ErrCaptchaRequired          ErrorCode = "CAPTCHA_REQUIRED"
+	ErrEmailNotVerified         ErrorCode = "EMAIL_NOT_VERIFIED"
+	ErrEmailAlreadyVerified     ErrorCode = "EMAIL_ALREADY_VERIFIED"
+	ErrVerificationTokenInvalid ErrorCode = "VERIFICATION_TOKEN_INVALID"
 )
 
 // Error 描述错误响应的统一结构。

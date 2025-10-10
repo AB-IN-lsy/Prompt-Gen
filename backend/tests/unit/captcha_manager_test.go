@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"electron-go-app/backend/internal/infra/captcha"
+	"electron-go-app/backend/internal/infra/ratelimit"
 
 	miniredis "github.com/alicebob/miniredis/v2"
 	"github.com/redis/go-redis/v9"
@@ -33,7 +34,8 @@ func TestManagerGenerateAndVerify(t *testing.T) {
 	client, cleanup := newRedisClient(t)
 	defer cleanup()
 
-	manager := captcha.NewManager(client, captcha.Options{
+	limiter := ratelimit.NewRedisLimiter(client, "captcha_test")
+	manager := captcha.NewManager(client, limiter, captcha.Options{
 		Prefix:          "test-captcha",
 		TTL:             time.Minute,
 		Length:          4,
@@ -41,12 +43,15 @@ func TestManagerGenerateAndVerify(t *testing.T) {
 	})
 
 	ctx := context.Background()
-	id, _, err := manager.Generate(ctx, "127.0.0.1")
+	id, _, remaining, err := manager.Generate(ctx, "127.0.0.1")
 	if err != nil {
 		t.Fatalf("generate captcha: %v", err)
 	}
 	if id == "" {
 		t.Fatalf("expected id to be non-empty")
+	}
+	if remaining != 4 {
+		t.Fatalf("expected remaining attempts to be 4, got %d", remaining)
 	}
 
 	stored, err := client.Get(ctx, "test-captcha:"+id).Result()
@@ -67,10 +72,11 @@ func TestManagerVerifyMismatch(t *testing.T) {
 	client, cleanup := newRedisClient(t)
 	defer cleanup()
 
-	manager := captcha.NewManager(client, captcha.Options{Prefix: "c", TTL: time.Minute, RateLimitPerMin: 5})
+	limiter := ratelimit.NewRedisLimiter(client, "captcha_test")
+	manager := captcha.NewManager(client, limiter, captcha.Options{Prefix: "c", TTL: time.Minute, RateLimitPerMin: 5})
 	ctx := context.Background()
 
-	id, _, err := manager.Generate(ctx, "10.0.0.2")
+	id, _, _, err := manager.Generate(ctx, "10.0.0.2")
 	if err != nil {
 		t.Fatalf("generate captcha: %v", err)
 	}
@@ -84,10 +90,11 @@ func TestManagerVerifyMissing(t *testing.T) {
 	client, cleanup := newRedisClient(t)
 	defer cleanup()
 
-	manager := captcha.NewManager(client, captcha.Options{Prefix: "c", TTL: time.Minute, RateLimitPerMin: 5})
+	limiter := ratelimit.NewRedisLimiter(client, "captcha_test")
+	manager := captcha.NewManager(client, limiter, captcha.Options{Prefix: "c", TTL: time.Minute, RateLimitPerMin: 5})
 	ctx := context.Background()
 
-	id, _, err := manager.Generate(ctx, "10.0.0.3")
+	id, _, _, err := manager.Generate(ctx, "10.0.0.3")
 	if err != nil {
 		t.Fatalf("generate captcha: %v", err)
 	}
@@ -105,18 +112,21 @@ func TestManagerRateLimit(t *testing.T) {
 	client, cleanup := newRedisClient(t)
 	defer cleanup()
 
-	manager := captcha.NewManager(client, captcha.Options{
+	limiter := ratelimit.NewRedisLimiter(client, "captcha_test")
+	manager := captcha.NewManager(client, limiter, captcha.Options{
 		Prefix:          "rl",
 		TTL:             time.Minute,
 		RateLimitPerMin: 1,
 	})
 
 	ctx := context.Background()
-	if _, _, err := manager.Generate(ctx, "8.8.8.8"); err != nil {
+	if _, _, remaining, err := manager.Generate(ctx, "8.8.8.8"); err != nil {
 		t.Fatalf("first generate should succeed: %v", err)
+	} else if remaining != 0 {
+		t.Fatalf("expected remaining attempts to be 0 after first request, got %d", remaining)
 	}
 
-	if _, _, err := manager.Generate(ctx, "8.8.8.8"); err != captcha.ErrRateLimited {
+	if _, _, _, err := manager.Generate(ctx, "8.8.8.8"); err != captcha.ErrRateLimited {
 		t.Fatalf("expected rate limited error, got %v", err)
 	}
 }

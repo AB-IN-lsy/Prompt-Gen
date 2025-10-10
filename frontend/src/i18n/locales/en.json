@@ -100,6 +100,32 @@
             "retrying": "Captcha failed to load, retrying ({{attempt}}/{{total}})…",
             "failed": "Captcha couldn’t load. Click refresh to try again.",
             "manualHint": "If the issue persists, please refresh the page or contact support."
+        },
+        "verification": {
+            "required": "Your email address hasn’t been verified yet.",
+            "blockTitle": "Email verification required",
+            "blockMessage": "Click \"Send verification email\" and follow the link in your inbox to finish verifying your account.",
+            "helper": "Click the button below and follow the verification link we send to your inbox.",
+            "send": "Send verification email",
+            "sent": "Verification email sent. Please check your inbox.",
+            "sentWithToken": "Verification email sent (token: {{token}}).",
+            "sentNeutral": "If an account exists for this email, a verification message will arrive shortly.",
+            "confirmedManual": "Email verified. Please sign in again to continue.",
+            "confirmed": "Email verified successfully. Signing you in...",
+            "confirm": "Submit token",
+            "tokenPlaceholder": "Enter the token from the email",
+            "tokenRequired": "Please enter the verification token first.",
+            "devHint": "Development token preview:",
+            "pageTitle": "Verify your email",
+            "pageSubtitle": "Confirm your email address to unlock PromptGen.",
+            "emailPlaceholder": "Enter your email address",
+            "emailRequired": "Please enter your email address first.",
+            "autoSuccess": "Email verified. You can now sign in.",
+            "backToLogin": "Back to sign in",
+            "goToPage": "Open email verification page",
+            "emailReminder": "If nothing arrives within a minute, check the spam folder or try again.",
+            "pageIntro": "Enter the email you registered with and we’ll send a fresh verification link.",
+            "pageSteps": "After verifying via the email link, return here or sign in to continue."
         }
     },
     "dashboard": {
@@ -146,6 +172,23 @@
         "languageCardTitle": "Language",
         "languageCardDescription": "Switch the interface language between English and Simplified Chinese.",
         "languageSelectLabel": "Display language",
+        "themeCard": {
+            "title": "Theme",
+            "description": "Choose between light, dark or follow your system preference.",
+            "options": {
+                "system": "Follow system",
+                "light": "Light",
+                "dark": "Dark"
+            },
+            "optionDescriptions": {
+                "system": "Automatically switches with your OS preference",
+                "light": "Use a bright background and high contrast UI",
+                "dark": "Use a dimmed background with high contrast UI"
+            },
+            "systemHint": "Currently following system (showing {{mode}} mode)",
+            "systemHintLight": "light",
+            "systemHintDark": "dark"
+        },
         "profileCard": {
             "title": "Profile",
             "description": "Update your username, email and prompt preferences.",
@@ -160,6 +203,19 @@
         "profileSaveSuccess": "Profile updated",
         "syncEnabledOn": "Enabled",
         "syncEnabledOff": "Disabled",
+        "verificationPending": {
+            "notice": "Your email hasn’t been verified yet. Please verify to unlock the full experience.",
+            "action": "Verify now",
+            "openPage": "Open verification page",
+            "emailLabel": "We'll send the verification link to {{email}}.",
+            "emailLabelFallback": "Enter an email address to request a verification link.",
+            "sent": "Verification email sent. Please check your inbox.",
+            "sentDev": "Verification email sent (token: {{token}}).",
+            "sentNeutral": "If an account exists for this email, a verification link will arrive shortly.",
+            "emailMissing": "Please update your email address before requesting verification.",
+            "remaining": "{{count}} attempt(s) remaining today.",
+            "rateLimit": "Please wait {{seconds}}s before trying again."
+        },
         "errors": {
             "usernameRequired": "Please enter a username.",
             "emailInvalid": "Please enter a valid email address.",
@@ -178,6 +234,9 @@
         "INTERNAL_ERROR": "The server encountered an error.",
         "CAPTCHA_INVALID": "The captcha code is incorrect.",
         "CAPTCHA_EXPIRED": "The captcha has expired. Please request a new one.",
-        "CAPTCHA_REQUIRED": "Captcha verification is required."
+        "CAPTCHA_REQUIRED": "Captcha verification is required.",
+        "EMAIL_NOT_VERIFIED": "Your email address hasn’t been verified yet.",
+        "EMAIL_ALREADY_VERIFIED": "This email address has already been verified.",
+        "VERIFICATION_TOKEN_INVALID": "The verification token is invalid or has expired."
     }
 }

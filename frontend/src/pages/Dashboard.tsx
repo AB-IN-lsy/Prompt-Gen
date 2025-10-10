@@ -58,8 +58,8 @@ function MetricCard({ icon: Icon, label, value, delta, trend }: Metric): JSX.Ele
         <GlassCard className="relative overflow-hidden">
             <div className="flex items-start justify-between gap-4">
                 <div>
-                    <p className="text-sm text-slate-500">{label}</p>
-                    <p className="mt-3 text-3xl font-semibold text-slate-900">{value}</p>
+                    <p className="text-sm text-slate-500 dark:text-slate-400">{label}</p>
+                    <p className="mt-3 text-3xl font-semibold text-slate-900 dark:text-slate-100">{value}</p>
                 </div>
                 <div className="rounded-2xl bg-primary/10 p-3 text-primary shadow-glow">
                     <Icon className="h-6 w-6" aria-hidden="true" />
@@ -184,16 +184,16 @@ export default function DashboardPage(): JSX.Element {
     );
 
     return (
-        <div className="space-y-6">
+        <div className="space-y-6 text-slate-700 transition-colors dark:text-slate-200">
             <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
                 <div className="space-y-2">
                     <Badge className="w-fit" variant="outline">
                         {t("dashboard.title")}
                     </Badge>
-                    <h1 className="text-3xl font-semibold text-slate-900 sm:text-4xl">
+                    <h1 className="text-3xl font-semibold text-slate-900 dark:text-slate-100 sm:text-4xl">
                         {t("dashboard.welcome", { name: displayName })}
                     </h1>
-                    <p className="text-sm text-slate-500 sm:text-base">{t("dashboard.subtitle")}</p>
+                    <p className="text-sm text-slate-500 dark:text-slate-400 sm:text-base">{t("dashboard.subtitle")}</p>
                 </div>
                 <div className="flex flex-wrap gap-3">
                     <Button
@@ -227,8 +227,8 @@ export default function DashboardPage(): JSX.Element {
                 <GlassCard className="xl:col-span-3">
                     <div className="flex items-center justify-between gap-4">
                         <div>
-                            <h2 className="text-lg font-semibold text-slate-900">{t("dashboard.activity.title")}</h2>
-                            <p className="mt-1 text-sm text-slate-500">
+                            <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">{t("dashboard.activity.title")}</h2>
+                            <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
                                 {t("dashboard.subtitle")}
                             </p>
                         </div>
@@ -239,29 +239,29 @@ export default function DashboardPage(): JSX.Element {
                     </div>
                     <div className="mt-6 space-y-4">
                         {activity.length === 0 ? (
-                            <p className="text-sm text-slate-500">{t("dashboard.activity.empty")}</p>
+                            <p className="text-sm text-slate-500 dark:text-slate-400">{t("dashboard.activity.empty")}</p>
                         ) : (
                             activity.map((item) => (
                                 <div key={item.id} className="flex items-start gap-3">
                                     <div className="mt-1 h-2.5 w-2.5 rounded-full bg-gradient-to-br from-primary to-secondary" />
                                     <div className="grow space-y-1">
                                         <div className="flex flex-wrap items-center gap-2">
-                                            <span className="text-xs font-medium uppercase tracking-wide text-slate-400">
+                                            <span className="text-xs font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">
                                                 {item.time}
                                             </span>
                                             <span
                                                 className={
                                                     "text-sm " +
                                                     (item.tone === "positive"
-                                                        ? "text-slate-900"
-                                                        : "text-slate-600")
+                                                        ? "text-slate-900 dark:text-slate-100"
+                                                        : "text-slate-600 dark:text-slate-400")
                                                 }
                                             >
                                                 {item.label}
                                             </span>
                                         </div>
                                         {item.note ? (
-                                            <span className="text-xs text-slate-500">{item.note}</span>
+                                            <span className="text-xs text-slate-500 dark:text-slate-400">{item.note}</span>
                                         ) : null}
                                     </div>
                                 </div>
@@ -272,7 +272,7 @@ export default function DashboardPage(): JSX.Element {
 
                 <GlassCard className="xl:col-span-2">
                     <div className="flex items-center justify-between">
-                        <h2 className="text-lg font-semibold text-slate-900">{t("dashboard.performance.title")}</h2>
+                        <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">{t("dashboard.performance.title")}</h2>
                         <Button
                             variant="ghost"
                             size="sm"
@@ -283,23 +283,23 @@ export default function DashboardPage(): JSX.Element {
                             <ArrowUpRight className="h-3 w-3" aria-hidden="true" />
                         </Button>
                     </div>
-                    <div className="mt-5 overflow-hidden rounded-2xl border border-white/60">
-                        <table className="min-w-full divide-y divide-white/60">
-                            <thead className="bg-white/30 text-left text-xs uppercase tracking-wide text-slate-500">
+                    <div className="mt-5 overflow-hidden rounded-2xl border border-white/60 dark:border-slate-800">
+                        <table className="min-w-full divide-y divide-white/60 dark:divide-slate-800">
+                            <thead className="bg-white/30 text-left text-xs uppercase tracking-wide text-slate-500 dark:bg-slate-900/60 dark:text-slate-400">
                                 <tr>
                                     <th className="px-4 py-3 font-medium">{t("dashboard.performance.columns.prompt")}</th>
                                     <th className="px-4 py-3 font-medium">{t("dashboard.performance.columns.model")}</th>
                                     <th className="px-4 py-3 font-medium text-right">{t("dashboard.performance.columns.conversion")}</th>
                                 </tr>
                             </thead>
-                            <tbody className="divide-y divide-white/50 text-sm text-slate-700">
+                            <tbody className="divide-y divide-white/50 text-sm text-slate-700 dark:divide-slate-800 dark:text-slate-300">
                                 {promptPerformance.map((row) => (
                                     <tr key={row.id}>
                                         <td className="px-4 py-3">
-                                            <div className="font-medium text-slate-900">{row.title}</div>
-                                            <div className="text-xs text-slate-500">{row.movement}</div>
+                                            <div className="font-medium text-slate-900 dark:text-slate-100">{row.title}</div>
+                                            <div className="text-xs text-slate-500 dark:text-slate-400">{row.movement}</div>
                                         </td>
-                                        <td className="px-4 py-3 text-slate-600">{row.model}</td>
+                                        <td className="px-4 py-3 text-slate-600 dark:text-slate-400">{row.model}</td>
                                         <td className="px-4 py-3 text-right">
                                             <span
                                                 className={
@@ -321,15 +321,15 @@ export default function DashboardPage(): JSX.Element {
             <div className="grid gap-4 lg:grid-cols-2">
                 <GlassCard>
                     <div className="flex items-center justify-between">
-                        <h2 className="text-lg font-semibold text-slate-900">{t("dashboard.insights.title")}</h2>
+                        <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">{t("dashboard.insights.title")}</h2>
                         <TrendingUp className="h-5 w-5 text-primary" aria-hidden="true" />
                     </div>
-                    <p className="mt-1 text-sm text-slate-500">{t("dashboard.insights.subtitle")}</p>
+                    <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{t("dashboard.insights.subtitle")}</p>
                     <div className="mt-5 space-y-3">
                         {keywordInsights.map((insight) => (
-                            <div key={insight.id} className="flex items-center justify-between rounded-2xl bg-white/60 px-4 py-3">
-                                <span className="text-sm font-medium text-slate-700">{insight.keyword}</span>
-                                <Badge className="bg-emerald-50 text-emerald-600">{insight.lift}</Badge>
+                            <div key={insight.id} className="flex items-center justify-between rounded-2xl bg-white/60 px-4 py-3 transition-colors dark:bg-slate-900/60">
+                                <span className="text-sm font-medium text-slate-700 dark:text-slate-300">{insight.keyword}</span>
+                                <Badge className="bg-emerald-50 text-emerald-600 dark:bg-emerald-500/20 dark:text-emerald-200">{insight.lift}</Badge>
                             </div>
                         ))}
                     </div>
@@ -337,22 +337,22 @@ export default function DashboardPage(): JSX.Element {
 
                 <GlassCard className="relative overflow-hidden">
                     <div className="flex items-center justify-between">
-                        <h2 className="text-lg font-semibold text-slate-900">{t("dashboard.metrics.successRate")}</h2>
+                        <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">{t("dashboard.metrics.successRate")}</h2>
                         <div className="rounded-full bg-primary/10 p-3 text-primary">
                             <TrendingUp className="h-5 w-5" aria-hidden="true" />
                         </div>
                     </div>
-                    <p className="mt-1 text-sm text-slate-500">
+                    <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
                         {t("dashboard.trend.up", { value: "4%" })}
                     </p>
                     <div className="mt-6 space-y-4">
                         {[68, 72, 74].map((value, index) => (
                             <div key={value} className="space-y-2">
-                                <div className="flex items-center justify-between text-xs text-slate-500">
+                                <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
                                     <span>Week {index + 1}</span>
                                     <span>{value}%</span>
                                 </div>
-                                <div className="h-2 overflow-hidden rounded-full bg-white/60">
+                                <div className="h-2 overflow-hidden rounded-full bg-white/60 dark:bg-slate-800/80">
                                     <div
                                         className="h-full rounded-full bg-gradient-to-r from-primary to-secondary"
                                         style={{ width: `${value}%` }}

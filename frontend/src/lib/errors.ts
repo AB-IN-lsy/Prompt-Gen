@@ -35,6 +35,9 @@ export type ErrorCode =
   | "CAPTCHA_INVALID"
   | "CAPTCHA_EXPIRED"
   | "CAPTCHA_REQUIRED"
+  | "EMAIL_NOT_VERIFIED"
+  | "EMAIL_ALREADY_VERIFIED"
+  | "VERIFICATION_TOKEN_INVALID"
   | string;
 
 /** Shape of the error payload sent by the backend. */

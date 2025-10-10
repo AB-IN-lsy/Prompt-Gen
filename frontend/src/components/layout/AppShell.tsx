@@ -45,8 +45,8 @@ export function AppShell({ children, rightSlot }: AppShellProps) {
     }, [profile?.user.username]);
 
     return (
-        <div className="flex h-screen w-screen bg-gradient-to-br from-[#F8F9FA] via-[#EEF2FF] to-[#E9EDFF] text-[var(--fg)]">
-            <aside className="hidden w-64 shrink-0 border-r border-white/40 bg-white/70 px-4 py-6 backdrop-blur-2xl md:flex md:flex-col">
+        <div className="flex h-screen w-screen bg-[var(--bg)] text-[var(--fg)] transition-colors">
+            <aside className="hidden w-64 shrink-0 border-r border-white/40 bg-white/70 px-4 py-6 backdrop-blur-2xl transition-colors dark:border-slate-800/70 dark:bg-slate-900/60 md:flex md:flex-col">
                 {/* 顶部品牌区：展示应用名称与图标 */}
                 <div className="mb-8 flex items-center gap-3">
                     <Sparkles className="h-6 w-6 text-primary" />
@@ -63,7 +63,7 @@ export function AppShell({ children, rightSlot }: AppShellProps) {
                                     "flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium transition",
                                     isActive
                                         ? "bg-primary text-white shadow-glow"
-                                        : "text-slate-600 hover:bg-white/60 hover:text-primary hover:shadow-sm"
+                                        : "text-slate-600 hover:bg-white/60 hover:text-primary hover:shadow-sm dark:text-slate-300 dark:hover:bg-slate-800/80"
                                 )
                             }
                         >
@@ -75,7 +75,7 @@ export function AppShell({ children, rightSlot }: AppShellProps) {
                 {/* 预留退出登录操作 */}
                 <Button
                     variant="ghost"
-                    className="mt-auto flex items-center justify-start gap-2 text-sm text-slate-500"
+                    className="mt-auto flex items-center justify-start gap-2 text-sm text-slate-500 dark:text-slate-300"
                     onClick={handleLogout}
                 >
                     <LogOut className="h-4 w-4" /> {t("appShell.logout")}
@@ -83,21 +83,21 @@ export function AppShell({ children, rightSlot }: AppShellProps) {
             </aside>
             <main className="flex flex-1 flex-col overflow-hidden">
                 {/* 顶部工具栏：包含搜索框、全局操作按钮和头像占位 */}
-                <header className="glass sticky top-0 z-10 flex h-16 items-center justify-between border-b border-white/60 px-6">
-                    <div className="flex items-center gap-3 rounded-full border border-white/60 bg-white/70 px-4 py-2">
-                        <Search className="h-4 w-4 text-slate-500" />
+                <header className="glass sticky top-0 z-10 flex h-16 items-center justify-between border-b border-white/60 bg-white/70 px-6 backdrop-blur-lg transition-colors dark:border-slate-800/70 dark:bg-slate-900/60">
+                    <div className="flex items-center gap-3 rounded-full border border-white/60 bg-white/80 px-4 py-2 transition-colors dark:border-slate-800 dark:bg-slate-900/60">
+                        <Search className="h-4 w-4 text-slate-500 dark:text-slate-400" />
                         <input
                             placeholder={t("appShell.searchPlaceholder")}
-                            className="w-64 bg-transparent text-sm text-slate-700 outline-none"
+                            className="w-64 bg-transparent text-sm text-slate-700 outline-none dark:text-slate-200"
                             type="search"
                         />
                     </div>
                     <div className="flex items-center gap-3">
                         {rightSlot}
-                        <Button size="sm" variant="secondary">
+                        <Button size="sm" variant="secondary" className="dark:shadow-none">
                             {t("appShell.syncNow")}
                         </Button>
-                        <div className="flex h-9 items-center gap-3 rounded-full border border-white/60 bg-white/80 px-3 shadow-sm">
+                        <div className="flex h-9 items-center gap-3 rounded-full border border-white/60 bg-white/80 px-3 shadow-sm transition-colors dark:border-slate-800 dark:bg-slate-900/70 dark:shadow-none">
                             {profile?.user.avatar_url ? (
                                 <img
                                     src={profile.user.avatar_url}
@@ -109,12 +109,12 @@ export function AppShell({ children, rightSlot }: AppShellProps) {
                                     {avatarInitial}
                                 </div>
                             )}
-                            <span className="text-sm text-slate-600">{profile?.user.username}</span>
+                            <span className="text-sm text-slate-600 dark:text-slate-300">{profile?.user.username}</span>
                         </div>
                     </div>
                 </header>
                 {/* 主内容区域，通过 children 注入各业务页面 */}
-                <div className="flex-1 overflow-y-auto px-6 py-6">{children}</div>
+                <div className="flex-1 overflow-y-auto bg-[var(--bg)] px-6 py-6 transition-colors">{children}</div>
             </main>
         </div>
     );

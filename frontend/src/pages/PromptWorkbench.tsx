@@ -128,17 +128,17 @@ export default function PromptWorkbenchPage() {
     );
 
     return (
-        <div className="grid grid-cols-1 gap-6 xl:grid-cols-[380px,minmax(0,1fr)]">
+        <div className="grid grid-cols-1 gap-6 text-slate-700 transition-colors dark:text-slate-200 xl:grid-cols-[380px,minmax(0,1fr)]">
             <GlassCard className="flex flex-col gap-6">
                 <header className="flex items-center justify-between">
                     <div>
-                        <p className="text-xs uppercase tracking-[0.28em] text-slate-400">{t("promptWorkbench.keywordsTitle")}</p>
-                        <h2 className="mt-1 text-xl font-semibold text-slate-800">{t("promptWorkbench.keywordsSubtitle")}</h2>
+                        <p className="text-xs uppercase tracking-[0.28em] text-slate-400 dark:text-slate-500">{t("promptWorkbench.keywordsTitle")}</p>
+                        <h2 className="mt-1 text-xl font-semibold text-slate-800 dark:text-slate-100">{t("promptWorkbench.keywordsSubtitle")}</h2>
                     </div>
                     {isFetching ? <LoaderCircle className="h-5 w-5 animate-spin text-primary" /> : null}
                 </header>
-                <div className="rounded-2xl border border-white/60 bg-white/70 p-4 shadow-sm">
-                    <p className="text-sm font-medium text-slate-600">{t("promptWorkbench.addKeyword")}</p>
+                <div className="rounded-2xl border border-white/60 bg-white/70 p-4 shadow-sm transition-colors dark:border-slate-800 dark:bg-slate-900/70">
+                    <p className="text-sm font-medium text-slate-600 dark:text-slate-300">{t("promptWorkbench.addKeyword")}</p>
                     <div className="mt-3 flex gap-2">
                         <Input
                             value={newKeyword}
@@ -190,8 +190,8 @@ export default function PromptWorkbenchPage() {
             <GlassCard className="flex flex-col gap-6">
                 <header className="flex items-center justify-between">
                     <div>
-                        <p className="text-xs uppercase tracking-[0.28em] text-slate-400">{t("promptWorkbench.workbenchEyebrow")}</p>
-                        <h2 className="mt-1 text-2xl font-semibold text-slate-800">{t("promptWorkbench.workbenchTitle")}</h2>
+                        <p className="text-xs uppercase tracking-[0.28em] text-slate-400 dark:text-slate-500">{t("promptWorkbench.workbenchEyebrow")}</p>
+                        <h2 className="mt-1 text-2xl font-semibold text-slate-800 dark:text-slate-100">{t("promptWorkbench.workbenchTitle")}</h2>
                     </div>
                     <Button
                         variant="secondary"
@@ -209,12 +209,12 @@ export default function PromptWorkbenchPage() {
                 </header>
 
                 <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-                    <div className="rounded-2xl border border-white/60 bg-white/70 p-4 shadow-sm">
-                        <label className="text-sm font-medium text-slate-600">{t("promptWorkbench.topicLabel")}</label>
+                    <div className="rounded-2xl border border-white/60 bg-white/70 p-4 shadow-sm transition-colors dark:border-slate-800 dark:bg-slate-900/70">
+                        <label className="text-sm font-medium text-slate-600 dark:text-slate-300">{t("promptWorkbench.topicLabel")}</label>
                         <Input value={topic} onChange={(event) => setTopic(event.target.value)} className="mt-2" />
                     </div>
-                    <div className="rounded-2xl border border-white/60 bg-white/70 p-4 shadow-sm">
-                        <label className="text-sm font-medium text-slate-600">{t("promptWorkbench.modelLabel")}</label>
+                    <div className="rounded-2xl border border-white/60 bg-white/70 p-4 shadow-sm transition-colors dark:border-slate-800 dark:bg-slate-900/70">
+                        <label className="text-sm font-medium text-slate-600 dark:text-slate-300">{t("promptWorkbench.modelLabel")}</label>
                         <div className="mt-3 flex gap-2 text-xs">
                             <Badge
                                 className={cn(
@@ -240,15 +240,15 @@ export default function PromptWorkbenchPage() {
                     </div>
                 </div>
 
-                <div className="rounded-3xl border border-white/60 bg-white/80 p-5 shadow-inner">
-                    <label className="text-sm font-medium text-slate-600">{t("promptWorkbench.draftLabel")}</label>
+                <div className="rounded-3xl border border-white/60 bg-white/80 p-5 shadow-inner transition-colors dark:border-slate-800 dark:bg-slate-900/70">
+                    <label className="text-sm font-medium text-slate-600 dark:text-slate-300">{t("promptWorkbench.draftLabel")}</label>
                     <Textarea
                         className="mt-3 min-h-[280px]"
                         value={prompt}
                         onChange={(event) => setPrompt(event.target.value)}
                         placeholder={t("promptWorkbench.draftPlaceholder")}
                     />
-                    <div className="mt-3 text-xs text-slate-400">
+                    <div className="mt-3 text-xs text-slate-400 dark:text-slate-500">
                         {t("promptWorkbench.autosave")}:{" "}
                         {isSaving ? t("promptWorkbench.autosaveSaving") : t("promptWorkbench.autosaveSaved")}
                     </div>
@@ -287,7 +287,7 @@ function KeywordSection({ title, hint, keywords, tint = "positive", onRemove }: 
     if (!keywords.length) {
         // 无关键词时展示占位提示，保持布局稳定。
         return (
-            <div className="rounded-2xl border border-dashed border-slate-200 bg-white/60 p-6 text-center text-sm text-slate-400">
+            <div className="rounded-2xl border border-dashed border-slate-200 bg-white/60 p-6 text-center text-sm text-slate-400 transition-colors dark:border-slate-700 dark:bg-slate-900/50 dark:text-slate-500">
                 {t("promptWorkbench.emptySection", { title })}
             </div>
         );
@@ -295,9 +295,9 @@ function KeywordSection({ title, hint, keywords, tint = "positive", onRemove }: 
 
     return (
         <div className="space-y-3">
-            <div className="flex items-center justify-between text-sm text-slate-500">
+            <div className="flex items-center justify-between text-sm text-slate-500 dark:text-slate-400">
                 <span>{title}</span>
-                {hint ? <span className="text-xs text-slate-400">{hint}</span> : null}
+                {hint ? <span className="text-xs text-slate-400 dark:text-slate-500">{hint}</span> : null}
             </div>
             <div className="flex flex-wrap gap-2">
                 {keywords.map((keyword) => (

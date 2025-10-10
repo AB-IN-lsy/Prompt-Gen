@@ -11,6 +11,12 @@
 - 注册接口在邮箱、用户名同时冲突时会通过 `error.details.fields` 返回完整字段列表，方便前端逐项提示。
 - `PUT /api/users/me` 支持显式传入空字符串清空头像，便于用户撤销已上传的头像图片。
 - 单元测试覆盖 `UserService.UpdateProfile`，确保资料更新逻辑稳定。
+- 新增邮箱验证流程，注册后会发放一次性验证令牌；邮箱未验证前无法登录。
+- 注册成功会立即调用邮件发送器发出验证邮件，并在响应中返回 `remaining_attempts`，前端可用以刷新 UI 提示。
+- 统一邮箱验证频控与验证码限流，实现 Redis/内存双实现的 `ratelimit.Limiter`，支持 `EMAIL_VERIFICATION_LIMIT`、`EMAIL_VERIFICATION_WINDOW` 自定义阈值。
+- 邮箱验证与图形验证码接口返回剩余尝试次数（`remaining_attempts`），被限流时附带冷却秒数（`retry_after_seconds`），便于前端展示剩余机会与等待时间。
+- 邮件发送新增阿里云 DirectMail 发信器，优先使用 DirectMail，未配置时自动回退到 SMTP。
+- 启动流程拆分为 `internal/app.InitResources`（负责连接/迁移）与 `internal/bootstrap.BuildApplication`（负责装配依赖），提升职责清晰度。
 
 ## 环境变量
 
@@ -27,7 +33,7 @@
 | `NACOS_GROUP` / `NACOS_NAMESPACE` | Nacos 读取 MySQL 配置所用的分组与命名空间 |
 | `MYSQL_CONFIG_DATA_ID` / `MYSQL_CONFIG_GROUP` | Nacos 中 MySQL 配置的 DataId 与 Group |
 
-### 可选：验证码与 Redis
+### 验证码与 Redis
 
 | 变量 | 作用 |
 | --- | --- |
@@ -42,6 +48,37 @@
 | `CAPTCHA_RATE_LIMIT_PER_MIN` | 每个 IP 在窗口内允许请求次数 |
 | `CAPTCHA_RATE_LIMIT_WINDOW` | 限流窗口时长，例如 `1m` |
 
+### 邮箱验证与邮件发送
+
+| 变量 | 作用 |
+| --- | --- |
+| `APP_PUBLIC_BASE_URL` | 前端公共地址，用于拼接验证链接，例如 `https://app.example.com` |
+| `EMAIL_VERIFICATION_LIMIT` | 邮箱验证重发限频次数，默认 `5` |
+| `EMAIL_VERIFICATION_WINDOW` | 邮箱验证限频窗口时长，默认 `1h` |
+
+#### SMTP 发信（可选）
+
+| 变量 | 作用 |
+| --- | --- |
+| `SMTP_HOST` / `SMTP_PORT` | SMTP 服务地址与端口 |
+| `SMTP_USERNAME` / `SMTP_PASSWORD` | SMTP 登录凭证（匿名时可留空用户名/密码） |
+| `SMTP_FROM` | 发信人邮箱地址 |
+
+#### 阿里云 DirectMail（可选）
+
+| 变量 | 作用 |
+| --- | --- |
+| `ALIYUN_DM_ACCESS_KEY_ID` / `ALIYUN_DM_ACCESS_KEY_SECRET` | 阿里云访问密钥对 |
+| `ALIYUN_DM_REGION_ID` | DirectMail 实例所在区域，例如 `cn-hangzhou` |
+| `ALIYUN_DM_ENDPOINT` | DirectMail API 访问域名，默认 `dm.aliyuncs.com` |
+| `ALIYUN_DM_ACCOUNT_NAME` | 管理控制台配置的发信地址（AccountName） |
+| `ALIYUN_DM_FROM_ALIAS` | 发信人别名，可选 |
+| `ALIYUN_DM_TAG_NAME` | 邮件标签，可选 |
+| `ALIYUN_DM_REPLY_TO_ADDRESS` | 是否启用回信地址（`true` / `false`） |
+| `ALIYUN_DM_ADDRESS_TYPE` | 发信地址类型（`0` 随机账号，`1` 独立账号） |
+
+DirectMail 环境变量齐全时，`initEmailSender` 会优先实例化阿里云客户端；否则退回 SMTP 发信器，再不满足则仅写日志。
+
 在仓库根目录中复制 `.env.example` 为 `.env.local` 填入真实值，服务启动时会自动加载。
 
 > **提示：** 刷新令牌默认存入 Redis；若未配置 Redis，则退化为进程内内存存储，适合开发环境，但服务重启后刷新令牌会全部失效。
@@ -49,6 +86,16 @@
 ```powershell
 Copy-Item ..\..\.env.example ..\..\.env.local -Force
 ```
+
+## 邮件发送调试
+
+阿里云 DirectMail 在本地开发时可以使用辅助命令快速发信确认配置：
+
+```powershell
+go run ./backend/cmd/sendmail -to you@example.com -name "测试账号"
+```
+
+命令会加载 `.env.local`，构造一封验证邮件发送至指定地址，并在终端打印生成的 token。可配合前端验证页面进行手动测试。
 
 ## 跨域访问（CORS）
 
@@ -79,6 +126,8 @@ Copy-Item ..\..\.env.example ..\..\.env.local -Force
 | `GET` | `/api/auth/captcha` | 获取图形验证码 | 无；按客户端 IP 控制限流 |
 | `POST` | `/api/auth/register` | 用户注册 | JSON：`username`、`email`、`password`、`avatar_url`、`captcha_id`、`captcha_code`（验证码开启时必填） |
 | `POST` | `/api/auth/login` | 用户登录 | JSON：`email`、`password` |
+| `POST` | `/api/auth/verify-email/request` | 重新发送邮箱验证令牌 | JSON：`email` |
+| `POST` | `/api/auth/verify-email/confirm` | 使用 token 完成邮箱验证 | JSON：`token` |
 | `POST` | `/api/auth/refresh` | 刷新访问令牌 | JSON：`refresh_token` |
 | `POST` | `/api/auth/logout` | 撤销刷新令牌 | JSON：`refresh_token` |
 | `GET` | `/api/users/me` | 获取当前登录用户信息 | 需附带 `Authorization: Bearer <token>` |
@@ -121,6 +170,25 @@ Copy-Item ..\..\.env.example ..\..\.env.local -Force
 - **成功响应**：`201`，返回用户信息与 TokenPair。
 - **常见错误**：邮箱/用户名重复（409）、验证码缺失/错误（400）。
 
+#### GET /api/auth/captcha
+
+- **用途**：返回图形验证码以及验证码 ID，供注册等场景校验。
+- **成功响应**：`200`
+
+  ```json
+  {
+    "success": true,
+    "data": {
+      "captcha_id": "...",
+      "image": "data:image/png;base64,...",
+      "remaining_attempts": 4
+    }
+  }
+  ```
+
+- **限制说明**：按客户端 IP 限流，超过阈值会返回 `429 Too Many Requests`，必要时调整 `CAPTCHA_RATE_LIMIT_PER_MIN` 与 `CAPTCHA_RATE_LIMIT_WINDOW`。
+- **提示信息**：`remaining_attempts` 表示当前窗口内剩余刷新次数，被限流时响应体会在 `error.details` 中附带 `retry_after_seconds` 与 `remaining_attempts: 0`。
+
 #### POST /api/auth/login
 
 - **请求体**
@@ -134,6 +202,35 @@ Copy-Item ..\..\.env.example ..\..\.env.local -Force
 
 - **成功响应**：`200`，返回用户信息与新的 TokenPair。
 - **常见错误**：账号不存在或密码错误 → `401` + `ErrInvalidLogin`。
+- **邮箱未验证**：返回 `403` + `EMAIL_NOT_VERIFIED`，需先完成邮箱验证。
+
+#### POST /api/auth/verify-email/request
+
+- **用途**：重新发送邮箱验证邮件/令牌，默认 24 小时内有效。
+- **请求体**
+
+  ```json
+  {
+    "email": "alice@example.com"
+  }
+  ```
+
+- **成功响应**：`200`。开发环境会在 `data.token` 返回一次性 Token，便于测试；`data.remaining_attempts` 提示当前窗口剩余可用次数，被限流时 `error.details.retry_after_seconds` 给出冷却时间。
+- **常见错误**：邮箱已通过验证 → `409` + `EMAIL_ALREADY_VERIFIED`。
+
+#### POST /api/auth/verify-email/confirm
+
+- **用途**：提交邮件中的一次性 token，完成邮箱验证。
+- **请求体**
+
+  ```json
+  {
+    "token": "0c1e1fa5-1c6d-4a6a-8c5d-8f3e7b5c2ee1"
+  }
+  ```
+
+- **成功响应**：`204`。
+- **常见错误**：token 过期、已使用或不存在 → `400` + `VERIFICATION_TOKEN_INVALID`。
 
 #### POST /api/auth/refresh
 
@@ -277,8 +374,10 @@ go test -tags integration ./tests/integration
 ```text
 backend/
 ├─ cmd/
-│  └─ server/
-│     └─ main.go                 # 后端入口，负责加载配置与启动 HTTP Server
+│  ├─ server/
+│  │  └─ main.go                 # 后端入口，负责加载配置与启动 HTTP Server
+│  └─ sendmail/
+│     └─ main.go                 # 阿里云 DirectMail 调试命令
 ├─ internal/
 │  ├─ app/
 │  │  └─ app.go                  # 资源生命周期管理（数据库、缓存等）
@@ -335,3 +434,12 @@ backend/
 ```
 
 需要新增模块时，推荐按照上述分层模式扩展，保持 Handler、Service、Repository 等职责清晰，并优先在 `tests/` 中补充对应的单元/集成测试。
+
+## 待办与安全增强排期
+
+- **邮箱校验与验证流程**：新增邮箱格式校验、中间层错误提示，并提供验证邮件链路，防止伪造账号。
+- **密码重置**：设计申请重置、邮件验证码、设置新密码的完整流程，覆盖服务层与 Handler 单元测试。
+- **登录防护**：补充基于 IP 与账号的速率限制，以及可选的登录失败黑名单策略。
+- **审计日志**：记录敏感操作（重置密码、修改邮箱、登出所有设备等），并提供查询接口以便追踪。
+
+以上条目后续会进入迭代计划，优先实现鉴权流程的完整闭环。

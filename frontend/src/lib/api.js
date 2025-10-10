@@ -182,6 +182,32 @@ export async function logout(refreshToken) {
         throw normaliseError(error);
     }
 }
+/** 请求邮箱验证令牌，开发环境会直接返回 token 便于测试。 */
+export async function requestEmailVerification(email) {
+    try {
+        const response = await http.post("/auth/verify-email/request", {
+            email,
+        });
+        const data = response.data ?? {};
+        return {
+            issued: Boolean(data.issued),
+            token: data.token,
+            remainingAttempts: typeof data.remaining_attempts === "number" && Number.isFinite(data.remaining_attempts) ? data.remaining_attempts : undefined,
+        };
+    }
+    catch (error) {
+        throw normaliseError(error);
+    }
+}
+/** 使用邮件中的 token 完成邮箱验证。 */
+export async function confirmEmailVerification(token) {
+    try {
+        await http.post("/auth/verify-email/confirm", { token });
+    }
+    catch (error) {
+        throw normaliseError(error);
+    }
+}
 /** 获取当前登录用户资料及设置。 */
 export async function fetchCurrentUser() {
     try {

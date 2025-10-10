@@ -7,6 +7,8 @@ import (
 	"strings"
 	"time"
 
+	"electron-go-app/backend/internal/infra/ratelimit"
+
 	"github.com/mojocn/base64Captcha"
 	"github.com/redis/go-redis/v9"
 )
@@ -18,7 +20,7 @@ var (
 )
 
 type Generator interface {
-	Generate(ctx context.Context, ip string) (id string, b64 string, err error)
+	Generate(ctx context.Context, ip string) (id string, b64 string, remaining int, err error)
 }
 
 type Verifier interface {
@@ -27,12 +29,13 @@ type Verifier interface {
 
 // Manager 封装验证码生成、答案存储以及按 IP 限流的完整逻辑。
 type Manager struct {
-	store   *redis.Client        // Redis 客户端，负责缓存验证码答案及限流计数
+	store   *redis.Client        // Redis 客户端，负责缓存验证码答案
 	driver  base64Captcha.Driver // 负责生成具体的验证码图片与答案
 	prefix  string               // Redis Key 前缀，避免不同业务污染
 	ttl     time.Duration        // 验证码存活时间
-	maxHits int64                // 限流阈值：窗口内允许的最大请求次数
-	rlTTL   time.Duration        // 限流计数窗口长度
+	limiter ratelimit.Limiter    // 可选限流器，实现统一的限流策略
+	limit   int                  // 指定窗口内允许的最大请求次数
+	window  time.Duration        // 限流窗口长度
 }
 
 // Options 聚合了验证码图像参数以及限流设置，可通过环境变量动态配置。
@@ -60,7 +63,7 @@ const (
 )
 
 // NewManager 根据给定的选项构造验证码管理器，实现生成、校验与限流。
-func NewManager(redisClient *redis.Client, opts Options) *Manager {
+func NewManager(redisClient *redis.Client, limiter ratelimit.Limiter, opts Options) *Manager {
 	if redisClient == nil {
 		panic("captcha manager requires redis client")
 	}
@@ -113,37 +116,43 @@ func NewManager(redisClient *redis.Client, opts Options) *Manager {
 		rlTTL = time.Minute
 	}
 
+	if limiter == nil {
+		limiter = ratelimit.NewMemoryLimiter()
+	}
+
 	return &Manager{
 		store:   redisClient,
 		driver:  driver,
 		prefix:  prefix,
 		ttl:     ttl,
-		maxHits: int64(maxHits),
-		rlTTL:   rlTTL,
+		limiter: limiter,
+		limit:   maxHits,
+		window:  rlTTL,
 	}
 }
 
 // Generate 输出 base64 图像和对应的验证码 ID，并在 Redis 中缓存答案。
-func (m *Manager) Generate(ctx context.Context, ip string) (string, string, error) {
-	// 先做简单的 IP 限流，防止爬虫无限制刷验证码。
-	if err := m.checkRateLimit(ctx, ip); err != nil {
-		return "", "", err
+func (m *Manager) Generate(ctx context.Context, ip string) (string, string, int, error) {
+	// 先做简单的 IP 限流，防止爬虫无限制刷验证码，同时记录剩余额度。
+	remaining, err := m.checkRateLimit(ctx, ip)
+	if err != nil {
+		return "", "", 0, err
 	}
 
 	id, content, answer := m.driver.GenerateIdQuestionAnswer()
 
 	item, err := m.driver.DrawCaptcha(content)
 	if err != nil {
-		return "", "", fmt.Errorf("draw captcha: %w", err)
+		return "", "", 0, fmt.Errorf("draw captcha: %w", err)
 	}
 
 	b64 := item.EncodeB64string()
 
 	if err := m.store.Set(ctx, m.key(id), strings.ToLower(answer), m.ttl).Err(); err != nil {
-		return "", "", fmt.Errorf("store captcha: %w", err)
+		return "", "", 0, fmt.Errorf("store captcha: %w", err)
 	}
 
-	return id, b64, nil
+	return id, b64, remaining, nil
 }
 
 // Verify 对比用户提交的验证码答案，成功时删除缓存，失败时返回明确错误。
@@ -178,27 +187,23 @@ func (m *Manager) key(id string) string {
 }
 
 // checkRateLimit 维护单个 IP 的访问频次，超过阈值返回 ErrRateLimited。
-func (m *Manager) checkRateLimit(ctx context.Context, ip string) error {
-	if m.maxHits <= 0 || strings.TrimSpace(ip) == "" {
-		return nil
+func (m *Manager) checkRateLimit(ctx context.Context, ip string) (int, error) {
+	if m == nil || m.limit <= 0 || strings.TrimSpace(ip) == "" {
+		return -1, nil
 	}
 
-	// 通过 INCR + EXPIRE 组合实现滑动窗口近似限流，避免引入额外依赖。
-	key := fmt.Sprintf("%s:rl:%s", m.prefix, ip)
-	count, err := m.store.Incr(ctx, key).Result()
+	if m.limiter == nil {
+		return -1, nil
+	}
+
+	key := fmt.Sprintf("%s:ip:%s", m.prefix, ip)
+	result, err := m.limiter.Allow(ctx, key, m.limit, m.window)
 	if err != nil {
-		return fmt.Errorf("captcha rate limit incr: %w", err)
+		return 0, fmt.Errorf("captcha rate limit: %w", err)
+	}
+	if !result.Allowed {
+		return 0, ErrRateLimited
 	}
 
-	if count == 1 {
-		if err := m.store.Expire(ctx, key, m.rlTTL).Err(); err != nil {
-			return fmt.Errorf("captcha rate limit expire: %w", err)
-		}
-	}
-
-	if count > m.maxHits {
-		return ErrRateLimited
-	}
-
-	return nil
+	return result.Remaining, nil
 }

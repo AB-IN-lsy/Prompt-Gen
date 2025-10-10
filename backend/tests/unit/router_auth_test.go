@@ -30,6 +30,12 @@ import (
 	"gorm.io/gorm"
 )
 
+type noopEmailSender struct{}
+
+func (noopEmailSender) SendVerification(_ context.Context, _ *domain.User, _ string) error {
+	return nil
+}
+
 type userProfileResponse struct {
 	Success bool `json:"success"`
 	Data    struct {
@@ -50,11 +56,12 @@ func setupRouter(t *testing.T) (*gin.Engine, uint, string) {
 		t.Fatalf("open sqlite: %v", err)
 	}
 
-	if err := db.AutoMigrate(&domain.User{}); err != nil {
+	if err := db.AutoMigrate(&domain.User{}, &domain.EmailVerificationToken{}); err != nil {
 		t.Fatalf("auto migrate: %v", err)
 	}
 
 	repo := repository.NewUserRepository(db)
+	verificationRepo := repository.NewEmailVerificationRepository(db)
 
 	user := &domain.User{
 		Username: "router-user",
@@ -67,8 +74,8 @@ func setupRouter(t *testing.T) (*gin.Engine, uint, string) {
 	secret := "test-secret"
 	jwtManager := token.NewJWTManager(secret, time.Minute, time.Hour)
 	refreshStore := token.NewMemoryRefreshTokenStore()
-	authService := authsvc.NewService(repo, jwtManager, refreshStore, nil)
-	authHandler := handler.NewAuthHandler(authService)
+	authService := authsvc.NewService(repo, verificationRepo, jwtManager, refreshStore, nil, noopEmailSender{})
+	authHandler := handler.NewAuthHandler(authService, nil, 0, 0)
 
 	userService := usersvc.NewService(repo)
 	userHandler := handler.NewUserHandler(userService)

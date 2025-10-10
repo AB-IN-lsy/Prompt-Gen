@@ -11,6 +11,7 @@ package integration
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -32,6 +33,12 @@ import (
 	"gorm.io/gorm"
 )
 
+type noopEmailSender struct{}
+
+func (noopEmailSender) SendVerification(_ context.Context, _ *domain.User, _ string) error {
+	return nil
+}
+
 func setupAuthFlow(t *testing.T) *gin.Engine {
 	t.Helper()
 
@@ -42,18 +49,19 @@ func setupAuthFlow(t *testing.T) *gin.Engine {
 		t.Fatalf("open sqlite: %v", err)
 	}
 
-	if err := db.AutoMigrate(&domain.User{}); err != nil {
+	if err := db.AutoMigrate(&domain.User{}, &domain.EmailVerificationToken{}); err != nil {
 		t.Fatalf("auto migrate: %v", err)
 	}
 
 	repo := repository.NewUserRepository(db)
+	verificationRepo := repository.NewEmailVerificationRepository(db)
 	secret := "integration-secret"
 	jwtManager := token.NewJWTManager(secret, time.Minute*5, time.Hour)
 	refreshStore := token.NewMemoryRefreshTokenStore()
-	authService := authsvc.NewService(repo, jwtManager, refreshStore, nil)
+	authService := authsvc.NewService(repo, verificationRepo, jwtManager, refreshStore, nil, noopEmailSender{})
 	userService := usersvc.NewService(repo)
 
-	authHandler := handler.NewAuthHandler(authService)
+	authHandler := handler.NewAuthHandler(authService, nil, 0, 0)
 	userHandler := handler.NewUserHandler(userService)
 	authMW := middleware.NewAuthMiddleware(secret)
 
@@ -139,8 +147,55 @@ func TestAuthFlow_RegisterLoginAndFetchProfile(t *testing.T) {
 		t.Fatalf("expected refresh token")
 	}
 
-	// Step 2: login with same credential
+	// Step 2: login should be blocked until email verified
 	loginResp := performJSONRequest(t, router, http.MethodPost, "/api/auth/login", map[string]any{
+		"email":    email,
+		"password": password,
+	}, nil)
+
+	if loginResp.Code != http.StatusForbidden {
+		t.Fatalf("expected login forbidden before verification, got %d body=%s", loginResp.Code, loginResp.Body.String())
+	}
+
+	// Step 3: request verification token
+	requestResp := performJSONRequest(t, router, http.MethodPost, "/api/auth/request-email-verification", map[string]any{
+		"email": email,
+	}, nil)
+
+	if requestResp.Code != http.StatusOK {
+		t.Fatalf("request verification status = %d, body = %s", requestResp.Code, requestResp.Body.String())
+	}
+
+	var requestBody response.Response
+	if err := json.Unmarshal(requestResp.Body.Bytes(), &requestBody); err != nil {
+		t.Fatalf("decode request body: %v", err)
+	}
+
+	if !requestBody.Success {
+		t.Fatalf("request verification expected success=true: %s", requestResp.Body.String())
+	}
+
+	reqData, ok := requestBody.Data.(map[string]any)
+	if !ok {
+		t.Fatalf("request verification data unexpected type: %T", requestBody.Data)
+	}
+
+	tokenVal, _ := reqData["token"].(string)
+	if tokenVal == "" {
+		t.Fatalf("expected token in request verification response")
+	}
+
+	// Step 4: verify email
+	verifyResp := performJSONRequest(t, router, http.MethodPost, "/api/auth/verify-email", map[string]any{
+		"token": tokenVal,
+	}, nil)
+
+	if verifyResp.Code != http.StatusNoContent {
+		t.Fatalf("verify email status = %d, body = %s", verifyResp.Code, verifyResp.Body.String())
+	}
+
+	// Step 5: login after verification
+	loginResp = performJSONRequest(t, router, http.MethodPost, "/api/auth/login", map[string]any{
 		"email":    email,
 		"password": password,
 	}, nil)

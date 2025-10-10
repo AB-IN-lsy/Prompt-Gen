@@ -7,5 +7,5 @@ import { jsx as _jsx } from "react/jsx-runtime";
  */
 import { forwardRef } from "react";
 import { cn } from "../../lib/utils";
-export const Textarea = forwardRef(({ className, ...props }, ref) => (_jsx("textarea", { ref: ref, className: cn("min-h-[160px] w-full rounded-2xl border border-white/70 bg-white/80 px-4 py-3 text-sm text-slate-700 shadow-sm transition placeholder:text-slate-400 focus:border-primary focus:shadow-glow focus:outline-none", className), ...props })));
+export const Textarea = forwardRef(({ className, ...props }, ref) => (_jsx("textarea", { ref: ref, className: cn("min-h-[160px] w-full rounded-2xl border border-white/70 bg-white/80 px-4 py-3 text-sm text-slate-700 shadow-sm transition placeholder:text-slate-400 focus:border-primary focus:shadow-glow focus:outline-none dark:border-slate-800 dark:bg-slate-900/70 dark:text-slate-200 dark:placeholder:text-slate-500", className), ...props })));
 Textarea.displayName = "Textarea";

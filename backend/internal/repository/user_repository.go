@@ -9,6 +9,7 @@ package repository
 import (
 	"context"
 	"strings"
+	"time"
 
 	"electron-go-app/backend/internal/domain/user"
 
@@ -60,6 +61,23 @@ func (r *UserRepository) FindByUsername(ctx context.Context, username string) (*
 // Update 按主键更新用户信息。
 func (r *UserRepository) Update(ctx context.Context, u *user.User) error {
 	return r.db.WithContext(ctx).Save(u).Error
+}
+
+// MarkEmailVerified 将用户邮箱标记为已验证。
+func (r *UserRepository) MarkEmailVerified(ctx context.Context, userID uint, when time.Time) error {
+	result := r.db.WithContext(ctx).
+		Model(&user.User{}).
+		Where("id = ?", userID).
+		Updates(map[string]any{
+			"email_verified_at": when,
+		})
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected == 0 {
+		return gorm.ErrRecordNotFound
+	}
+	return nil
 }
 
 // UpdateSettings 更新指定用户的设置字段。

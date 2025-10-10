@@ -100,6 +100,32 @@
             "retrying": "验证码加载失败，正在自动重试 ({{attempt}}/{{total}})…",
             "failed": "验证码仍未加载成功，请刷新后再试。",
             "manualHint": "如多次失败，请刷新页面或联系管理员。"
+        },
+        "verification": {
+            "required": "邮箱尚未验证，请先完成验证再登录。",
+            "blockTitle": "需要验证邮箱",
+            "blockMessage": "点击下方的“发送验证邮件”，然后在邮箱里打开验证链接即可完成操作。",
+            "helper": "点击下方按钮发送验证邮件，并按照邮件内的提示完成验证。",
+            "send": "发送验证邮件",
+            "sent": "验证邮件已发送，请查收。",
+            "sentWithToken": "验证邮件已发送（Token：{{token}}）。",
+            "sentNeutral": "如果该邮箱存在账户，将会收到验证邮件。",
+            "confirmed": "邮箱已验证成功，正在为你登录...",
+            "confirmedManual": "邮箱验证成功，请再次点击“登录”继续。",
+            "confirm": "提交验证码",
+            "tokenPlaceholder": "输入邮件中的验证码",
+            "tokenRequired": "请先输入验证码。",
+            "devHint": "开发环境快捷验证令牌：",
+            "pageTitle": "验证邮箱",
+            "pageSubtitle": "确认邮箱地址后即可使用 PromptGen 全部能力。",
+            "emailPlaceholder": "请输入你的邮箱地址",
+            "emailRequired": "请先填写邮箱地址。",
+            "autoSuccess": "邮箱已验证，可以直接登录。",
+            "backToLogin": "返回登录",
+            "goToPage": "打开邮箱验证页面",
+            "emailReminder": "若未收到邮件，请检查垃圾箱或稍后再次发送。",
+            "pageIntro": "请输入注册时使用的邮箱，我们会立即发送新的验证链接。",
+            "pageSteps": "完成邮件中的验证后，可返回此页或直接登录继续使用。"
         }
     },
     "dashboard": {
@@ -146,6 +172,23 @@
         "languageCardTitle": "界面语言",
         "languageCardDescription": "在英文与简体中文之间切换界面显示语言。",
         "languageSelectLabel": "显示语言",
+        "themeCard": {
+            "title": "界面主题",
+            "description": "选择浅色、深色或跟随系统的模式。",
+            "options": {
+                "system": "跟随系统",
+                "light": "浅色模式",
+                "dark": "深色模式"
+            },
+            "optionDescriptions": {
+                "system": "根据系统偏好自动切换",
+                "light": "使用浅色背景与高亮界面",
+                "dark": "使用深色背景与高对比界面"
+            },
+            "systemHint": "当前根据系统设定显示{{mode}}模式",
+            "systemHintLight": "浅色",
+            "systemHintDark": "深色"
+        },
         "profileCard": {
             "title": "个人资料",
             "description": "修改用户名、邮箱、偏好模型等信息。",
@@ -160,6 +203,19 @@
         "profileSaveSuccess": "资料已更新",
         "syncEnabledOn": "已开启",
         "syncEnabledOff": "已关闭",
+        "verificationPending": {
+            "notice": "你的邮箱尚未完成验证，建议尽快验证以解锁全部功能。",
+            "action": "立即验证",
+            "openPage": "打开验证页面",
+            "emailLabel": "我们会将验证邮件发送至 {{email}}。",
+            "emailLabelFallback": "请先填写邮箱地址再请求验证邮件。",
+            "sent": "验证邮件已发送，请检查收件箱。",
+            "sentDev": "验证邮件已发送（开发 token：{{token}}）。",
+            "sentNeutral": "如果该邮箱已有账号，将在稍后收到验证邮件。",
+            "emailMissing": "请先更新邮箱地址再请求验证邮件。",
+            "remaining": "今日还可尝试 {{count}} 次。",
+            "rateLimit": "请等待 {{seconds}} 秒后再试。"
+        },
         "errors": {
             "usernameRequired": "请填写用户名",
             "emailInvalid": "请输入合法的邮箱地址",
@@ -178,6 +234,9 @@
         "INTERNAL_ERROR": "服务器开小差了。",
         "CAPTCHA_INVALID": "验证码不正确。",
         "CAPTCHA_EXPIRED": "验证码已过期，请重新获取。",
-        "CAPTCHA_REQUIRED": "需要填写验证码。"
+        "CAPTCHA_REQUIRED": "需要填写验证码。",
+        "EMAIL_NOT_VERIFIED": "邮箱尚未验证，请先完成验证。",
+        "EMAIL_ALREADY_VERIFIED": "邮箱已验证，无需重复操作。",
+        "VERIFICATION_TOKEN_INVALID": "验证码无效或已过期，请重新获取。"
     }
 }

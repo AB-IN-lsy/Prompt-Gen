@@ -13,15 +13,29 @@ import (
 
 // User represents the persisted user entity in the system.
 type User struct {
-	ID           uint       `gorm:"primaryKey" json:"id"`
-	Username     string     `gorm:"size:64;uniqueIndex" json:"username"`
-	Email        string     `gorm:"size:255;uniqueIndex" json:"email"`
-	AvatarURL    string     `gorm:"size:512" json:"avatar_url"` // 用户头像的公开访问地址
-	PasswordHash string     `gorm:"size:255" json:"-"`
-	Settings     string     `gorm:"type:text" json:"settings"`
-	LastLoginAt  *time.Time `json:"last_login_at"`
-	CreatedAt    time.Time  `json:"created_at"`
-	UpdatedAt    time.Time  `json:"updated_at"`
+	ID              uint       `gorm:"primaryKey" json:"id"`
+	Username        string     `gorm:"size:64;uniqueIndex" json:"username"`
+	Email           string     `gorm:"size:255;uniqueIndex" json:"email"`
+	AvatarURL       string     `gorm:"size:512" json:"avatar_url"` // 用户头像的公开访问地址
+	PasswordHash    string     `gorm:"size:255" json:"-"`
+	Settings        string     `gorm:"type:text" json:"settings"`
+	LastLoginAt     *time.Time `json:"last_login_at"`
+	EmailVerifiedAt *time.Time `json:"email_verified_at"`
+	CreatedAt       time.Time  `json:"created_at"`
+	UpdatedAt       time.Time  `json:"updated_at"`
+}
+
+// EmailVerificationToken 记录邮箱验证所需的一次性令牌。
+type EmailVerificationToken struct {
+	ID         uint      `gorm:"primaryKey"`
+	UserID     uint      `gorm:"uniqueIndex:user_id"`
+	Token      string    `gorm:"size:128;uniqueIndex:token"`
+	ExpiresAt  time.Time `gorm:"index"`
+	ConsumedAt *time.Time
+	CreatedAt  time.Time
+	UpdatedAt  time.Time
+
+	User User `gorm:"constraint:OnDelete:CASCADE"`
 }
 
 // Settings 描述用户可自定义的配置项，会以 JSON 字符串形式持久化在 User.Settings 字段中。

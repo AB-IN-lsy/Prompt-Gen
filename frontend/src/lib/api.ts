@@ -107,6 +107,7 @@ export interface AuthUser {
   username: string;
   email: string;
   avatar_url?: string | null;
+  email_verified_at?: string | null;
   last_login_at?: string | null;
   created_at?: string;
   updated_at?: string;
@@ -145,6 +146,12 @@ export interface UpdateCurrentUserRequest {
   avatar_url?: string | null;
   preferred_model?: string;
   sync_enabled?: boolean;
+}
+
+export interface EmailVerificationRequestResult {
+  issued: boolean;
+  token?: string;
+  remainingAttempts?: number;
 }
 
 export interface CaptchaResponse {
@@ -342,6 +349,36 @@ export async function refreshTokens(refreshToken: string): Promise<AuthTokens> {
 export async function logout(refreshToken: string): Promise<void> {
   try {
     await http.post("/auth/logout", { refresh_token: refreshToken });
+  } catch (error) {
+    throw normaliseError(error);
+  }
+}
+
+/** 请求邮箱验证令牌，开发环境会直接返回 token 便于测试。 */
+export async function requestEmailVerification(email: string): Promise<EmailVerificationRequestResult> {
+  try {
+    const response: AxiosResponse<{ issued: boolean; token?: string; remaining_attempts?: number }> = await http.post(
+      "/auth/verify-email/request",
+      {
+        email,
+      }
+    );
+    const data = response.data ?? {};
+    return {
+      issued: Boolean(data.issued),
+      token: data.token,
+      remainingAttempts:
+        typeof data.remaining_attempts === "number" && Number.isFinite(data.remaining_attempts) ? data.remaining_attempts : undefined,
+    };
+  } catch (error) {
+    throw normaliseError(error);
+  }
+}
+
+/** 使用邮件中的 token 完成邮箱验证。 */
+export async function confirmEmailVerification(token: string): Promise<void> {
+  try {
+    await http.post("/auth/verify-email/confirm", { token });
   } catch (error) {
     throw normaliseError(error);
   }

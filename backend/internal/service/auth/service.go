@@ -18,25 +18,32 @@ import (
 	appLogger "electron-go-app/backend/internal/infra/logger"
 	"electron-go-app/backend/internal/repository"
 
+	"github.com/google/uuid"
 	"go.uber.org/zap"
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
 )
 
 var (
-	ErrEmailTaken            = errors.New("email already registered")
-	ErrUsernameTaken         = errors.New("username already taken")
-	ErrEmailAndUsernameTaken = errors.New("email and username already taken")
-	ErrInvalidLogin          = errors.New("invalid email or password")
-	ErrCaptchaRequired       = errors.New("captcha is required")
-	ErrCaptchaInvalid        = errors.New("captcha verification failed")
-	ErrCaptchaExpired        = errors.New("captcha expired or not found")
-	ErrCaptchaRateLimited    = errors.New("captcha requests too frequent")
-	ErrRefreshTokenInvalid   = errors.New("refresh token is invalid")
-	ErrRefreshTokenExpired   = errors.New("refresh token expired")
-	ErrRefreshTokenRevoked   = errors.New("refresh token revoked")
-	ErrRefreshTokenRequired  = errors.New("refresh token is required")
+	ErrEmailTaken               = errors.New("email already registered")
+	ErrUsernameTaken            = errors.New("username already taken")
+	ErrEmailAndUsernameTaken    = errors.New("email and username already taken")
+	ErrInvalidLogin             = errors.New("invalid email or password")
+	ErrEmailNotVerified         = errors.New("email not verified")
+	ErrVerificationTokenInvalid = errors.New("verification token is invalid or expired")
+	ErrEmailAlreadyVerified     = errors.New("email already verified")
+	ErrVerificationNotEnabled   = errors.New("email verification store not configured")
+	ErrCaptchaRequired          = errors.New("captcha is required")
+	ErrCaptchaInvalid           = errors.New("captcha verification failed")
+	ErrCaptchaExpired           = errors.New("captcha expired or not found")
+	ErrCaptchaRateLimited       = errors.New("captcha requests too frequent")
+	ErrRefreshTokenInvalid      = errors.New("refresh token is invalid")
+	ErrRefreshTokenExpired      = errors.New("refresh token expired")
+	ErrRefreshTokenRevoked      = errors.New("refresh token revoked")
+	ErrRefreshTokenRequired     = errors.New("refresh token is required")
 )
+
+const emailVerificationTTL = 24 * time.Hour
 
 // CaptchaManager 聚合验证码生成与校验能力，便于在服务层替换实现。
 type CaptchaManager interface {
@@ -76,6 +83,23 @@ type RefreshTokenStore interface {
 	Exists(ctx context.Context, userID uint, tokenID string) (bool, error)
 }
 
+// EmailSender 定义发送验证邮件的能力，便于后续替换为真实邮件服务。
+type EmailSender interface {
+	SendVerification(ctx context.Context, user *domain.User, token string) error
+}
+
+type loggingEmailSender struct {
+	logger *zap.SugaredLogger
+}
+
+func (l *loggingEmailSender) SendVerification(ctx context.Context, user *domain.User, token string) error {
+	if l == nil {
+		return nil
+	}
+	l.logger.Infow("email verification token issued", "user_id", user.ID, "email", user.Email, "token", token)
+	return nil
+}
+
 // Service 负责处理用户注册、登录、刷新、登出等鉴权业务。
 //
 // 依赖说明：
@@ -84,17 +108,30 @@ type RefreshTokenStore interface {
 //   - RefreshTokenStore：保存刷新令牌的“指纹”（userID + jti），用于防止重复使用、实现登出。
 //   - CaptchaManager：在注册时提供验证码校验能力，按需注入。
 type Service struct {
-	users        *repository.UserRepository
-	tokenManager TokenManager
-	logger       *zap.SugaredLogger
-	captcha      CaptchaManager
-	refreshStore RefreshTokenStore
+	users         *repository.UserRepository
+	verifications *repository.EmailVerificationRepository
+	tokenManager  TokenManager
+	logger        *zap.SugaredLogger
+	captcha       CaptchaManager
+	refreshStore  RefreshTokenStore
+	emailSender   EmailSender
 }
 
 // NewService 创建鉴权服务实例，并注入用户仓储与令牌管理器等核心依赖。
-func NewService(users *repository.UserRepository, tm TokenManager, store RefreshTokenStore, cm CaptchaManager) *Service {
+func NewService(users *repository.UserRepository, verifications *repository.EmailVerificationRepository, tm TokenManager, store RefreshTokenStore, cm CaptchaManager, sender EmailSender) *Service {
 	baseLogger := appLogger.S().With("component", "auth.service")
-	return &Service{users: users, tokenManager: tm, logger: baseLogger, captcha: cm, refreshStore: store}
+	if sender == nil {
+		sender = &loggingEmailSender{logger: baseLogger}
+	}
+	return &Service{
+		users:         users,
+		verifications: verifications,
+		tokenManager:  tm,
+		logger:        baseLogger,
+		captcha:       cm,
+		refreshStore:  store,
+		emailSender:   sender,
+	}
 }
 
 // RegisterParams 封装注册接口所需的输入参数。
@@ -208,6 +245,12 @@ func (s *Service) Register(ctx context.Context, params RegisterParams) (*domain.
 		return nil, TokenPair{}, err
 	}
 
+	if user.EmailVerifiedAt == nil {
+		if _, err := s.issueEmailVerificationToken(ctx, user); err != nil {
+			log.Warnw("issue email verification token failed", "error", err)
+		}
+	}
+
 	log.With("user_id", user.ID).Infow("user registered")
 
 	return user, tokens, nil
@@ -229,6 +272,12 @@ func (s *Service) Login(ctx context.Context, params LoginParams) (*domain.User, 
 	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(params.Password)); err != nil {
 		log.Warnw("password mismatch")
 		return nil, TokenPair{}, ErrInvalidLogin
+	}
+
+	if user.EmailVerifiedAt == nil {
+		// 没有验证过邮箱的账号被禁止登录，要求先完成邮件确认流程。
+		log.Warnw("email not verified", "user_id", user.ID)
+		return nil, TokenPair{}, ErrEmailNotVerified
 	}
 
 	now := time.Now()
@@ -268,26 +317,120 @@ func (s *Service) scope(operation string) *zap.SugaredLogger {
 	return s.ensureLogger().With("operation", operation)
 }
 
+// RequestEmailVerification 会为尚未完成验证的用户重新生成验证码。
+// 常用于“没收到邮件”或主动点击“重新发送”场景。
+func (s *Service) RequestEmailVerification(ctx context.Context, email string) (string, error) {
+	if s.verifications == nil {
+		return "", ErrVerificationNotEnabled
+	}
+
+	user, err := s.users.FindByEmail(ctx, strings.TrimSpace(email))
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return "", ErrInvalidLogin
+		}
+		return "", fmt.Errorf("find user: %w", err)
+	}
+
+	if user.EmailVerifiedAt != nil {
+		return "", ErrEmailAlreadyVerified
+	}
+
+	token, err := s.issueEmailVerificationToken(ctx, user)
+	if err != nil {
+		return "", err
+	}
+
+	return token, nil
+}
+
+// VerifyEmail 接收来自邮件的 token，校验其有效性，然后将用户标记为“已验证”。
+// 成功后会立即将 token 标记为已消费，防止重复使用。
+func (s *Service) VerifyEmail(ctx context.Context, token string) error {
+	if s.verifications == nil {
+		return ErrVerificationNotEnabled
+	}
+
+	record, err := s.verifications.FindValidToken(ctx, strings.TrimSpace(token))
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return ErrVerificationTokenInvalid
+		}
+		return fmt.Errorf("lookup verification token: %w", err)
+	}
+
+	if record == nil {
+		return ErrVerificationTokenInvalid
+	}
+
+	now := time.Now()
+	if err := s.users.MarkEmailVerified(ctx, record.UserID, now); err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return ErrVerificationTokenInvalid
+		}
+		return fmt.Errorf("mark verified: %w", err)
+	}
+
+	if err := s.verifications.MarkConsumed(ctx, record.ID); err != nil {
+		return fmt.Errorf("consume verification token: %w", err)
+	}
+
+	s.scope("verify_email").Infow("email verified", "user_id", record.UserID)
+	return nil
+}
+
+// issueEmailVerificationToken 根据用户生成新的 UUID 令牌，并写入数据库。
+// 若用户已经有旧 token，会先删除旧记录再写入新 token。
+// 最后调用 EmailSender（默认打印日志，可替换为实际邮件服务）通知用户。
+func (s *Service) issueEmailVerificationToken(ctx context.Context, user *domain.User) (string, error) {
+	if s.verifications == nil {
+		return "", ErrVerificationNotEnabled
+	}
+
+	token := uuid.NewString()
+	record := &domain.EmailVerificationToken{
+		UserID:    user.ID,
+		Token:     token,
+		ExpiresAt: time.Now().Add(emailVerificationTTL),
+	}
+
+	if err := s.verifications.UpsertToken(ctx, record); err != nil {
+		return "", fmt.Errorf("save verification token: %w", err)
+	}
+
+	go func() {
+		if _, err := s.verifications.DeleteExpired(context.Background(), time.Now()); err != nil {
+			s.scope("verify_email_cleanup").Warnw("delete expired tokens failed", "error", err)
+		}
+	}()
+
+	if err := s.emailSender.SendVerification(ctx, user, token); err != nil {
+		s.scope("verify_email").Warnw("send verification email failed", "error", err, "user_id", user.ID)
+	}
+
+	return token, nil
+}
+
 // CaptchaEnabled 表示当前服务是否启用了验证码依赖。
 func (s *Service) CaptchaEnabled() bool {
 	return s != nil && s.captcha != nil
 }
 
 // GenerateCaptcha 调用底层验证码管理器生成图形验证码。
-func (s *Service) GenerateCaptcha(ctx context.Context, ip string) (string, string, error) {
+func (s *Service) GenerateCaptcha(ctx context.Context, ip string) (string, string, int, error) {
 	if !s.CaptchaEnabled() {
-		return "", "", ErrCaptchaRequired
+		return "", "", 0, ErrCaptchaRequired
 	}
 
-	id, b64, err := s.captcha.Generate(ctx, ip)
+	id, b64, remaining, err := s.captcha.Generate(ctx, ip)
 	if err != nil {
 		if errors.Is(err, captcha.ErrRateLimited) {
-			return "", "", ErrCaptchaRateLimited
+			return "", "", 0, ErrCaptchaRateLimited
 		}
-		return "", "", fmt.Errorf("generate captcha: %w", err)
+		return "", "", 0, fmt.Errorf("generate captcha: %w", err)
 	}
 
-	return id, b64, nil
+	return id, b64, remaining, nil
 }
 
 // Refresh 使用刷新令牌换取新的访问令牌与刷新令牌。

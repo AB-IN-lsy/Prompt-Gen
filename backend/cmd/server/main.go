@@ -76,7 +76,7 @@ func initLogger() *zap.Logger {
 }
 
 func mustBootstrap(ctx context.Context, sugar *zap.SugaredLogger) *app.Resources {
-	resources, err := app.Bootstrap(ctx)
+	resources, err := app.InitResources(ctx)
 	if err != nil {
 		sugar.Fatalw("bootstrap failed", "error", err)
 	}

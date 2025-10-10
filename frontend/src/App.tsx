@@ -4,7 +4,7 @@
  * @FilePath: \electron-go-app\frontend\src\App.tsx
  * @LastEditTime: 2025-10-09 22:51:57
  */
-import { Routes, Route, Navigate } from "react-router-dom";
+import { Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useEffect } from "react";
 
@@ -14,6 +14,8 @@ import PromptWorkbenchPage from "./pages/PromptWorkbench";
 import SettingsPage from "./pages/Settings";
 import LoginPage from "./pages/Login";
 import RegisterPage from "./pages/Register";
+import VerifyEmailPage from "./pages/VerifyEmail";
+import EmailVerificationCallbackPage from "./pages/EmailVerificationCallback";
 import { useAuth, useIsAuthenticated } from "./hooks/useAuth";
 
 // 占位页面组件：在对应功能尚未实现时保持路由完整。
@@ -35,6 +37,7 @@ export default function App() {
     const initializing = useAuth((state) => state.initializing);
     const isAuthenticated = useIsAuthenticated();
     const { t } = useTranslation();
+    const location = useLocation();
 
     // 首次挂载时触发认证初始化：校验 Token 并尝试拉取用户资料。
     useEffect(() => {
@@ -50,12 +53,18 @@ export default function App() {
         );
     }
 
+    if (location.pathname.startsWith("/email/verified")) {
+        return <EmailVerificationCallbackPage />;
+    }
+
     if (!isAuthenticated) {
-        // 未登录用户只允许访问登录/注册，其他路径统一重定向。
+        // 未登录用户允许访问登录 / 注册 / 邮箱验证页面，避免验证链接被重定向。
         return (
             <Routes>
                 <Route path="/login" element={<LoginPage />} />
                 <Route path="/register" element={<RegisterPage />} />
+                <Route path="/verify-email" element={<VerifyEmailPage />} />
+                <Route path="/email/verified" element={<EmailVerificationCallbackPage />} />
                 <Route path="*" element={<Navigate to="/login" replace />} />
             </Routes>
         );

@@ -22,6 +22,7 @@ import (
 	"electron-go-app/backend/internal/handler"
 	"electron-go-app/backend/internal/infra/client"
 	response "electron-go-app/backend/internal/infra/common"
+	"electron-go-app/backend/internal/infra/ratelimit"
 	"electron-go-app/backend/internal/infra/token"
 	"electron-go-app/backend/internal/middleware"
 	"electron-go-app/backend/internal/repository"
@@ -113,15 +114,18 @@ func connectRedis(t *testing.T, ctx context.Context) *redis.Client {
 }
 
 // setupRemoteRouter 复用生产 Handler，但不真正启动 HTTP 端口。
-func setupRemoteRouter(t *testing.T, gormRepo *repository.UserRepository, secret string) *gin.Engine {
+func setupRemoteRouter(t *testing.T, userRepo *repository.UserRepository, verificationRepo *repository.EmailVerificationRepository, redisClient *redis.Client, secret string) *gin.Engine {
 	t.Helper()
 
 	gin.SetMode(gin.ReleaseMode)
 
-	authService := authsvc.NewService(gormRepo, token.NewJWTManager(secret, 5*time.Minute, 24*time.Hour), nil)
-	userService := usersvc.NewService(gormRepo)
+	jwtManager := token.NewJWTManager(secret, 5*time.Minute, 24*time.Hour)
+	refreshStore := token.NewRedisRefreshTokenStore(redisClient, "")
+	limiter := ratelimit.NewRedisLimiter(redisClient, "verify_email")
+	authService := authsvc.NewService(userRepo, verificationRepo, jwtManager, refreshStore, nil, nil)
+	userService := usersvc.NewService(userRepo)
 
-	authHandler := handler.NewAuthHandler(authService)
+	authHandler := handler.NewAuthHandler(authService, limiter, 0, 0)
 	userHandler := handler.NewUserHandler(userService)
 	authMW := middleware.NewAuthMiddleware(secret)
 
@@ -167,7 +171,7 @@ func TestRemoteAuthFlow(t *testing.T) {
 	defer cancel()
 
 	// Step 0: 验证远端 Redis 是否可用（基础依赖探活）。
-	_ = connectRedis(t, ctx)
+	redisClient := connectRedis(t, ctx)
 
 	// Step 1: 通过 ENV / Nacos 解析 MySQL 配置，与线上数据库建立连接。
 	cfg := loadRemoteMySQLConfig(t, ctx)
@@ -179,13 +183,14 @@ func TestRemoteAuthFlow(t *testing.T) {
 	t.Cleanup(func() { _ = sqlDB.Close() })
 
 	repo := repository.NewUserRepository(gormDB)
+	verificationRepo := repository.NewEmailVerificationRepository(gormDB)
 
 	secret := os.Getenv("E2E_JWT_SECRET")
 	if secret == "" {
 		secret = fmt.Sprintf("e2e-secret-%d", time.Now().UnixNano())
 	}
 
-	router := setupRemoteRouter(t, repo, secret)
+	router := setupRemoteRouter(t, repo, verificationRepo, redisClient, secret)
 
 	randSuffix := rand.New(rand.NewSource(time.Now().UnixNano())).Int63()
 	email := fmt.Sprintf("e2e+%d@example.com", randSuffix)
@@ -239,8 +244,52 @@ func TestRemoteAuthFlow(t *testing.T) {
 		t.Fatalf("register response missing access token")
 	}
 
-	// Step 3: 使用同一账号登录，确认密码校验与 token 生成正常。
+	// Step 3: 登录应在验证邮箱前被拒绝，随后完成验证再尝试。
 	loginResp := performJSONRequest(t, router, http.MethodPost, "/api/auth/login", map[string]any{
+		"email":    email,
+		"password": password,
+	}, nil)
+
+	if loginResp.Code != http.StatusForbidden {
+		t.Fatalf("expected login forbidden before verification, got %d body=%s", loginResp.Code, loginResp.Body.String())
+	}
+
+	requestResp := performJSONRequest(t, router, http.MethodPost, "/api/auth/request-email-verification", map[string]any{
+		"email": email,
+	}, nil)
+
+	if requestResp.Code != http.StatusOK {
+		t.Fatalf("request verification status = %d, body = %s", requestResp.Code, requestResp.Body.String())
+	}
+
+	var requestBody response.Response
+	if err := json.Unmarshal(requestResp.Body.Bytes(), &requestBody); err != nil {
+		t.Fatalf("decode request verification response: %v", err)
+	}
+
+	if !requestBody.Success {
+		t.Fatalf("request verification failed: %s", requestResp.Body.String())
+	}
+
+	reqData, ok := requestBody.Data.(map[string]any)
+	if !ok {
+		t.Fatalf("request verification data unexpected type: %T", requestBody.Data)
+	}
+
+	tokenVal, _ := reqData["token"].(string)
+	if tokenVal == "" {
+		t.Fatalf("expected token in verification response")
+	}
+
+	verifyResp := performJSONRequest(t, router, http.MethodPost, "/api/auth/verify-email", map[string]any{
+		"token": tokenVal,
+	}, nil)
+
+	if verifyResp.Code != http.StatusNoContent {
+		t.Fatalf("verify email status = %d, body = %s", verifyResp.Code, verifyResp.Body.String())
+	}
+
+	loginResp = performJSONRequest(t, router, http.MethodPost, "/api/auth/login", map[string]any{
 		"email":    email,
 		"password": password,
 	}, nil)

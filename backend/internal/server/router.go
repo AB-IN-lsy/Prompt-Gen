@@ -72,6 +72,8 @@ func NewRouter(opts RouterOptions) *gin.Engine {
 			authGroup.POST("/login", opts.AuthHandler.Login)
 			authGroup.POST("/refresh", opts.AuthHandler.Refresh)
 			authGroup.POST("/logout", opts.AuthHandler.Logout)
+			authGroup.POST("/verify-email/request", opts.AuthHandler.RequestEmailVerification)
+			authGroup.POST("/verify-email/confirm", opts.AuthHandler.VerifyEmail)
 		}
 
 		// /api/users 下的路由需要登录才能访问，所以单独分组，再挂载 JWT 鉴权中间件。

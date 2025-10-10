@@ -9,9 +9,11 @@ package handler
 import (
 	"net/http"
 	"strings"
+	"time"
 
 	response "electron-go-app/backend/internal/infra/common"
 	appLogger "electron-go-app/backend/internal/infra/logger"
+	"electron-go-app/backend/internal/infra/ratelimit"
 	"electron-go-app/backend/internal/service/auth"
 
 	"github.com/gin-gonic/gin"
@@ -20,15 +22,35 @@ import (
 
 // AuthHandler 负责对接 Gin，处理鉴权相关的 HTTP 请求。
 type AuthHandler struct {
-	service *auth.Service
-	logger  *zap.SugaredLogger
+	service             *auth.Service
+	logger              *zap.SugaredLogger
+	verificationLimiter ratelimit.Limiter
+	verificationLimit   int
+	verificationWindow  time.Duration
 }
 
 // NewAuthHandler 构造鉴权 handler，注入业务层服务做实际处理。
-func NewAuthHandler(service *auth.Service) *AuthHandler {
+func NewAuthHandler(service *auth.Service, limiter ratelimit.Limiter, limit int, window time.Duration) *AuthHandler {
 	baseLogger := appLogger.S().With("component", "auth.handler")
-	return &AuthHandler{service: service, logger: baseLogger}
+	if limit <= 0 {
+		limit = defaultVerificationLimit
+	}
+	if window <= 0 {
+		window = defaultVerificationWindow
+	}
+	return &AuthHandler{
+		service:             service,
+		logger:              baseLogger,
+		verificationLimiter: limiter,
+		verificationLimit:   limit,
+		verificationWindow:  window,
+	}
 }
+
+const (
+	defaultVerificationLimit  = 5
+	defaultVerificationWindow = time.Hour
+)
 
 type registerRequest struct {
 	Username    string `json:"username" binding:"required,min=3"`
@@ -46,6 +68,14 @@ type loginRequest struct {
 
 type refreshRequest struct {
 	RefreshToken string `json:"refresh_token" binding:"required"`
+}
+
+type requestVerificationRequest struct {
+	Email string `json:"email" binding:"required,email"`
+}
+
+type verifyEmailRequest struct {
+	Token string `json:"token" binding:"required"`
 }
 
 // Register 处理用户注册的 HTTP 请求，验证参数并调用业务逻辑。
@@ -148,6 +178,10 @@ func (h *AuthHandler) Login(c *gin.Context) {
 			status = http.StatusUnauthorized
 			code = response.ErrUnauthorized
 			log.Warnw("login failed: invalid credential", "email", req.Email)
+		} else if err == auth.ErrEmailNotVerified {
+			status = http.StatusForbidden
+			code = response.ErrEmailNotVerified
+			log.Warnw("login blocked: email not verified", "email", req.Email)
 		} else {
 			log.Errorw("login failed", "error", err, "email", req.Email)
 		}
@@ -254,7 +288,7 @@ func (h *AuthHandler) Captcha(c *gin.Context) {
 	}
 
 	ip := c.ClientIP()
-	id, img, err := h.service.GenerateCaptcha(c.Request.Context(), ip)
+	id, img, remaining, err := h.service.GenerateCaptcha(c.Request.Context(), ip)
 	if err != nil {
 		status := http.StatusInternalServerError
 		code := response.ErrInternal
@@ -263,14 +297,120 @@ func (h *AuthHandler) Captcha(c *gin.Context) {
 			code = response.ErrTooManyRequests
 		}
 		h.scope("captcha").Errorw("generate captcha failed", "error", err, "ip", ip)
-		response.Fail(c, status, code, err.Error(), nil)
+		details := gin.H{}
+		if err == auth.ErrCaptchaRateLimited {
+			details["remaining_attempts"] = 0
+		}
+		response.Fail(c, status, code, err.Error(), details)
 		return
 	}
 
-	response.Success(c, http.StatusOK, gin.H{
+	payload := gin.H{
 		"captcha_id": id,
 		"image":      img,
-	}, nil)
+	}
+	if remaining >= 0 {
+		payload["remaining_attempts"] = remaining
+	}
+
+	response.Success(c, http.StatusOK, payload, nil)
+}
+
+// RequestEmailVerification 重新发送邮箱验证令牌。
+func (h *AuthHandler) RequestEmailVerification(c *gin.Context) {
+	log := h.scope("verify_email_request")
+
+	var req requestVerificationRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		log.Warnw("invalid request body", "error", err)
+		response.Fail(c, http.StatusBadRequest, response.ErrBadRequest, err.Error(), nil)
+		return
+	}
+
+	// remainingAttempts 用于反馈给前端当前窗口内还可以请求多少次验证码。
+	remainingAttempts := -1
+	if h.verificationLimiter != nil {
+		key := "verify:" + strings.ToLower(req.Email)
+		result, err := h.verificationLimiter.Allow(c.Request.Context(), key, h.verificationLimit, h.verificationWindow)
+		if err != nil {
+			log.Errorw("rate limiter failure", "error", err)
+			response.Fail(c, http.StatusInternalServerError, response.ErrInternal, "rate limiter error", nil)
+			return
+		}
+		if !result.Allowed {
+			details := gin.H{}
+			if result.RetryAfter > 0 {
+				details["retry_after_seconds"] = int(result.RetryAfter.Seconds())
+			}
+			details["remaining_attempts"] = 0
+			response.Fail(c, http.StatusTooManyRequests, response.ErrTooManyRequests, "verification requests too frequent", details)
+			return
+		}
+		remainingAttempts = result.Remaining
+	}
+
+	token, err := h.service.RequestEmailVerification(c.Request.Context(), req.Email)
+	if err != nil {
+		switch err {
+		case auth.ErrInvalidLogin:
+			// 避免暴露邮箱存在与否，统一返回成功状态但不附带 token。
+			payload := gin.H{"issued": false}
+			if remainingAttempts >= 0 {
+				payload["remaining_attempts"] = remainingAttempts
+			}
+			response.Success(c, http.StatusOK, payload, nil)
+			return
+		case auth.ErrEmailAlreadyVerified:
+			response.Fail(c, http.StatusConflict, response.ErrEmailAlreadyVerified, err.Error(), nil)
+			return
+		case auth.ErrVerificationNotEnabled:
+			response.Fail(c, http.StatusServiceUnavailable, response.ErrInternal, err.Error(), nil)
+			return
+		default:
+			log.Errorw("request verification failed", "error", err)
+			response.Fail(c, http.StatusInternalServerError, response.ErrInternal, err.Error(), nil)
+			return
+		}
+	}
+
+	payload := gin.H{
+		"issued": true,
+		"token":  token,
+	}
+	if remainingAttempts >= 0 {
+		payload["remaining_attempts"] = remainingAttempts
+	}
+
+	response.Success(c, http.StatusOK, payload, nil)
+}
+
+// VerifyEmail 验证邮箱令牌。
+func (h *AuthHandler) VerifyEmail(c *gin.Context) {
+	log := h.scope("verify_email_confirm")
+
+	var req verifyEmailRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		log.Warnw("invalid request body", "error", err)
+		response.Fail(c, http.StatusBadRequest, response.ErrBadRequest, err.Error(), nil)
+		return
+	}
+
+	if err := h.service.VerifyEmail(c.Request.Context(), req.Token); err != nil {
+		switch err {
+		case auth.ErrVerificationTokenInvalid:
+			response.Fail(c, http.StatusBadRequest, response.ErrVerificationTokenInvalid, err.Error(), nil)
+			return
+		case auth.ErrVerificationNotEnabled:
+			response.Fail(c, http.StatusServiceUnavailable, response.ErrInternal, err.Error(), nil)
+			return
+		default:
+			log.Errorw("verify email failed", "error", err)
+			response.Fail(c, http.StatusInternalServerError, response.ErrInternal, err.Error(), nil)
+			return
+		}
+	}
+
+	response.NoContent(c)
 }
 
 func (h *AuthHandler) ensureLogger() *zap.SugaredLogger {
