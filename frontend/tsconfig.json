@@ -19,6 +19,7 @@
         "isolatedModules": true,
         "jsx": "react-jsx",
         "baseUrl": "./src",
+        "noEmit": true,
         "types": [
             "node",
             "react",
