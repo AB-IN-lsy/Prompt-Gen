@@ -7,7 +7,111 @@
     "myPrompts": "My Prompts",
     "workbench": "Prompt Workbench",
     "settings": "Settings",
-    "help": "Help & Logs"
+    "logs": "Activity Logs",
+    "help": "Help Center"
+  },
+  "helpPage": {
+    "eyebrow": "Help center",
+    "title": "Guides & troubleshooting",
+    "subtitle": "Learn how to configure PromptGen from registration to day-to-day operations.",
+    "sections": {
+      "gettingStarted": {
+        "title": "Quick start",
+        "description": "Spin up your workspace in minutes.",
+        "items": [
+          "Register with captcha protection, then verify your email using the one-time link we send.",
+          "After verification, sign in and the dashboard will greet you with realtime account status.",
+          "Open Settings to upload an avatar, pick your preferred model, and toggle cloud sync."
+        ]
+      },
+      "authentication": {
+        "title": "Authentication flow",
+        "description": "Stay secure while keeping friction low.",
+        "items": [
+          "Login requests surface inline validation and toast feedback for success and errors.",
+          "Email verification panels show remaining resend attempts and rate-limit cooldowns.",
+          "Use the verification callback page if you login from an email link inside Electron."
+        ]
+      },
+      "workbench": {
+        "title": "Prompt workbench",
+        "description": "Craft and iterate on prompts with keyword governance.",
+        "items": [
+          "Fetch AI-assisted keyword suggestions tied to your current topic.",
+          "Separate positive and negative keywords, adjust weights, and auto-save drafts.",
+          "Switch between DeepSeek and Volcano Engine models; the UI gracefully falls back when a model is disabled."
+        ]
+      },
+      "models": {
+        "title": "Model credentials",
+        "description": "Securely manage API keys for DeepSeek and future providers.",
+        "items": [
+          "Store encrypted API keys; AES-256-GCM keeps credentials safe at rest.",
+          "Enable, disable, or delete models and instantly update your preferred default.",
+          "Test connectivity directly from the card and view the last verification time."
+        ]
+      },
+      "troubleshooting": {
+        "title": "Troubleshooting tips",
+        "description": "What to try when something feels off.",
+        "items": [
+          "Captcha failing repeatedly? Refresh the image or reload the page to fetch a new captcha.",
+          "Verification email missing? Wait for the cooldown timer, then resend or check the spam folder.",
+          "Model calls timing out? Confirm the API key status in Settings."
+        ]
+      }
+    },
+    "resources": {
+      "title": "More resources",
+      "description": "Discover community knowledge, source code, and support channels maintained by AB-IN.",
+      "contacts": [
+        { "label": "AB-IN CSDN Blog · ab-in.blog.csdn.net", "href": "https://ab-in.blog.csdn.net/", "type": "external" },
+        { "label": "GitHub · AB-IN/Prompt-Gen", "href": "https://github.com/AB-IN-lsy/Prompt-Gen", "type": "external" },
+        { "label": "Email · ab-in-liusy@outlook.com", "href": "mailto:ab-in-liusy@outlook.com", "type": "email" }
+      ],
+      "cta": "Open CSDN blog",
+      "note": "Powered by AB-IN · ICP License 鲁ICP备2021035431号-1"
+    }
+  },
+  "logsPage": {
+    "eyebrow": "Release notes",
+    "title": "Recent updates",
+    "subtitle": "Track the latest frontend and backend changes powering your workspace.",
+    "entries": [],
+    "admin": {
+      "title": "Manage changelog",
+      "description": "Add or edit release notes directly. Changes are saved immediately.",
+      "locale": "Locale",
+      "publishedAt": "Published date (YYYY-MM-DD)",
+      "badge": "Badge",
+      "titleLabel": "Title",
+      "summary": "Summary",
+      "items": "Highlights (one per line)",
+      "itemsHint": "Example: Added React Query cache for keywords",
+      "create": "Create entry",
+      "update": "Update entry",
+      "reset": "Reset",
+      "cancel": "Cancel editing",
+      "edit": "Edit",
+      "delete": "Delete",
+      "confirmDelete": "Delete this entry?",
+      "itemsRequired": "Please provide at least one highlight.",
+      "successCreate": "Changelog entry created.",
+      "successUpdate": "Changelog entry updated.",
+      "successDelete": "Changelog entry deleted.",
+      "translate": "Auto translate",
+      "translateDescription": "Select target locales and publish translated copies together.",
+      "translateTargets": "Target locales",
+      "translateModelKey": "Translation model key",
+      "translateModelHint": "Uses your model credential identified by this key (e.g. deepseek-chat).",
+      "translateTargetsRequired": "Select at least one target locale.",
+      "translateModelRequired": "Please provide the translation model key.",
+      "localeOption": {
+        "en": "English",
+        "zh-CN": "Simplified Chinese"
+      }
+    },
+    "empty": "No changelog entries yet. Use “Create entry” to publish the first update."
   },
   "appShell": {
     "searchPlaceholder": "Search topics or keywords...",

@@ -40,6 +40,7 @@ require (
 	github.com/volcengine/volc-sdk-golang v1.0.23 // indirect
 	gopkg.in/ini.v1 v1.56.0 // indirect
 	gopkg.in/yaml.v2 v2.2.8 // indirect
+	gorm.io/datatypes v1.1.1 // indirect
 )
 
 require (

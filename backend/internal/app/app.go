@@ -14,6 +14,7 @@ import (
 	"strings"
 
 	"electron-go-app/backend/internal/config"
+	changelog "electron-go-app/backend/internal/domain/changelog"
 	domain "electron-go-app/backend/internal/domain/user"
 	infra "electron-go-app/backend/internal/infra/client"
 	appLogger "electron-go-app/backend/internal/infra/logger"
@@ -63,7 +64,7 @@ func InitResources(ctx context.Context) (*Resources, error) {
 	}
 
 	// 保证核心模型已经同步到数据库，避免后续查询报错。
-	if err := gormDB.AutoMigrate(&domain.User{}, &domain.EmailVerificationToken{}, &domain.UserModelCredential{}); err != nil {
+	if err := gormDB.AutoMigrate(&domain.User{}, &domain.EmailVerificationToken{}, &domain.UserModelCredential{}, &changelog.Entry{}); err != nil {
 		return nil, fmt.Errorf("auto migrate: %w", err)
 	}
 

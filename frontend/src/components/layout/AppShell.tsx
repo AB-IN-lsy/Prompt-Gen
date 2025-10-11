@@ -2,13 +2,22 @@
  * @Author: NEFU AB-IN
  * @Date: 2025-10-09 22:43:45
  * @FilePath: \electron-go-app\frontend\src\components\layout\AppShell.tsx
- * @LastEditTime: 2025-10-09 22:43:50
+ * @LastEditTime: 2025-10-11 23:07:56
  */
 import { NavLink, useNavigate } from "react-router-dom";
 import { ReactNode, useCallback, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { cn } from "../../lib/utils";
-import { Search, Settings, HelpCircle, LayoutDashboard, Sparkles, LogOut, ListChecks } from "lucide-react";
+import {
+    Search,
+    Settings,
+    HelpCircle,
+    LayoutDashboard,
+    Sparkles,
+    LogOut,
+    ListChecks,
+    FileClock
+} from "lucide-react";
 import { Button } from "../ui/button";
 import { useAuth } from "../../hooks/useAuth";
 
@@ -18,6 +27,7 @@ const navItems = [
     { labelKey: "nav.myPrompts", icon: ListChecks, to: "/prompts" },
     { labelKey: "nav.workbench", icon: Sparkles, to: "/prompt-workbench" },
     { labelKey: "nav.settings", icon: Settings, to: "/settings" },
+    { labelKey: "nav.logs", icon: FileClock, to: "/logs" },
     { labelKey: "nav.help", icon: HelpCircle, to: "/help" }
 ];
 
@@ -114,7 +124,24 @@ export function AppShell({ children, rightSlot }: AppShellProps) {
                     </div>
                 </header>
                 {/* 主内容区域，通过 children 注入各业务页面 */}
-                <div className="flex-1 overflow-y-auto bg-[var(--bg)] px-6 py-6 transition-colors">{children}</div>
+                <div className="flex-1 overflow-y-auto bg-[var(--bg)] px-6 py-6 transition-colors">
+                    <div className="flex min-h-full flex-col gap-8">
+                        {children}
+                        <footer className="border-t border-white/60 pt-4 text-xs text-slate-400 transition-colors dark:border-slate-800/70 dark:text-slate-500">
+                            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                                <span>Powered by AB-IN · 鲁ICP备2021035431号-1</span>
+                                <a
+                                    href="https://ab-in.blog.csdn.net/"
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="text-slate-500 underline-offset-4 hover:text-primary hover:underline dark:text-slate-400"
+                                >
+                                    AB-IN CSDN 博客 · ab-in.blog.csdn.net
+                                </a>
+                            </div>
+                        </footer>
+                    </div>
+                </div>
             </main>
         </div>
     );

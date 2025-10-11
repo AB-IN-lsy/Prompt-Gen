@@ -18,6 +18,7 @@ type User struct {
 	Email           string     `gorm:"size:255;uniqueIndex" json:"email"`   // 登录邮箱（唯一）
 	AvatarURL       string     `gorm:"size:512" json:"avatar_url"`          // 用户头像的公开访问地址
 	PasswordHash    string     `gorm:"size:255" json:"-"`                   // Bcrypt 等算法生成的密码哈希
+	IsAdmin         bool       `gorm:"default:false" json:"is_admin"`       // 管理员标记，仅限内部控制面
 	Settings        string     `gorm:"type:text" json:"settings"`           // JSON 字符串，存放偏好设置
 	LastLoginAt     *time.Time `json:"last_login_at"`                       // 上次登录时间，可为空
 	EmailVerifiedAt *time.Time `json:"email_verified_at"`                   // 邮箱通过验证的时间，可为空

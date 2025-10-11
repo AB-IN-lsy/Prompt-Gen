@@ -19,9 +19,11 @@
 - 启动流程拆分为 `internal/app.InitResources`（负责连接/迁移）与 `internal/bootstrap.BuildApplication`（负责装配依赖），提升职责清晰度。
 - 新增 `/api/models` 系列接口，支持模型凭据的创建、查看、更新与删除，API Key 会在入库前加密。
 - 引入 `MODEL_CREDENTIAL_MASTER_KEY` 环境变量，使用 AES-256-GCM 加解密用户提交的模型凭据。
-- 数据库自动迁移包含 `user_model_credentials` 表，服务启动即可创建所需数据结构。
+- 数据库自动迁移包含 `user_model_credentials` 与 `changelog_entries` 表，服务启动即可创建所需数据结构。
 - 模型凭据禁用或删除时，会自动清理用户偏好的 `preferred_model`，避免指向不可用的模型；`PUT /api/users/me` 也会验证偏好模型是否存在并已启用。
 - 新增 `infra/model/deepseek` 模块与 `Service.InvokeDeepSeekChatCompletion`，可使用存量凭据直接向 DeepSeek Chat Completion API 发起调用。
+- 新增 `changelog_entries` 表和 `/api/changelog` 接口，允许管理员在线维护更新日志；普通用户可直接读取最新发布的条目。
+- JWT 访问令牌新增 `is_admin` 字段，后端会在鉴权中间件里解析并注入上下文，前端可据此展示后台管理能力。
 
 ## 环境变量
 
@@ -143,6 +145,44 @@ go run ./backend/cmd/sendmail -to you@example.com -name "测试账号"
 | `POST` | `/api/models` | 新增模型凭据并加密存储 | JSON：`provider`、`label`、`api_key`、`metadata` |
 | `PUT` | `/api/models/:id` | 更新模型凭据（可替换 API Key） | JSON：`label`、`api_key`、`metadata` |
 | `DELETE` | `/api/models/:id` | 删除模型凭据 | 无 |
+| `GET` | `/api/changelog` | 获取更新日志列表 | Query：`locale`（可选，默认 `en`） |
+| `POST` | `/api/changelog` | 新增更新日志（管理员） | JSON：`locale`、`badge`、`title`、`summary`、`items[]`、`published_at` |
+| `PUT` | `/api/changelog/:id` | 编辑指定日志（管理员） | 同 `POST` |
+| `DELETE` | `/api/changelog/:id` | 删除指定日志（管理员） | 无 |
+
+### 更新日志存储与管理
+
+- `changelog_entries` 用于记录前端展示的 Release Notes，关键字段包括 `locale`（语言）、`badge`（标签）、`items`（高亮信息 JSON 数组）、`published_at`（发布日期）。  
+- 接口会根据 `locale` 排序返回最新条目，若指定语言暂未录入数据，会自动回退使用英文内容。  
+- 管理员身份通过用户表中的 `is_admin` 字段判定；JWT 会携带该布尔值，鉴权中间件会将其写入 `Gin Context` 供 Handler 使用。  
+- 创建日志时可传入 `translate_to`（字符串数组）与 `translation_model_key` 字段，后端会调用管理员名下的 DeepSeek 凭据完成自动翻译，并为每个目标语言生成额外的 changelog 记录。  
+- 如需手动初始化数据，可执行以下 SQL 新建表并将目标账号标记为管理员：
+
+```sql
+ALTER TABLE `users`
+  ADD COLUMN `is_admin` TINYINT(1) NOT NULL DEFAULT 0 AFTER `password_hash`;
+
+CREATE TABLE `changelog_entries` (
+  `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `locale` VARCHAR(16) NOT NULL DEFAULT 'en',
+  `badge` VARCHAR(64) NOT NULL,
+  `title` VARCHAR(255) NOT NULL,
+  `summary` TEXT NOT NULL,
+  `items` JSON NOT NULL,
+  `published_at` DATETIME NOT NULL,
+  `author_id` BIGINT UNSIGNED DEFAULT NULL,
+  `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_changelog_locale_date` (`locale`, `published_at`),
+  CONSTRAINT `fk_changelog_author`
+    FOREIGN KEY (`author_id`) REFERENCES `users` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+UPDATE `users` SET `is_admin` = 1 WHERE `email` = 'your-admin@example.com';
+```
+
+> 现阶段仍保留 i18n 中的静态 changelog 文案，用作空库时的兜底展示；待生产环境数据稳定后，可将这些静态条目迁移成初始 SQL 种子，再移除冗余文案。
 
 ### 模型凭据字段说明与 DeepSeek 示例
 

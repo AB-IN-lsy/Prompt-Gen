@@ -13,6 +13,8 @@
 - **模型可用性联动**：Prompt 工作台智能感知模型启用状态，自动回退到可用模型并提示用户，避免引用失效配置。
 - **设置中心**：支持头像上传/移除、用户名/邮箱/偏好模型/云同步开关的编辑，同时保留语言切换与状态持久化；内置主题偏好（亮色/暗色/跟随系统），会监听 `prefers-color-scheme` 自动切换；移除头像后点击保存会立即同步至服务器与本地状态。
 - **应用外壳**：`AppShell` 搭建统一导航、顶部工具栏、账户信息与退出功能，展示后端返回的用户头像并在退出时提示成功。
+- **帮助中心**：新增 `Help` 页面，按模块整理快速上手、认证、工作台、模型凭据和排障建议，并集成 CSDN / GitHub / 邮箱等外部资源链接。
+- **更新日志**：`Logs` 页面优先从 `/api/changelog` 读取最新动态，支持管理员在界面内创建、编辑、删除记录；普通用户则以卡片列表查看发布内容。
 
 ## 快速开始
 
@@ -90,7 +92,9 @@ frontend/
    │  ├─ Login.tsx                 # 登录表单，内置行内校验与 Toast 成功/失败提示
    │  ├─ Register.tsx              # 注册表单，内置验证码刷新、自动重试与行内校验提示
    │  ├─ PromptWorkbench.tsx       # 提示词工作台，整合关键词管理与草稿编辑
-   │  └─ Settings.tsx              # 设置页，当前主要用于语言切换
+   │  ├─ Settings.tsx              # 设置页，管理账户资料、模型偏好与主题
+   │  ├─ Help.tsx                  # 帮助中心，汇总使用指南与支持渠道
+   │  └─ Logs.tsx                  # 更新日志，展示并（管理员）维护 changelog
    ├─ hooks/
    │  ├─ useAppSettings.ts         # 管理语言等全局设置的 Zustand Store
    │  ├─ useAuth.ts                # 认证状态 Store，负责初始化、登录、登出
@@ -114,6 +118,15 @@ frontend/
 - **界面布局**：`components/layout/AppShell.tsx` 定义全局导航壳，所有页面走 `App.tsx` 进入；页面内 UI 统一复用 `components/ui/` 中的基础控件。
 - **认证流程**：`hooks/useAuth.ts` 负责在启动时校验 token、刷新用户资料、执行登出；`Login.tsx`/`Register.tsx` 通过 `useAuth.authenticate` 串联登录/注册后的资料拉取；`App.tsx` 根据登录态切换路由。
 - **国际化**：`i18n/index.ts` 初始化翻译实例并读取 `locales/` 下的文案；`Settings.tsx` 通过 store 调用 `setLanguage` 完成切换与持久化。
+
+## 更新日志编辑（管理员专属）
+
+- `Logs.tsx` 首次渲染时会调用 `GET /api/changelog?locale=<当前语言>`，并使用 React Query 缓存 5 分钟；若接口暂未返回数据，则使用 i18n 中的静态条目兜底。
+- 当登录用户的 `profile.user.is_admin` 为 `true` 时，会展示一个可编辑的表单，可创建或更新 changelog；操作成功后自动刷新列表。删除操作会二次确认并调用 `DELETE /api/changelog/:id`。
+- 表单支持在「亮点」文本域中逐行输入内容，保存前会自动拆分为字符串数组，再提交给后端。
+- 若需要快速体验后台管理，可在数据库中将目标用户的 `is_admin` 字段置为 `1`，刷新登录态后即可看到管理面板。
+- 勾选“自动翻译”可在提交时让后端调用 DeepSeek（或其他你配置的模型）生成目标语言版本；需在表单中提供 `translation_model_key`，并确保账号已配置对应模型凭据。
+- 后续若你将原有 i18n 文案迁移至数据库，记得清理 `logsPage.entries` 的静态内容以避免重复。
 
 ## 身份认证与路由
 

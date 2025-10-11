@@ -7,7 +7,111 @@
     "myPrompts": "我的 Prompt",
     "workbench": "Prompt 工作台",
     "settings": "设置",
-    "help": "帮助与日志"
+    "logs": "更新日志",
+    "help": "帮助中心"
+  },
+  "helpPage": {
+    "eyebrow": "帮助中心",
+    "title": "使用指南与排障",
+    "subtitle": "从注册到日常协作，快速掌握 PromptGen。",
+    "sections": {
+      "gettingStarted": {
+        "title": "快速开始",
+        "description": "几分钟内搭建好工作台。",
+        "items": [
+          "注册时填写图形验证码，完成邮箱验证后即可激活账号。",
+          "邮箱验证完成后登录，仪表盘会展示实时账户状态。",
+          "进入设置上传头像、选择偏好模型并开启或关闭云同步。"
+        ]
+      },
+      "authentication": {
+        "title": "身份认证流程",
+        "description": "安全与易用兼顾。",
+        "items": [
+          "登录表单提供行内校验与 Toast 提示，成功或失败都会即时反馈。",
+          "邮箱验证面板实时展示剩余重发次数与限流倒计时。",
+          "在 Electron 中点击邮件链接时，可通过验证回调页一键完成登录。"
+        ]
+      },
+      "workbench": {
+        "title": "Prompt 工作台",
+        "description": "用关键词治理高效迭代 Prompt。",
+        "items": [
+          "按当前主题获取 AI 推荐关键词，并可随时重新生成。",
+          "分离正向与负向关键词，调整权重并自动保存草稿。",
+          "在 DeepSeek 与 火山引擎模型之间切换，若模型被禁用会自动回退并提示。"
+        ]
+      },
+      "models": {
+        "title": "模型凭据",
+        "description": "安全管理 DeepSeek 等提供方的 API Key。",
+        "items": [
+          "凭据使用 AES-256-GCM 加密静态存储，保障敏感信息安全。",
+          "支持启用、禁用或删除模型，并即时更新偏好模型。",
+          "可在卡片上直接测试连通性，并查看最近一次验证时间。"
+        ]
+      },
+      "troubleshooting": {
+        "title": "排障小贴士",
+        "description": "遇到问题时可先检查这些步骤。",
+        "items": [
+          "验证码多次失败？刷新图片或刷新页面重新获取新的验证码。",
+          "没有收到验证邮件？等待冷却结束后重发，并检查垃圾箱。",
+          "模型调用超时？在设置页确认 API Key 状态。"
+        ]
+      }
+    },
+    "resources": {
+      "title": "更多资源",
+      "description": "探索由 AB-IN 维护的资料、源码与支持渠道。",
+      "contacts": [
+        { "label": "AB-IN CSDN 博客 · ab-in.blog.csdn.net", "href": "https://ab-in.blog.csdn.net/", "type": "external" },
+        { "label": "GitHub · AB-IN/Prompt-Gen", "href": "https://github.com/AB-IN-lsy/Prompt-Gen", "type": "external" },
+        { "label": "邮箱 · ab-in-liusy@outlook.com", "href": "mailto:ab-in-liusy@outlook.com", "type": "email" }
+      ],
+      "cta": "访问 CSDN 博客",
+      "note": "Powered by AB-IN · 鲁ICP备2021035431号-1"
+    }
+  },
+  "logsPage": {
+    "eyebrow": "版本更新",
+    "title": "最新动态",
+    "subtitle": "了解前后端的最新能力与修复。",
+    "entries": [],
+    "admin": {
+      "title": "管理更新日志",
+      "description": "直接在应用内维护 Release Notes，提交后立即生效。",
+      "locale": "语言",
+      "publishedAt": "发布日期（YYYY-MM-DD）",
+      "badge": "标签",
+      "titleLabel": "标题",
+      "summary": "摘要说明",
+      "items": "亮点（每行一条）",
+      "itemsHint": "示例：关键词建议接入 React Query 缓存",
+      "create": "新增日志",
+      "update": "更新日志",
+      "reset": "清空表单",
+      "cancel": "取消编辑",
+      "edit": "编辑",
+      "delete": "删除",
+      "confirmDelete": "确认删除该日志吗？",
+      "itemsRequired": "请至少填写一条亮点。",
+      "successCreate": "日志已创建。",
+      "successUpdate": "日志已更新。",
+      "successDelete": "日志已删除。",
+      "translate": "自动翻译",
+      "translateDescription": "选择目标语言，保存时自动生成翻译版本并一同发布。",
+      "translateTargets": "目标语言",
+      "translateModelKey": "翻译使用的模型 key",
+      "translateModelHint": "会使用你在模型凭据中配置的对应 key（例如 deepseek-chat）。",
+      "translateTargetsRequired": "请至少勾选一个目标语言。",
+      "translateModelRequired": "请填写模型 key 用于翻译。",
+      "localeOption": {
+        "en": "English",
+        "zh-CN": "简体中文"
+      }
+    },
+    "empty": "还没有任何更新日志，点击“新增日志”即可发布第一条。"
   },
   "appShell": {
     "searchPlaceholder": "搜索主题或关键词...",

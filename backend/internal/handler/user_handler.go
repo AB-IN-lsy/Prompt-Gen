@@ -255,3 +255,14 @@ func extractUserID(c *gin.Context) (uint, bool) {
 		return 0, false
 	}
 }
+
+func isAdmin(c *gin.Context) bool {
+	val, ok := c.Get("isAdmin")
+	if !ok {
+		return false
+	}
+	if b, ok := val.(bool); ok {
+		return b
+	}
+	return false
+}

@@ -25,6 +25,7 @@ import (
 	"electron-go-app/backend/internal/repository"
 	"electron-go-app/backend/internal/server"
 	authsvc "electron-go-app/backend/internal/service/auth"
+	changelogsrv "electron-go-app/backend/internal/service/changelog"
 	modelsvc "electron-go-app/backend/internal/service/model"
 	usersvc "electron-go-app/backend/internal/service/user"
 
@@ -43,6 +44,7 @@ type Application struct {
 	AuthSvc   *authsvc.Service
 	UserSvc   *usersvc.Service
 	ModelSvc  *modelsvc.Service
+	Changelog *changelogsrv.Service
 	Router    http.Handler
 }
 
@@ -54,6 +56,7 @@ func BuildApplication(ctx context.Context, logger *zap.SugaredLogger, resources 
 	verificationRepo := repository.NewEmailVerificationRepository(resources.DBConn())
 	tokens := token.NewJWTManager(cfg.JWTSecret, cfg.AccessTTL, cfg.RefreshTTL)
 	modelRepo := repository.NewModelCredentialRepository(resources.DBConn())
+	changelogRepo := repository.NewChangelogRepository(resources.DBConn())
 
 	// 刷新令牌优先落在 Redis，便于服务重启后继续验证。
 	var refreshStore authsvc.RefreshTokenStore
@@ -96,6 +99,8 @@ func BuildApplication(ctx context.Context, logger *zap.SugaredLogger, resources 
 
 	modelService := modelsvc.NewService(modelRepo, userRepo)
 	modelHandler := handler.NewModelHandler(modelService)
+	changelogService := changelogsrv.NewService(changelogRepo)
+	changelogHandler := handler.NewChangelogHandler(changelogService, modelService)
 
 	uploadStorage := filepath.Join("public", "avatars")
 	uploadHandler := handler.NewUploadHandler(uploadStorage)
@@ -103,11 +108,12 @@ func BuildApplication(ctx context.Context, logger *zap.SugaredLogger, resources 
 	authMiddleware := middleware.NewAuthMiddleware(cfg.JWTSecret)
 
 	router := server.NewRouter(server.RouterOptions{
-		AuthHandler:   authHandler,
-		UserHandler:   userHandler,
-		UploadHandler: uploadHandler,
-		ModelHandler:  modelHandler,
-		AuthMW:        authMiddleware,
+		AuthHandler:      authHandler,
+		UserHandler:      userHandler,
+		UploadHandler:    uploadHandler,
+		ModelHandler:     modelHandler,
+		ChangelogHandler: changelogHandler,
+		AuthMW:           authMiddleware,
 	})
 
 	return &Application{
@@ -115,6 +121,7 @@ func BuildApplication(ctx context.Context, logger *zap.SugaredLogger, resources 
 		AuthSvc:   authService,
 		UserSvc:   userService,
 		ModelSvc:  modelService,
+		Changelog: changelogService,
 		Router:    router,
 	}, nil
 }

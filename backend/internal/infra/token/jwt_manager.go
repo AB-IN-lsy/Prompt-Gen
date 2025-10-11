@@ -76,6 +76,7 @@ func (m *JWTManager) buildToken(user *domain.User, ttl time.Duration, tokenType 
 		"sub":          fmt.Sprintf("%d", user.ID),
 		"username":     user.Username,
 		"exp":          expiresAt.Unix(),
+		"is_admin":     user.IsAdmin,
 		claimTokenType: tokenType,
 	}
 

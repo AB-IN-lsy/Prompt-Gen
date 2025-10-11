@@ -13,11 +13,12 @@ import (
 )
 
 type RouterOptions struct {
-	AuthHandler   *handler.AuthHandler
-	UserHandler   *handler.UserHandler
-	UploadHandler *handler.UploadHandler
-	ModelHandler  *handler.ModelHandler
-	AuthMW        *middleware.AuthMiddleware
+	AuthHandler      *handler.AuthHandler
+	UserHandler      *handler.UserHandler
+	UploadHandler    *handler.UploadHandler
+	ModelHandler     *handler.ModelHandler
+	ChangelogHandler *handler.ChangelogHandler
+	AuthMW           *middleware.AuthMiddleware
 }
 
 func NewRouter(opts RouterOptions) *gin.Engine {
@@ -106,6 +107,19 @@ func NewRouter(opts RouterOptions) *gin.Engine {
 				uploads.Use(opts.AuthMW.Handle())
 			}
 			uploads.POST("/avatar", opts.UploadHandler.UploadAvatar)
+		}
+
+		if opts.ChangelogHandler != nil {
+			logs := api.Group("/changelog")
+			logs.GET("", opts.ChangelogHandler.List)
+
+			if opts.AuthMW != nil {
+				adminLogs := api.Group("/changelog")
+				adminLogs.Use(opts.AuthMW.Handle())
+				adminLogs.POST("", opts.ChangelogHandler.Create)
+				adminLogs.PUT("/:id", opts.ChangelogHandler.Update)
+				adminLogs.DELETE("/:id", opts.ChangelogHandler.Delete)
+			}
 		}
 	}
 

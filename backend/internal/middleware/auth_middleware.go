@@ -86,6 +86,21 @@ func (m *AuthMiddleware) Handle() gin.HandlerFunc {
 
 		c.Set("claims", claims)
 
+		if raw, ok := claims["is_admin"]; ok {
+			switch v := raw.(type) {
+			case bool:
+				c.Set("isAdmin", v)
+			case string:
+				c.Set("isAdmin", strings.EqualFold(v, "true") || v == "1")
+			case float64:
+				c.Set("isAdmin", v != 0)
+			default:
+				c.Set("isAdmin", false)
+			}
+		} else {
+			c.Set("isAdmin", false)
+		}
+
 		if sub, ok := claims["sub"]; ok {
 			switch v := sub.(type) {
 			case string:

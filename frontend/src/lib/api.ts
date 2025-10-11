@@ -107,6 +107,7 @@ export interface AuthUser {
   username: string;
   email: string;
   avatar_url?: string | null;
+  is_admin: boolean;
   email_verified_at?: string | null;
   last_login_at?: string | null;
   created_at?: string;
@@ -227,6 +228,30 @@ export interface EmailVerificationRequestResult {
 export interface CaptchaResponse {
   captcha_id: string;
   image: string;
+}
+
+export interface ChangelogEntry {
+  id: number;
+  locale: string;
+  badge: string;
+  title: string;
+  summary: string;
+  items: string[];
+  published_at: string;
+  author_id?: number | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ChangelogPayload {
+  locale: string;
+  badge: string;
+  title: string;
+  summary: string;
+  items: string[];
+  published_at: string;
+  translate_to?: string[];
+  translation_model_key?: string;
 }
 
 /**
@@ -608,6 +633,53 @@ export async function fetchCaptcha(): Promise<CaptchaResponse> {
     const response: AxiosResponse<CaptchaResponse> =
       await http.get("/auth/captcha");
     return response.data;
+  } catch (error) {
+    throw normaliseError(error);
+  }
+}
+
+export async function fetchChangelogEntries(
+  locale?: string,
+): Promise<ChangelogEntry[]> {
+  try {
+    const response: AxiosResponse<{ items: ChangelogEntry[] }> =
+      await http.get("/changelog", {
+        params: locale ? { locale } : undefined,
+      });
+    return response.data.items ?? [];
+  } catch (error) {
+    throw normaliseError(error);
+  }
+}
+
+export async function createChangelogEntry(
+  payload: ChangelogPayload,
+): Promise<ChangelogEntry> {
+  try {
+    const response: AxiosResponse<{ entry: ChangelogEntry }> =
+      await http.post("/changelog", payload);
+    return response.data.entry;
+  } catch (error) {
+    throw normaliseError(error);
+  }
+}
+
+export async function updateChangelogEntry(
+  id: number,
+  payload: ChangelogPayload,
+): Promise<ChangelogEntry> {
+  try {
+    const response: AxiosResponse<{ entry: ChangelogEntry }> =
+      await http.put(`/changelog/${id}`, payload);
+    return response.data.entry;
+  } catch (error) {
+    throw normaliseError(error);
+  }
+}
+
+export async function deleteChangelogEntry(id: number): Promise<void> {
+  try {
+    await http.delete(`/changelog/${id}`);
   } catch (error) {
     throw normaliseError(error);
   }

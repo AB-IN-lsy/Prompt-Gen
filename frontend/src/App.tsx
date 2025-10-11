@@ -16,6 +16,8 @@ import LoginPage from "./pages/Login";
 import RegisterPage from "./pages/Register";
 import VerifyEmailPage from "./pages/VerifyEmail";
 import EmailVerificationCallbackPage from "./pages/EmailVerificationCallback";
+import HelpPage from "./pages/Help";
+import LogsPage from "./pages/Logs";
 import { useAuth, useIsAuthenticated } from "./hooks/useAuth";
 
 // 占位页面组件：在对应功能尚未实现时保持路由完整。
@@ -77,7 +79,8 @@ export default function App() {
                 <Route path="/prompts" element={<Placeholder titleKey="nav.myPrompts" />} />
                 <Route path="/prompt-workbench" element={<PromptWorkbenchPage />} />
                 <Route path="/settings" element={<SettingsPage />} />
-                <Route path="/help" element={<Placeholder titleKey="nav.help" />} />
+                <Route path="/logs" element={<LogsPage />} />
+                <Route path="/help" element={<HelpPage />} />
                 <Route path="*" element={<Navigate to="/prompt-workbench" replace />} />
             </Routes>
         </AppShell>
