@@ -226,6 +226,16 @@ func TestModelServiceCreateValidation(t *testing.T) {
 	}
 
 	if _, err := svc.Create(ctx, userID, modelsvc.CreateInput{
+		Provider:    "volcengine",
+		ModelKey:    "doubao-entry",
+		DisplayName: "Doubao",
+		BaseURL:     "https://ark.cn-beijing.volces.com/api/v3",
+		APIKey:      "sk-ark",
+	}); err != nil {
+		t.Fatalf("expected volcengine provider to succeed: %v", err)
+	}
+
+	if _, err := svc.Create(ctx, userID, modelsvc.CreateInput{
 		Provider:    "unknown",
 		ModelKey:    "secondary",
 		DisplayName: "Unknown",

@@ -565,10 +565,41 @@ export default function SettingsPage() {
         HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement
       >,
     ) => {
-      const value = event.target.value;
+      const rawValue = event.target.value;
+      const value = field === "provider" ? rawValue.toLowerCase() : rawValue;
       setModelFormError(null);
       setModelForm((prev) => ({ ...prev, [field]: value }));
     };
+
+  // 根据当前 provider 预设常见默认值，减少手动填写成本。
+  const providerPreset = useMemo(() => {
+    const normalized = (modelForm.provider || "deepseek").toLowerCase();
+    if (normalized === "volcengine") {
+      return {
+        modelKey: "doubao-1-5-thinking-pro-250415",
+        displayName: "Doubao",
+        baseUrl: "https://ark.cn-beijing.volces.com/api/v3",
+        extraConfig: '{"max_tokens":4096,"temperature":1}',
+      };
+    }
+    return {
+      modelKey: "deepseek-chat",
+      displayName: "DeepSeek Chat",
+      baseUrl: "https://api.deepseek.com/v1",
+      extraConfig: '{"max_tokens":4096,"temperature":1}',
+    };
+  }, [modelForm.provider]);
+
+  // 火山引擎默认要求特定 Base URL，自动补齐以避免请求失败。
+  useEffect(() => {
+    const normalized = (modelForm.provider || "deepseek").toLowerCase();
+    if (normalized === "volcengine" && modelForm.base_url.trim() === "") {
+      setModelForm((prev) => ({
+        ...prev,
+        base_url: providerPreset.baseUrl,
+      }));
+    }
+  }, [modelForm.provider, modelForm.base_url, providerPreset.baseUrl]);
 
   // 表单校验 + 调用创建接口
   const handleCreateModelSubmit = (event: FormEvent<HTMLFormElement>) => {
@@ -663,7 +694,8 @@ export default function SettingsPage() {
   };
 
   const handleTestModel = (credential: UserModelCredential) => {
-    if ((credential.provider ?? "").toLowerCase() !== "deepseek") {
+    const provider = (credential.provider ?? "").toLowerCase();
+    if (provider !== "deepseek" && provider !== "volcengine") {
       return;
     }
     if (
@@ -978,7 +1010,9 @@ export default function SettingsPage() {
               const editDisabled = isEditing || updateInFlight;
               const providerNormalized =
                 credential.provider?.toLowerCase() ?? "";
-              const isTestable = providerNormalized === "deepseek";
+              const isTestable =
+                providerNormalized === "deepseek" ||
+                providerNormalized === "volcengine";
               const testingDisabled =
                 !isTestable ||
                 (testModelMutation.isPending &&
@@ -1037,12 +1071,10 @@ export default function SettingsPage() {
                         disabled={testingDisabled}
                         onClick={() => handleTestModel(credential)}
                       >
-                        {isTestable
-                          ? testModelMutation.isPending &&
-                            testModelMutation.variables?.id === credential.id
-                            ? t("settings.modelCard.testing")
-                            : t("settings.modelCard.test")
-                          : t("settings.modelCard.testUnavailable")}
+                        {testModelMutation.isPending &&
+                        testModelMutation.variables?.id === credential.id
+                          ? t("settings.modelCard.testing")
+                          : t("settings.modelCard.test")}
                       </Button>
                       <Button
                         type="button"
@@ -1218,7 +1250,7 @@ export default function SettingsPage() {
               <Input
                 value={modelForm.model_key}
                 onChange={handleModelInputChange("model_key")}
-                placeholder="deepseek-chat"
+                placeholder={providerPreset.modelKey}
               />
               <span className="text-xs text-slate-400 dark:text-slate-500">
                 {t("settings.modelCard.modelKeyHint")}
@@ -1231,7 +1263,7 @@ export default function SettingsPage() {
               <Input
                 value={modelForm.display_name}
                 onChange={handleModelInputChange("display_name")}
-                placeholder="DeepSeek Chat"
+                placeholder={providerPreset.displayName}
               />
               <span className="text-xs text-slate-400 dark:text-slate-500">
                 {t("settings.modelCard.displayNameHint")}
@@ -1244,7 +1276,7 @@ export default function SettingsPage() {
               <Input
                 value={modelForm.base_url}
                 onChange={handleModelInputChange("base_url")}
-                placeholder="https://api.deepseek.com/v1"
+                placeholder={providerPreset.baseUrl}
               />
               <span className="text-xs text-slate-400 dark:text-slate-500">
                 {t("settings.modelCard.baseUrlHint")}
@@ -1271,7 +1303,7 @@ export default function SettingsPage() {
               <Textarea
                 value={modelForm.extra_config}
                 onChange={handleModelInputChange("extra_config")}
-                placeholder='{"max_tokens":4096,"temperature":1}'
+                placeholder={providerPreset.extraConfig}
                 rows={3}
               />
               <span className="text-xs text-slate-400 dark:text-slate-500">

@@ -5,11 +5,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
 	domain "electron-go-app/backend/internal/domain/user"
 	"electron-go-app/backend/internal/infra/model/deepseek"
+	volc "electron-go-app/backend/internal/infra/model/volcengine"
 	"electron-go-app/backend/internal/infra/security"
 
 	"gorm.io/gorm"
@@ -17,7 +19,8 @@ import (
 
 const (
 	// defaultDeepSeekModel 当用户未填写具体模型时的默认型号。
-	defaultDeepSeekModel = "deepseek-chat"
+	defaultDeepSeekModel   = "deepseek-chat"
+	defaultVolcengineModel = "doubao-1-5-thinking-pro-250415"
 )
 
 // InvokeDeepSeekChatCompletion 读取用户凭据并调用 DeepSeek 的 Chat Completion 接口。
@@ -30,11 +33,12 @@ func (s *Service) InvokeDeepSeekChatCompletion(ctx context.Context, userID uint,
 		}
 		return deepseek.ChatCompletionResponse{}, fmt.Errorf("find credential: %w", err)
 	}
-	return s.invokeDeepSeek(ctx, credential, req)
+	return s.invokeProvider(ctx, credential, req)
 }
 
-// TestDeepSeekConnection 尝试使用指定凭据发起一次调用，并记录最新验证时间。
-func (s *Service) TestDeepSeekConnection(ctx context.Context, userID, id uint, req deepseek.ChatCompletionRequest) (deepseek.ChatCompletionResponse, error) {
+// TestConnection 尝试使用指定凭据发起一次调用，并记录最新验证时间。
+// 统一入口便于在此处完成多家模型的联调与状态更新。
+func (s *Service) TestConnection(ctx context.Context, userID, id uint, req deepseek.ChatCompletionRequest) (deepseek.ChatCompletionResponse, error) {
 	credential, err := s.repo.FindByID(ctx, userID, id)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -44,7 +48,7 @@ func (s *Service) TestDeepSeekConnection(ctx context.Context, userID, id uint, r
 	}
 
 	// 与在线调用共享调用链，确保所有校验逻辑一致。
-	resp, err := s.invokeDeepSeek(ctx, credential, req)
+	resp, err := s.invokeProvider(ctx, credential, req)
 	if err != nil {
 		return deepseek.ChatCompletionResponse{}, err
 	}
@@ -58,15 +62,16 @@ func (s *Service) TestDeepSeekConnection(ctx context.Context, userID, id uint, r
 	return resp, nil
 }
 
-// prepareDeepSeekRequest 会根据用户请求与持久化配置补齐模型参数，确保模型字段永远有值。
-func prepareDeepSeekRequest(req deepseek.ChatCompletionRequest, credential *domain.UserModelCredential) (deepseek.ChatCompletionRequest, error) {
+// prepareModelRequest 会根据用户请求与持久化配置补齐模型参数，确保模型字段永远有值。
+// fallbackModel 用于不同 provider 的默认模型兜底，兼容未显式填写的情况。
+func prepareModelRequest(req deepseek.ChatCompletionRequest, credential *domain.UserModelCredential, fallbackModel string) (deepseek.ChatCompletionRequest, error) {
 	request := req
 	request.Model = strings.TrimSpace(request.Model)
 	if request.Model == "" {
 		request.Model = strings.TrimSpace(credential.ModelKey)
 	}
 	if request.Model == "" {
-		request.Model = defaultDeepSeekModel
+		request.Model = fallbackModel
 	}
 	// 深拷贝 ExtraFields，避免直接修改调用方提供的映射。
 	request.ExtraFields = cloneMap(req.ExtraFields)
@@ -75,6 +80,14 @@ func prepareDeepSeekRequest(req deepseek.ChatCompletionRequest, credential *doma
 		return deepseek.ChatCompletionRequest{}, err
 	}
 	return request, nil
+}
+
+func prepareDeepSeekRequest(req deepseek.ChatCompletionRequest, credential *domain.UserModelCredential) (deepseek.ChatCompletionRequest, error) {
+	return prepareModelRequest(req, credential, defaultDeepSeekModel)
+}
+
+func prepareVolcengineRequest(req deepseek.ChatCompletionRequest, credential *domain.UserModelCredential) (deepseek.ChatCompletionRequest, error) {
+	return prepareModelRequest(req, credential, defaultVolcengineModel)
 }
 
 // mergeExtraConfig 将数据库中的 extra_config 映射到请求体，只有调用方未显式设置的字段才会被填充。
@@ -255,9 +268,6 @@ func (s *Service) invokeDeepSeek(ctx context.Context, credential *domain.UserMod
 	if credential == nil {
 		return deepseek.ChatCompletionResponse{}, ErrCredentialNotFound
 	}
-	if !strings.EqualFold(strings.TrimSpace(credential.Provider), "deepseek") {
-		return deepseek.ChatCompletionResponse{}, ErrUnsupportedProvider
-	}
 	if strings.EqualFold(credential.Status, "disabled") {
 		return deepseek.ChatCompletionResponse{}, ErrCredentialDisabled
 	}
@@ -276,4 +286,153 @@ func (s *Service) invokeDeepSeek(ctx context.Context, credential *domain.UserMod
 	client := deepseek.NewClient(string(apiKeyPlain), deepseek.WithBaseURL(baseURL))
 
 	return client.ChatCompletion(ctx, prepared)
+}
+
+// invokeVolcengine 将请求映射到方舟 SDK，再把返回值折叠为统一结构，前端无需区分具体厂商。
+func (s *Service) invokeVolcengine(ctx context.Context, credential *domain.UserModelCredential, req deepseek.ChatCompletionRequest) (deepseek.ChatCompletionResponse, error) {
+	if credential == nil {
+		return deepseek.ChatCompletionResponse{}, ErrCredentialNotFound
+	}
+	if strings.EqualFold(credential.Status, "disabled") {
+		return deepseek.ChatCompletionResponse{}, ErrCredentialDisabled
+	}
+
+	apiKeyPlain, err := security.Decrypt(credential.APIKeyCipher)
+	if err != nil {
+		return deepseek.ChatCompletionResponse{}, fmt.Errorf("decrypt api key: %w", err)
+	}
+
+	prepared, err := prepareVolcengineRequest(req, credential)
+	if err != nil {
+		return deepseek.ChatCompletionResponse{}, err
+	}
+
+	volcReq := volc.ChatCompletionRequest{
+		Model:            prepared.Model,
+		Messages:         make([]volc.ChatMessage, 0, len(prepared.Messages)),
+		MaxTokens:        prepared.MaxTokens,
+		Temperature:      prepared.Temperature,
+		TopP:             prepared.TopP,
+		PresencePenalty:  prepared.PresencePenalty,
+		FrequencyPenalty: prepared.FrequencyPenalty,
+		Stop:             extractStopList(prepared.Stop),
+		ResponseFormat:   prepared.ResponseFormat,
+		ExtraFields:      cloneMap(prepared.ExtraFields),
+	}
+	for _, msg := range prepared.Messages {
+		volcReq.Messages = append(volcReq.Messages, volc.ChatMessage{
+			Role:    msg.Role,
+			Content: msg.Content,
+		})
+	}
+
+	client := volc.NewClient(string(apiKeyPlain), volc.WithBaseURL(strings.TrimSpace(credential.BaseURL)))
+	resp, err := client.ChatCompletion(ctx, volcReq)
+	if err != nil {
+		return deepseek.ChatCompletionResponse{}, err
+	}
+
+	return convertVolcengineResponse(resp), nil
+}
+
+func (s *Service) invokeProvider(ctx context.Context, credential *domain.UserModelCredential, req deepseek.ChatCompletionRequest) (deepseek.ChatCompletionResponse, error) {
+	switch normalizeProvider(credential.Provider) {
+	case "deepseek":
+		return s.invokeDeepSeek(ctx, credential, req)
+	case "volcengine":
+		return s.invokeVolcengine(ctx, credential, req)
+	default:
+		return deepseek.ChatCompletionResponse{}, ErrUnsupportedProvider
+	}
+}
+
+// convertVolcengineResponse 负责把方舟的响应字段转换为 DeepSeek 兼容的结构。
+func convertVolcengineResponse(resp volc.ChatCompletionResponse) deepseek.ChatCompletionResponse {
+	converted := deepseek.ChatCompletionResponse{
+		ID:      resp.ID,
+		Object:  resp.Object,
+		Created: resp.Created,
+		Model:   resp.Model,
+		Raw:     resp.Raw,
+	}
+	if resp.ServiceTier != "" {
+		converted.SystemFingerprint = resp.ServiceTier // 复用现有字段透出服务等级
+	}
+
+	if len(resp.Choices) > 0 {
+		converted.Choices = make([]deepseek.ChatCompletionChoice, 0, len(resp.Choices))
+		for _, choice := range resp.Choices {
+			reasoningContent := strings.TrimSpace(choice.Message.ReasoningContent)
+			convertedChoice := deepseek.ChatCompletionChoice{
+				Index: choice.Index,
+				Message: deepseek.ChatMessage{
+					Role:    choice.Message.Role,
+					Content: choice.Message.Content,
+				},
+				FinishReason: choice.FinishReason,
+			}
+			if reasoningContent != "" {
+				// reasoning_content 为火山扩展字段，借用 Logprobs 透传给上层。
+				convertedChoice.Logprobs = map[string]any{
+					"reasoning_content": reasoningContent,
+				}
+			}
+			converted.Choices = append(converted.Choices, convertedChoice)
+		}
+	}
+
+	if resp.Usage != nil {
+		usage := &deepseek.ChatCompletionUsage{
+			PromptTokens:     int64(resp.Usage.PromptTokens),
+			CompletionTokens: int64(resp.Usage.CompletionTokens),
+			TotalTokens:      int64(resp.Usage.TotalTokens),
+			PromptTokensDetails: map[string]any{
+				"cached_tokens": resp.Usage.CachedTokens,
+			},
+		}
+		if resp.Usage.ProvisionedPromptTokens != nil {
+			usage.PromptTokensDetails["provisioned_tokens"] = *resp.Usage.ProvisionedPromptTokens
+		}
+		if resp.Usage.ReasoningTokens > 0 {
+			usage.CompletionTokensByType = map[string]json.Number{
+				"reasoning_tokens": json.Number(strconv.FormatInt(int64(resp.Usage.ReasoningTokens), 10)),
+			}
+		}
+		if resp.Usage.ProvisionedCompTokens != nil {
+			if usage.CompletionTokensByType == nil {
+				usage.CompletionTokensByType = map[string]json.Number{}
+			}
+			usage.CompletionTokensByType["provisioned_tokens"] = json.Number(strconv.FormatInt(int64(*resp.Usage.ProvisionedCompTokens), 10))
+		}
+		converted.Usage = usage
+	}
+
+	return converted
+}
+
+// extractStopList 将 ExtraConfig/请求体中多样化的 stop 写法转换成字符串切片。
+func extractStopList(stop any) []string {
+	if stop == nil {
+		return nil
+	}
+	switch v := stop.(type) {
+	case []string:
+		return v
+	case []any:
+		result := make([]string, 0, len(v))
+		for _, item := range v {
+			if s, ok := item.(string); ok {
+				result = append(result, s)
+			}
+		}
+		return result
+	case string:
+		trimmed := strings.TrimSpace(v)
+		if trimmed == "" {
+			return nil
+		}
+		return []string{trimmed}
+	default:
+		return nil
+	}
 }

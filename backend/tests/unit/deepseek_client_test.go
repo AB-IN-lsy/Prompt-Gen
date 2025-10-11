@@ -209,7 +209,7 @@ func TestInvokeDeepSeekChatCompletion(t *testing.T) {
 	}
 }
 
-func TestTestDeepSeekConnection(t *testing.T) {
+func TestServiceTestConnection(t *testing.T) {
 	key := make([]byte, 32)
 	for i := range key {
 		key[i] = byte(i + 2)
@@ -259,7 +259,7 @@ func TestTestDeepSeekConnection(t *testing.T) {
 		t.Fatalf("create credential: %v", err)
 	}
 
-	resp, err := svc.TestDeepSeekConnection(context.Background(), userID, credential.ID, deepseek.ChatCompletionRequest{
+	resp, err := svc.TestConnection(context.Background(), userID, credential.ID, deepseek.ChatCompletionRequest{
 		Messages: []deepseek.ChatMessage{{Role: "user", Content: "ping"}},
 	})
 	if err != nil {
@@ -287,7 +287,7 @@ func TestTestDeepSeekConnection(t *testing.T) {
 	}
 }
 
-func TestTestDeepSeekConnectionDisabled(t *testing.T) {
+func TestServiceTestConnectionDisabled(t *testing.T) {
 	key := make([]byte, 32)
 	for i := range key {
 		key[i] = byte(i + 3)
@@ -312,7 +312,7 @@ func TestTestDeepSeekConnectionDisabled(t *testing.T) {
 		t.Fatalf("disable credential: %v", err)
 	}
 
-	_, err = svc.TestDeepSeekConnection(context.Background(), userID, credential.ID, deepseek.ChatCompletionRequest{
+	_, err = svc.TestConnection(context.Background(), userID, credential.ID, deepseek.ChatCompletionRequest{
 		Messages: []deepseek.ChatMessage{{Role: "user", Content: "ping"}},
 	})
 	if !errors.Is(err, modelsvc.ErrCredentialDisabled) {
@@ -320,19 +320,58 @@ func TestTestDeepSeekConnectionDisabled(t *testing.T) {
 	}
 }
 
-func TestInvokeDeepSeekUnsupportedProvider(t *testing.T) {
+func TestInvokeVolcengineChatCompletion(t *testing.T) {
 	key := make([]byte, 32)
 	for i := range key {
 		key[i] = byte(i + 4)
 	}
 	os.Setenv("MODEL_CREDENTIAL_MASTER_KEY", base64.StdEncoding.EncodeToString(key))
 
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/chat/completions" {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+		var payload map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+			t.Fatalf("decode request payload: %v", err)
+		}
+		if payload["model"] != "doubao-1-5-thinking-pro-250415" {
+			t.Fatalf("unexpected model: %v", payload["model"])
+		}
+		response := map[string]any{
+			"id":      "volc-test",
+			"object":  "chat.completion",
+			"created": 1234,
+			"model":   "doubao-1-5-thinking-pro-250415",
+			"choices": []any{
+				map[string]any{
+					"index": 0,
+					"message": map[string]any{
+						"role":    "assistant",
+						"content": "pong",
+					},
+					"finish_reason": "stop",
+				},
+			},
+			"usage": map[string]any{
+				"prompt_tokens":             20,
+				"completion_tokens":         10,
+				"total_tokens":              30,
+				"prompt_tokens_details":     map[string]any{"cached_tokens": 0},
+				"completion_tokens_details": map[string]any{"reasoning_tokens": 0},
+			},
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(response)
+	}))
+	defer server.Close()
+
 	svc, _, _, userID := newTestModelService(t)
 	cred, err := svc.Create(context.Background(), userID, modelsvc.CreateInput{
 		Provider:    "volcengine",
-		ModelKey:    "volcengine-chat",
-		DisplayName: "Volcengine",
-		BaseURL:     "https://api.volcengine.example.com",
+		ModelKey:    "doubao-1-5-thinking-pro-250415",
+		DisplayName: "Volcengine Doubao",
+		BaseURL:     server.URL,
 		APIKey:      "sk-volcano",
 		ExtraConfig: map[string]any{},
 	})
@@ -340,18 +379,41 @@ func TestInvokeDeepSeekUnsupportedProvider(t *testing.T) {
 		t.Fatalf("create volcengine credential: %v", err)
 	}
 
-	_, err = svc.InvokeDeepSeekChatCompletion(context.Background(), userID, cred.ModelKey, deepseek.ChatCompletionRequest{
-		Messages: []deepseek.ChatMessage{{Role: "user", Content: "ping"}},
+	resp, err := svc.InvokeDeepSeekChatCompletion(context.Background(), userID, cred.ModelKey, deepseek.ChatCompletionRequest{
+		Messages: []deepseek.ChatMessage{{Role: "user", Content: "你好"}},
 	})
-	if !errors.Is(err, modelsvc.ErrUnsupportedProvider) {
-		t.Fatalf("expected ErrUnsupportedProvider, got %v", err)
+	if err != nil {
+		t.Fatalf("invoke volcengine: %v", err)
+	}
+	if len(resp.Choices) == 0 || resp.Choices[0].Message.Content != "pong" {
+		t.Fatalf("unexpected volcengine response: %+v", resp.Choices)
 	}
 
-	_, err = svc.TestDeepSeekConnection(context.Background(), userID, cred.ID, deepseek.ChatCompletionRequest{
-		Messages: []deepseek.ChatMessage{{Role: "user", Content: "ping"}},
+	resp2, err := svc.TestConnection(context.Background(), userID, cred.ID, deepseek.ChatCompletionRequest{
+		Messages: []deepseek.ChatMessage{{Role: "user", Content: "test"}},
 	})
-	if !errors.Is(err, modelsvc.ErrUnsupportedProvider) {
-		t.Fatalf("expected ErrUnsupportedProvider on test connection, got %v", err)
+	if err != nil {
+		t.Fatalf("test connection for volcengine: %v", err)
+	}
+	if resp2.ID == "" {
+		t.Fatalf("expected response id set for volcengine test")
+	}
+
+	list, err := svc.List(context.Background(), userID)
+	if err != nil {
+		t.Fatalf("list credentials: %v", err)
+	}
+	found := false
+	for _, item := range list {
+		if item.ID == cred.ID {
+			found = true
+			if item.LastVerifiedAt == nil {
+				t.Fatalf("expected volcengine credential last_verified_at set")
+			}
+		}
+	}
+	if !found {
+		t.Fatalf("volcengine credential not found in list")
 	}
 }
 

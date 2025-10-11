@@ -153,12 +153,12 @@ go run ./backend/cmd/sendmail -to you@example.com -name "测试账号"
 - **api_key**：实际的访问密钥，后端入库前会用 `MODEL_CREDENTIAL_MASTER_KEY` 加密。  
 - **extra_config**：可选 JSON，对应 DeepSeek `chat/completions` 的可选参数（如 `max_tokens`、`temperature`、`response_format` 等），未在请求体里显式提供时会自动回填。
 
-> 当前后端仅支持 DeepSeek；火山引擎模型适配正在规划中，后续会更新。
+> 当前后端已支持 DeepSeek 与火山引擎（Volcengine）；其余提供方将在后续迭代中逐步接入。
 
 例如将 DeepSeek 官方 Demo 注册进系统，可在“新增模型”表单输入：
 
 ```json
-{
+ {
   "provider": "deepseek",
   "model_key": "deepseek-chat",
   "display_name": "DeepSeek Chat（主力）",
@@ -170,6 +170,22 @@ go run ./backend/cmd/sendmail -to you@example.com -name "测试账号"
     "response_format": {
       "type": "text"
     }
+  }
+}
+```
+
+如果需要接入火山引擎（方舟 Doubao），可以参考以下示例：
+
+```json
+{
+  "provider": "volcengine",
+  "model_key": "doubao-1-5-thinking-pro-250415",
+  "display_name": "Volcengine Doubao",
+  "base_url": "https://ark.cn-beijing.volces.com/api/v3",
+  "api_key": "<替换为你的方舟 API Key>",
+  "extra_config": {
+    "max_tokens": 4096,
+    "temperature": 1
   }
 }
 ```
@@ -208,6 +224,13 @@ go run ./backend/cmd/sendmail -to you@example.com -name "测试账号"
   }
 }
 ```
+
+### 火山引擎（Volcengine）适配说明
+
+- **双向兼容**：模型管理的新增 / 更新 / 连通性测试接口同时支持 `deepseek` 与 `volcengine`，`POST /api/models/:id/test` 会自动根据 provider 调用对应客户端。
+- **默认配置兜底**：未显式填写 `model` 时会使用凭据里的 `model_key`，DeepSeek 默认 `deepseek-chat`，火山引擎默认 `doubao-1-5-thinking-pro-250415`；Base URL 不填写则分别落到 `https://api.deepseek.com/v1` 与 `https://ark.cn-beijing.volces.com/api/v3`。
+- **响应字段映射**：方舟返回的 `service_tier` 会映射到 `system_fingerprint`，`reasoning_content` 以 `choices[*].logprobs.reasoning_content` 形式透出，其余 token 统计、原始 JSON 全量保存在 `usage` 与 `raw` 中，前端可统一渲染。
+- **示例**：新增火山引擎模型时可参考上文 JSON 示例，将 `provider` 改为 `volcengine`、`api_key` 替换为实际凭据即可。
 
 ### 静态资源与上传目录
 

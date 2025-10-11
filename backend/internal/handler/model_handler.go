@@ -147,6 +147,8 @@ func (h *ModelHandler) Update(c *gin.Context) {
 			return
 		case modelsvc.ErrInvalidStatus:
 			response.Fail(c, http.StatusBadRequest, response.ErrBadRequest, err.Error(), gin.H{"field": "status"})
+		case modelsvc.ErrUnsupportedProvider:
+			response.Fail(c, http.StatusBadRequest, response.ErrBadRequest, err.Error(), gin.H{"field": "provider"})
 			return
 		default:
 			log.Errorw("update credential failed", "error", err, "user_id", userID, "credential_id", id)
@@ -196,7 +198,7 @@ func (h *ModelHandler) TestConnection(c *gin.Context) {
 		}
 	}
 
-	resp, err := h.service.TestDeepSeekConnection(c.Request.Context(), userID, id, chatReq)
+	resp, err := h.service.TestConnection(c.Request.Context(), userID, id, chatReq)
 	if err != nil {
 		switch {
 		case errors.Is(err, modelsvc.ErrCredentialNotFound):
