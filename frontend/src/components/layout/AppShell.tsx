@@ -2,7 +2,7 @@
  * @Author: NEFU AB-IN
  * @Date: 2025-10-09 22:43:45
  * @FilePath: \electron-go-app\frontend\src\components\layout\AppShell.tsx
- * @LastEditTime: 2025-10-11 23:07:56
+ * @LastEditTime: 2025-10-12 02:29:45
  */
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import { ReactNode, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
@@ -27,9 +27,9 @@ const navItems = [
     { labelKey: "nav.dashboard", icon: LayoutDashboard, to: "/" },
     { labelKey: "nav.myPrompts", icon: ListChecks, to: "/prompts" },
     { labelKey: "nav.workbench", icon: Sparkles, to: "/prompt-workbench" },
-    { labelKey: "nav.settings", icon: Settings, to: "/settings" },
     { labelKey: "nav.logs", icon: FileClock, to: "/logs" },
-    { labelKey: "nav.help", icon: HelpCircle, to: "/help" }
+    { labelKey: "nav.help", icon: HelpCircle, to: "/help" },
+    { labelKey: "nav.settings", icon: Settings, to: "/settings" }
 ];
 
 interface AppShellProps {

@@ -173,7 +173,8 @@
       "cta": "Sign in",
       "switch": "Don't have an account?",
       "switchCta": "Create one",
-      "success": "Signed in successfully"
+      "success": "Signed in successfully",
+      "remember": "Remember this account"
     },
     "register": {
       "title": "Create your PromptGen account",

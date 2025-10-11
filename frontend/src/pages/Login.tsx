@@ -25,6 +25,8 @@ import { useAuth } from "../hooks/useAuth";
 import { useVerificationToken } from "../hooks/useVerificationToken";
 import { EMAIL_VERIFIED_EVENT_KEY } from "../lib/verification";
 
+const IDENTIFIER_STORAGE_KEY = "promptgen:last-identifier";
+
 type VerificationFeedback = {
     tone: "info" | "success" | "error";
     message: string;
@@ -43,6 +45,7 @@ export default function LoginPage() {
     const [verificationFeedback, setVerificationFeedback] = useState<VerificationFeedback | null>(null);
     const authenticate = useAuth((state) => state.authenticate);
     const verificationToken = useVerificationToken();
+    const [rememberIdentifier, setRememberIdentifier] = useState(false);
 
     // 单字段校验逻辑：在输入过程与提交前复用，确保提示一致。
     const validateField = (field: keyof LoginRequest, value: string): string | undefined => {
@@ -89,6 +92,14 @@ export default function LoginPage() {
             setNeedsVerification(false);
             setShouldRetryLogin(false);
             setVerificationFeedback(null);
+            if (typeof window !== "undefined") {
+                const trimmed = credentials.identifier.trim();
+                if (rememberIdentifier && trimmed) {
+                    window.localStorage.setItem(IDENTIFIER_STORAGE_KEY, trimmed);
+                } else {
+                    window.localStorage.removeItem(IDENTIFIER_STORAGE_KEY);
+                }
+            }
             navigate("/prompt-workbench", { replace: true });
         },
         onError: (error: unknown) => {
@@ -333,6 +344,17 @@ export default function LoginPage() {
                         }}
                     />
                     {fieldErrors.password ? <p className="text-xs text-red-500">{fieldErrors.password}</p> : null}
+                </div>
+                <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
+                    <label className="flex items-center gap-2">
+                        <input
+                            type="checkbox"
+                            className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
+                            checked={rememberIdentifier}
+                            onChange={(event) => setRememberIdentifier(event.target.checked)}
+                        />
+                        <span>{t("auth.login.remember")}</span>
+                    </label>
                 </div>
                 {backendError ? <p className="text-sm text-red-500">{backendError}</p> : null}
                 {needsVerification ? (

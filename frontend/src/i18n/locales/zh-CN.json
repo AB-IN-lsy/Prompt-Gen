@@ -173,7 +173,8 @@
       "cta": "登录",
       "switch": "还没有账号？",
       "switchCta": "立即注册",
-      "success": "登录成功"
+      "success": "登录成功",
+      "remember": "记住此账号"
     },
     "register": {
       "title": "注册 PromptGen 账号",
