@@ -1024,7 +1024,7 @@ export default function SettingsPage() {
                   className="rounded-xl border border-white/60 bg-white/70 px-4 py-3 shadow-sm transition-colors dark:border-slate-800 dark:bg-slate-900/70"
                 >
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                    <div className="space-y-1">
+                    <div className="space-y-1 sm:flex-1 sm:min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
                         <span className="text-sm font-medium text-slate-800 dark:text-slate-100">
                           {credential.display_name || credential.model_key}
@@ -1047,14 +1047,14 @@ export default function SettingsPage() {
                             : t("settings.modelCard.statusEnabled")}
                         </Badge>
                       </div>
-                      <p className="text-xs text-slate-500 dark:text-slate-400">
+                      <p className="text-xs text-slate-500 dark:text-slate-400 break-words">
                         {t("settings.modelCard.meta", {
                           provider: credential.provider,
                           model: credential.model_key,
                         })}
                       </p>
                       {credential.base_url ? (
-                        <p className="text-xs text-slate-400 dark:text-slate-500">
+                        <p className="text-xs text-slate-400 dark:text-slate-500 break-words">
                           {t("settings.modelCard.baseUrl", {
                             url: credential.base_url,
                           })}
@@ -1064,7 +1064,7 @@ export default function SettingsPage() {
                         {formatVerifiedAt(credential.last_verified_at)}
                       </p>
                     </div>
-                    <div className="flex flex-wrap gap-2 sm:items-center">
+                    <div className="flex flex-wrap gap-2 sm:flex-none sm:items-center sm:justify-end">
                       <Button
                         type="button"
                         variant="outline"

@@ -231,6 +231,7 @@ go run ./backend/cmd/sendmail -to you@example.com -name "测试账号"
 - **默认配置兜底**：未显式填写 `model` 时会使用凭据里的 `model_key`，DeepSeek 默认 `deepseek-chat`，火山引擎默认 `doubao-1-5-thinking-pro-250415`；Base URL 不填写则分别落到 `https://api.deepseek.com/v1` 与 `https://ark.cn-beijing.volces.com/api/v3`。
 - **响应字段映射**：方舟返回的 `service_tier` 会映射到 `system_fingerprint`，`reasoning_content` 以 `choices[*].logprobs.reasoning_content` 形式透出，其余 token 统计、原始 JSON 全量保存在 `usage` 与 `raw` 中，前端可统一渲染。
 - **示例**：新增火山引擎模型时可参考上文 JSON 示例，将 `provider` 改为 `volcengine`、`api_key` 替换为实际凭据即可。
+- **前端联动**：设置页模型卡片会根据 provider 自动填充常用默认值，并支持 DeepSeek/Volcengine 的“测试连通性”按钮，方便在界面上直接验证凭据是否可用。
 
 ### 静态资源与上传目录
 
