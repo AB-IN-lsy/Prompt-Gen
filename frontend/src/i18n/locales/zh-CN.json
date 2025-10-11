@@ -186,6 +186,7 @@
     "form": {
       "username": "用户名",
       "email": "邮箱",
+      "identifier": "邮箱或用户名",
       "password": "密码",
       "captcha": "验证码"
     },
@@ -194,6 +195,8 @@
       "usernameTooShort": "用户名至少需要 2 个字符",
       "usernameTaken": "该用户名已被使用",
       "emailInvalid": "请填写合法的邮箱地址",
+      "identifierRequired": "请填写邮箱或用户名。",
+      "identifierInvalid": "请输入合法的邮箱地址或用户名。",
       "emailTaken": "该邮箱已被注册",
       "passwordRequired": "请填写密码",
       "passwordTooShort": "密码至少需要 8 个字符",
@@ -232,6 +235,7 @@
       "backToLogin": "返回登录",
       "goToPage": "打开邮箱验证页面",
       "emailReminder": "若未收到邮件，请检查垃圾箱或稍后再次发送。",
+      "emailOnly": "重新发送验证邮件时需要填写邮箱地址。",
       "pageIntro": "请输入注册时使用的邮箱，我们会立即发送新的验证链接。",
       "pageSteps": "完成邮件中的验证后，可返回此页或直接登录继续使用。"
     }

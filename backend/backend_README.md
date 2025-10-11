@@ -133,7 +133,7 @@ go run ./backend/cmd/sendmail -to you@example.com -name "测试账号"
 | --- | --- | --- | --- |
 | `GET` | `/api/auth/captcha` | 获取图形验证码 | 无；按客户端 IP 控制限流 |
 | `POST` | `/api/auth/register` | 用户注册 | JSON：`username`、`email`、`password`、`avatar_url`、`captcha_id`、`captcha_code`（验证码开启时必填） |
-| `POST` | `/api/auth/login` | 用户登录 | JSON：`email`、`password` |
+| `POST` | `/api/auth/login` | 用户登录 | JSON：`identifier`（邮箱或用户名）、`password` |
 | `POST` | `/api/auth/verify-email/request` | 重新发送邮箱验证令牌 | JSON：`email` |
 | `POST` | `/api/auth/verify-email/confirm` | 使用 token 完成邮箱验证 | JSON：`token` |
 | `POST` | `/api/auth/refresh` | 刷新访问令牌 | JSON：`refresh_token` |

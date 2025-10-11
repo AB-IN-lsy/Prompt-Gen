@@ -35,9 +35,9 @@ type VerificationFeedback = {
 export default function LoginPage() {
     const { t } = useTranslation();
     const navigate = useNavigate();
-    const [credentials, setCredentials] = useState<LoginRequest>({ email: "", password: "" });
+    const [credentials, setCredentials] = useState<LoginRequest>({ identifier: "", password: "" });
     // 行内校验的错误信息容器，按字段分别存储提示文案。
-    const [fieldErrors, setFieldErrors] = useState<{ email?: string; password?: string }>({});
+    const [fieldErrors, setFieldErrors] = useState<{ identifier?: string; password?: string }>({});
     const [needsVerification, setNeedsVerification] = useState(false);
     const [shouldRetryLogin, setShouldRetryLogin] = useState(false);
     const [verificationFeedback, setVerificationFeedback] = useState<VerificationFeedback | null>(null);
@@ -46,13 +46,17 @@ export default function LoginPage() {
 
     // 单字段校验逻辑：在输入过程与提交前复用，确保提示一致。
     const validateField = (field: keyof LoginRequest, value: string): string | undefined => {
-        if (field === "email") {
-            if (!value.trim()) {
-                return t("auth.validation.emailInvalid");
+        if (field === "identifier") {
+            const trimmed = value.trim();
+            if (!trimmed) {
+                return t("auth.validation.identifierRequired");
             }
             const emailPattern = /^[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}$/;
-            if (!emailPattern.test(value)) {
-                return t("auth.validation.emailInvalid");
+            if (trimmed.includes("@") && !emailPattern.test(trimmed)) {
+                return t("auth.validation.identifierInvalid");
+            }
+            if (!trimmed.includes("@") && trimmed.length < 2) {
+                return t("auth.validation.identifierInvalid");
             }
         }
         if (field === "password") {
@@ -67,9 +71,9 @@ export default function LoginPage() {
     };
 
     // 提交前的整体校验，汇总所有字段错误。
-    const validateAll = (): { email?: string; password?: string } => {
+    const validateAll = (): { identifier?: string; password?: string } => {
         return {
-            email: validateField("email", credentials.email),
+            identifier: validateField("identifier", credentials.identifier),
             password: validateField("password", credentials.password),
         };
     };
@@ -114,10 +118,14 @@ export default function LoginPage() {
 
     const resendMutation = useMutation({
         mutationFn: async (): Promise<EmailVerificationRequestResult> => {
-            if (!credentials.email.trim()) {
-                throw new ApiError({ message: t("auth.validation.emailInvalid") ?? "" });
+            const trimmed = credentials.identifier.trim();
+            if (!trimmed) {
+                throw new ApiError({ message: t("auth.validation.identifierRequired") ?? "" });
             }
-            return requestEmailVerification(credentials.email.trim());
+            if (!trimmed.includes("@")) {
+                throw new ApiError({ message: t("auth.verification.emailOnly") ?? "" });
+            }
+            return requestEmailVerification(trimmed);
         },
         onSuccess: (result) => {
             const remaining = typeof result.remainingAttempts === "number" ? result.remainingAttempts : undefined;
@@ -284,29 +292,29 @@ export default function LoginPage() {
     const isSubmitDisabled =
         mutation.isPending ||
         Object.values(fieldErrors).some(Boolean) ||
-        !credentials.email.trim() ||
+        !credentials.identifier.trim() ||
         !credentials.password.trim();
 
     return (
         <AuthLayout title={t("auth.login.title") ?? ""} subtitle={t("auth.login.subtitle") ?? undefined}>
             <form className="space-y-5" onSubmit={handleSubmit}>
                 <div className="space-y-2">
-                    <label className="text-sm font-medium text-slate-700 dark:text-slate-200" htmlFor="email">
-                        {t("auth.form.email")}
+                    <label className="text-sm font-medium text-slate-700 dark:text-slate-200" htmlFor="identifier">
+                        {t("auth.form.identifier")}
                     </label>
                     <Input
-                        id="email"
-                        type="email"
-                        autoComplete="email"
+                        id="identifier"
+                        type="text"
+                        autoComplete="username"
                         required
-                        value={credentials.email}
+                        value={credentials.identifier}
                         onChange={(event) => {
                             const value = event.target.value;
-                            setCredentials((prev) => ({ ...prev, email: value }));
-                            setFieldErrors((prev) => ({ ...prev, email: validateField("email", value) }));
+                            setCredentials((prev) => ({ ...prev, identifier: value }));
+                            setFieldErrors((prev) => ({ ...prev, identifier: validateField("identifier", value) }));
                         }}
                     />
-                    {fieldErrors.email ? <p className="text-xs text-red-500">{fieldErrors.email}</p> : null}
+                    {fieldErrors.identifier ? <p className="text-xs text-red-500">{fieldErrors.identifier}</p> : null}
                 </div>
                 <div className="space-y-2">
                     <label className="text-sm font-medium text-slate-700 dark:text-slate-200" htmlFor="password">
@@ -377,8 +385,9 @@ export default function LoginPage() {
                             className="w-full justify-start px-0 text-primary underline-offset-4 hover:underline"
                             onClick={() => {
                                 const searchParams = new URLSearchParams();
-                                if (credentials.email.trim()) {
-                                    searchParams.set("email", credentials.email.trim());
+                                const trimmed = credentials.identifier.trim();
+                                if (trimmed && trimmed.includes("@")) {
+                                    searchParams.set("email", trimmed);
                                 }
                                 navigate(`/verify-email${searchParams.toString() ? `?${searchParams.toString()}` : ""}`);
                             }}

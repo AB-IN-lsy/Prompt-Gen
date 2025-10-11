@@ -62,8 +62,8 @@ type registerRequest struct {
 }
 
 type loginRequest struct {
-	Email    string `json:"email" binding:"required,email"`
-	Password string `json:"password" binding:"required"`
+	Identifier string `json:"identifier" binding:"required"`
+	Password   string `json:"password" binding:"required"`
 }
 
 type refreshRequest struct {
@@ -165,11 +165,11 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		return
 	}
 
-	log.Infow("login request", "email", req.Email)
+	log.Infow("login request", "identifier", req.Identifier)
 
 	user, tokens, err := h.service.Login(c.Request.Context(), auth.LoginParams{
-		Email:    req.Email,
-		Password: req.Password,
+		Identifier: req.Identifier,
+		Password:   req.Password,
 	})
 	if err != nil {
 		status := http.StatusInternalServerError
@@ -177,13 +177,13 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		if err == auth.ErrInvalidLogin {
 			status = http.StatusUnauthorized
 			code = response.ErrUnauthorized
-			log.Warnw("login failed: invalid credential", "email", req.Email)
+			log.Warnw("login failed: invalid credential", "identifier", req.Identifier)
 		} else if err == auth.ErrEmailNotVerified {
 			status = http.StatusForbidden
 			code = response.ErrEmailNotVerified
-			log.Warnw("login blocked: email not verified", "email", req.Email)
+			log.Warnw("login blocked: email not verified", "identifier", req.Identifier)
 		} else {
-			log.Errorw("login failed", "error", err, "email", req.Email)
+			log.Errorw("login failed", "error", err, "identifier", req.Identifier)
 		}
 		response.Fail(c, status, code, err.Error(), nil)
 		return

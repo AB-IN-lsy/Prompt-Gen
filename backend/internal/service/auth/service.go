@@ -146,8 +146,8 @@ type RegisterParams struct {
 
 // LoginParams 封装登录接口所需的输入参数。
 type LoginParams struct {
-	Email    string
-	Password string
+	Identifier string
+	Password   string
 }
 
 // Register 完成注册流程：校验唯一性、校验验证码（若启用）、加密密码、持久化用户并签发 TokenPair。
@@ -256,16 +256,38 @@ func (s *Service) Register(ctx context.Context, params RegisterParams) (*domain.
 	return user, tokens, nil
 }
 
-// Login 校验用户凭证，更新登录时间，并重新签发新的 TokenPair。
+// Login 校验用户凭证（支持邮箱或用户名），更新登录时间，并重新签发新的 TokenPair。
 // 当用户在多端登录时，最新的 refresh token 会覆盖旧的记录，使得每次登录都能获得“最新的一对令牌”。
 func (s *Service) Login(ctx context.Context, params LoginParams) (*domain.User, TokenPair, error) {
-	log := s.scope("login").With("email", params.Email)
+	identifier := strings.TrimSpace(params.Identifier)
+	log := s.scope("login").With("identifier", identifier)
 
 	log.Infow("login attempt")
 
-	user, err := s.users.FindByEmail(ctx, params.Email)
+	var (
+		user *domain.User
+		err  error
+	)
+
+	if strings.Contains(identifier, "@") {
+		user, err = s.users.FindByEmail(ctx, identifier)
+	} else {
+		user, err = s.users.FindByUsername(ctx, identifier)
+	}
+
 	if err != nil {
-		log.Warnw("login email not found or repo error", "error", err)
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			// 尝试另一种方式查找：先按 email，失败再按用户名（或反之）。
+			if strings.Contains(identifier, "@") {
+				user, err = s.users.FindByUsername(ctx, identifier)
+			} else {
+				user, err = s.users.FindByEmail(ctx, identifier)
+			}
+		}
+	}
+
+	if err != nil {
+		log.Warnw("login identifier not found or repo error", "error", err)
 		return nil, TokenPair{}, ErrInvalidLogin
 	}
 

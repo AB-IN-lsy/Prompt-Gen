@@ -200,12 +200,14 @@ export interface AuthResponse {
 }
 
 export interface LoginRequest {
-  email: string;
+  identifier: string;
   password: string;
 }
 
-export interface RegisterRequest extends LoginRequest {
+export interface RegisterRequest {
   username: string;
+  email: string;
+  password: string;
   captcha_id?: string;
   captcha_code?: string;
   avatar_url?: string;

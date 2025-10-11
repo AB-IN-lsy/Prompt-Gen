@@ -5,7 +5,7 @@
  * @LastEditTime: 2025-10-11 23:07:56
  */
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
-import { ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ReactNode, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { cn } from "../../lib/utils";
 import {
@@ -74,16 +74,21 @@ export function AppShell({ children, rightSlot }: AppShellProps) {
         };
     }, []);
 
-    useEffect(() => {
+    useLayoutEffect(() => {
         const node = scrollContainerRef.current;
         if (!node) {
             return;
         }
         node.scrollTo({ top: 0, behavior: "auto" });
         setFading(true);
-        const id = window.setTimeout(() => setFading(false), 120);
+        let frame = 0;
+        let frame2 = 0;
+        frame = window.requestAnimationFrame(() => {
+            frame2 = window.requestAnimationFrame(() => setFading(false));
+        });
         return () => {
-            window.clearTimeout(id);
+            window.cancelAnimationFrame(frame);
+            window.cancelAnimationFrame(frame2);
         };
     }, [location.pathname]);
 

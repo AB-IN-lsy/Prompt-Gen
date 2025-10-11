@@ -125,8 +125,8 @@ func TestAuthServiceRegisterAndLogin(t *testing.T) {
 	}
 
 	loginUser, loginTokens, err := svc.Login(ctx, auth.LoginParams{
-		Email:    "alice@example.com",
-		Password: "password123",
+		Identifier: "alice@example.com",
+		Password:   "password123",
 	})
 	if err != nil {
 		t.Fatalf("login: %v", err)
@@ -259,19 +259,48 @@ func TestAuthServiceLoginInvalidCredentials(t *testing.T) {
 	}
 
 	_, _, err = svc.Login(ctx, auth.LoginParams{
-		Email:    "alice@example.com",
-		Password: "wrong-password",
+		Identifier: "alice@example.com",
+		Password:   "wrong-password",
 	})
 	if !errors.Is(err, auth.ErrInvalidLogin) {
 		t.Fatalf("expected invalid login error, got %v", err)
 	}
 
 	_, _, err = svc.Login(ctx, auth.LoginParams{
-		Email:    "unknown@example.com",
-		Password: "password123",
+		Identifier: "unknown@example.com",
+		Password:   "password123",
 	})
 	if !errors.Is(err, auth.ErrInvalidLogin) {
 		t.Fatalf("expected invalid login for unknown user, got %v", err)
+	}
+}
+
+func TestAuthServiceLoginWithUsername(t *testing.T) {
+	svc, repo, _, _ := newTestAuthService(t)
+	ctx := context.Background()
+
+	user, _, err := svc.Register(ctx, auth.RegisterParams{
+		Username: "alice",
+		Email:    "alice@example.com",
+		Password: "password123",
+	})
+	if err != nil {
+		t.Fatalf("register: %v", err)
+	}
+
+	if err := repo.MarkEmailVerified(ctx, user.ID, time.Now()); err != nil {
+		t.Fatalf("mark email verified: %v", err)
+	}
+
+	loginUser, _, err := svc.Login(ctx, auth.LoginParams{
+		Identifier: "alice",
+		Password:   "password123",
+	})
+	if err != nil {
+		t.Fatalf("login with username: %v", err)
+	}
+	if loginUser.ID != user.ID {
+		t.Fatalf("expected login to return same user id")
 	}
 }
 

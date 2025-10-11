@@ -186,6 +186,7 @@
     "form": {
       "username": "Username",
       "email": "Email",
+      "identifier": "Email or username",
       "password": "Password",
       "captcha": "Captcha"
     },
@@ -194,6 +195,8 @@
       "usernameTooShort": "Username should be at least 2 characters.",
       "usernameTaken": "This username is already in use.",
       "emailInvalid": "Please enter a valid email address.",
+      "identifierRequired": "Please enter your email or username.",
+      "identifierInvalid": "Please enter a valid email address or username.",
       "emailTaken": "This email address has already been registered.",
       "passwordRequired": "Please enter a password.",
       "passwordTooShort": "Password should contain at least 8 characters.",
@@ -232,6 +235,7 @@
       "backToLogin": "Back to sign in",
       "goToPage": "Open email verification page",
       "emailReminder": "If nothing arrives within a minute, check the spam folder or try again.",
+      "emailOnly": "Please enter an email address to resend the verification message.",
       "pageIntro": "Enter the email you registered with and we’ll send a fresh verification link.",
       "pageSteps": "After verifying via the email link, return here or sign in to continue."
     }
