@@ -113,13 +113,7 @@ func (h *ChangelogHandler) Create(c *gin.Context) {
 
 	var translatedEntries []changelogsvc.Entry
 	if len(translateTargets) > 0 {
-		results, translateErr := h.translateAndCreate(c.Request.Context(), userID, params, translateTargets, strings.TrimSpace(req.ModelKey))
-		if translateErr != nil {
-			h.logger.Errorw("translate changelog failed", "error", translateErr, "locale", req.Locale, "targets", translateTargets)
-			response.Fail(c, http.StatusBadRequest, response.ErrBadRequest, translateErr.Error(), nil)
-			return
-		}
-		translatedEntries = results
+		translatedEntries = h.translateAndCreate(c.Request.Context(), userID, params, translateTargets, strings.TrimSpace(req.ModelKey))
 	}
 
 	response.Created(c, gin.H{"entry": entry, "translations": translatedEntries}, nil)
@@ -194,24 +188,34 @@ func (h *ChangelogHandler) Delete(c *gin.Context) {
 }
 
 // translateAndCreate 会针对每个目标语言调用 LLM 获取翻译，并把结果保存为新的 changelog 记录。
-func (h *ChangelogHandler) translateAndCreate(ctx context.Context, userID uint, base changelogsvc.CreateEntryParams, targets []string, modelKey string) ([]changelogsvc.Entry, error) {
+// 若某个目标语言翻译失败，会记录 warning 并继续处理后续目标，避免影响主记录的创建。
+func (h *ChangelogHandler) translateAndCreate(ctx context.Context, userID uint, base changelogsvc.CreateEntryParams, targets []string, modelKey string) []changelogsvc.Entry {
 	results := make([]changelogsvc.Entry, 0, len(targets))
 	for _, target := range targets {
 		params, err := h.requestTranslation(ctx, userID, base, target, modelKey)
 		if err != nil {
-			return nil, err
+			h.logger.Warnw("translate changelog failed", "locale", base.Locale, "target", target, "error", err)
+			continue
 		}
-		entry, err := h.service.CreateEntry(ctx, params)
+
+		dbCtx := context.WithoutCancel(ctx)
+		entry, err := h.service.CreateEntry(dbCtx, params)
 		if err != nil {
-			return nil, fmt.Errorf("create translated entry (%s): %w", target, err)
+			h.logger.Warnw("persist translated changelog failed", "locale", base.Locale, "target", target, "error", err)
+			continue
 		}
 		results = append(results, entry)
 	}
-	return results, nil
+	return results
 }
 
 // requestTranslation 将原始 changelog 内容封装成提示词，调用 DeepSeek 完成翻译并解析结果。
 func (h *ChangelogHandler) requestTranslation(ctx context.Context, userID uint, base changelogsvc.CreateEntryParams, targetLocale, modelKey string) (changelogsvc.CreateEntryParams, error) {
+	provider, err := h.modelService.ResolveProviderByModelKey(ctx, userID, modelKey)
+	if err != nil {
+		return changelogsvc.CreateEntryParams{}, fmt.Errorf("resolve provider: %w", err)
+	}
+
 	payload := map[string]any{
 		"badge":   base.Badge,
 		"title":   base.Title,
@@ -237,13 +241,14 @@ func (h *ChangelogHandler) requestTranslation(ctx context.Context, userID uint, 
 	request := deepseek.ChatCompletionRequest{
 		Model:    modelKey,
 		Messages: messages,
-		ResponseFormat: map[string]any{
-			"type": "json_object",
-		},
 	}
 
-	// 基于管理员提供的模型 key 调用 DeepSeek。若未来支持其他模型，可在 Service 内扩展。
-	resp, err := h.modelService.InvokeDeepSeekChatCompletion(ctx, userID, modelKey, request)
+	if provider == "deepseek" {
+		request.ResponseFormat = map[string]any{"type": "json_object"}
+	}
+
+	// 基于管理员提供的模型 key 调用模型凭据。不同 provider 会在 ModelService 内映射到对应实现。
+	resp, err := h.modelService.InvokeChatCompletion(ctx, userID, modelKey, request)
 	if err != nil {
 		return changelogsvc.CreateEntryParams{}, fmt.Errorf("translate via model %s: %w", modelKey, err)
 	}

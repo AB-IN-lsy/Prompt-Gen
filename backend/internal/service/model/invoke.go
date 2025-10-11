@@ -23,9 +23,9 @@ const (
 	defaultVolcengineModel = "doubao-1-5-thinking-pro-250415"
 )
 
-// InvokeDeepSeekChatCompletion 读取用户凭据并调用 DeepSeek 的 Chat Completion 接口。
+// InvokeChatCompletion 根据模型 key 读取凭据并调用对应提供方的 Chat Completion 接口。
 // 关键流程：从数据库查凭据→解密 API Key→合并请求/扩展参数→构造客户端发起请求。
-func (s *Service) InvokeDeepSeekChatCompletion(ctx context.Context, userID uint, modelKey string, req deepseek.ChatCompletionRequest) (deepseek.ChatCompletionResponse, error) {
+func (s *Service) InvokeChatCompletion(ctx context.Context, userID uint, modelKey string, req deepseek.ChatCompletionRequest) (deepseek.ChatCompletionResponse, error) {
 	credential, err := s.repo.FindByModelKey(ctx, userID, modelKey)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -34,6 +34,11 @@ func (s *Service) InvokeDeepSeekChatCompletion(ctx context.Context, userID uint,
 		return deepseek.ChatCompletionResponse{}, fmt.Errorf("find credential: %w", err)
 	}
 	return s.invokeProvider(ctx, credential, req)
+}
+
+// InvokeDeepSeekChatCompletion 保留旧接口，兼容已有调用逻辑。
+func (s *Service) InvokeDeepSeekChatCompletion(ctx context.Context, userID uint, modelKey string, req deepseek.ChatCompletionRequest) (deepseek.ChatCompletionResponse, error) {
+	return s.InvokeChatCompletion(ctx, userID, modelKey, req)
 }
 
 // TestConnection 尝试使用指定凭据发起一次调用，并记录最新验证时间。

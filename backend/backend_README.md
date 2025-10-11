@@ -21,7 +21,7 @@
 - 引入 `MODEL_CREDENTIAL_MASTER_KEY` 环境变量，使用 AES-256-GCM 加解密用户提交的模型凭据。
 - 数据库自动迁移包含 `user_model_credentials` 与 `changelog_entries` 表，服务启动即可创建所需数据结构。
 - 模型凭据禁用或删除时，会自动清理用户偏好的 `preferred_model`，避免指向不可用的模型；`PUT /api/users/me` 也会验证偏好模型是否存在并已启用。
-- 新增 `infra/model/deepseek` 模块与 `Service.InvokeDeepSeekChatCompletion`，可使用存量凭据直接向 DeepSeek Chat Completion API 发起调用。
+- 新增 `infra/model/deepseek` 模块与 `Service.InvokeChatCompletion`，可使用存量凭据直接向接入的大模型发起调用（当前支持 DeepSeek / 火山引擎）。
 - 新增 `changelog_entries` 表和 `/api/changelog` 接口，允许管理员在线维护更新日志；普通用户可直接读取最新发布的条目。
 - JWT 访问令牌新增 `is_admin` 字段，后端会在鉴权中间件里解析并注入上下文，前端可据此展示后台管理能力。
 
@@ -155,7 +155,7 @@ go run ./backend/cmd/sendmail -to you@example.com -name "测试账号"
 - `changelog_entries` 用于记录前端展示的 Release Notes，关键字段包括 `locale`（语言）、`badge`（标签）、`items`（高亮信息 JSON 数组）、`published_at`（发布日期）。  
 - 接口会根据 `locale` 排序返回最新条目，若指定语言暂未录入数据，会自动回退使用英文内容。  
 - 管理员身份通过用户表中的 `is_admin` 字段判定；JWT 会携带该布尔值，鉴权中间件会将其写入 `Gin Context` 供 Handler 使用。  
-- 创建日志时可传入 `translate_to`（字符串数组）与 `translation_model_key` 字段，后端会调用管理员名下的 DeepSeek 凭据完成自动翻译，并为每个目标语言生成额外的 changelog 记录。  
+- 创建日志时可传入 `translate_to`（字符串数组）与 `translation_model_key` 字段，后端会调用管理员名下的大模型凭据完成自动翻译，并为每个目标语言生成额外的 changelog 记录。支持 DeepSeek（如 `deepseek-chat`）以及火山引擎方舟模型（如 `doubao-1-5-thinking-pro-250415`）。  
 - 如需手动初始化数据，可执行以下 SQL 新建表并将目标账号标记为管理员：
 
 ```sql
@@ -230,7 +230,7 @@ UPDATE `users` SET `is_admin` = 1 WHERE `email` = 'your-admin@example.com';
 }
 ```
 
-前端在工作台或设置页触发模型调用时，会通过 `InvokeDeepSeekChatCompletion` 流程完成以下动作：
+前端在工作台或设置页触发模型调用时，会通过 `InvokeChatCompletion` 流程完成以下动作：
 
 1. 读取并校验模型凭据，确认状态为 `enabled`。  
 2. 使用 AES-256-GCM 解密 API Key，并根据 `base_url` 创建 DeepSeek 客户端。  

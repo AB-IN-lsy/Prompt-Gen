@@ -99,11 +99,12 @@
       "successCreate": "Changelog entry created.",
       "successUpdate": "Changelog entry updated.",
       "successDelete": "Changelog entry deleted.",
+      "successCreateWithTranslations": "Entry created with {{count}} translation(s).",
       "translate": "Auto translate",
       "translateDescription": "Select target locales and publish translated copies together.",
       "translateTargets": "Target locales",
       "translateModelKey": "Translation model key",
-      "translateModelHint": "Uses your model credential identified by this key (e.g. deepseek-chat).",
+      "translateModelHint": "Uses your model credential identified by this key (e.g. deepseek-chat or doubao-1-5-thinking-pro-250415).",
       "translateTargetsRequired": "Select at least one target locale.",
       "translateModelRequired": "Please provide the translation model key.",
       "localeOption": {
@@ -117,7 +118,8 @@
     "searchPlaceholder": "Search topics or keywords...",
     "syncNow": "Sync now",
     "logout": "Sign out",
-    "logoutSuccess": "Signed out successfully"
+    "logoutSuccess": "Signed out successfully",
+    "backToTop": "Back to top"
   },
   "avatarUploader": {
     "title": "Avatar",

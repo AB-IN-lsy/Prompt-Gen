@@ -125,7 +125,7 @@ frontend/
 - 当登录用户的 `profile.user.is_admin` 为 `true` 时，会展示一个可编辑的表单，可创建或更新 changelog；操作成功后自动刷新列表。删除操作会二次确认并调用 `DELETE /api/changelog/:id`。
 - 表单支持在「亮点」文本域中逐行输入内容，保存前会自动拆分为字符串数组，再提交给后端。
 - 若需要快速体验后台管理，可在数据库中将目标用户的 `is_admin` 字段置为 `1`，刷新登录态后即可看到管理面板。
-- 勾选“自动翻译”可在提交时让后端调用 DeepSeek（或其他你配置的模型）生成目标语言版本；需在表单中提供 `translation_model_key`，并确保账号已配置对应模型凭据。
+- 勾选“自动翻译”可在提交时让后端调用已配置的模型（DeepSeek 或火山引擎等）生成目标语言版本；需在表单中提供 `translation_model_key`，例如 `deepseek-chat` 或 `doubao-1-5-thinking-pro-250415`。
 - 后续若你将原有 i18n 文案迁移至数据库，记得清理 `logsPage.entries` 的静态内容以避免重复。
 
 ## 身份认证与路由

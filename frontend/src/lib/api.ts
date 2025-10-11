@@ -254,6 +254,11 @@ export interface ChangelogPayload {
   translation_model_key?: string;
 }
 
+export interface ChangelogCreateResult {
+  entry: ChangelogEntry;
+  translations: ChangelogEntry[];
+}
+
 /**
  * Fetches keywords from the backend. The backend supports optional topic/polarity filters.
  * Errors are normalised to {@link ApiError} before being rethrown.
@@ -654,11 +659,17 @@ export async function fetchChangelogEntries(
 
 export async function createChangelogEntry(
   payload: ChangelogPayload,
-): Promise<ChangelogEntry> {
+): Promise<ChangelogCreateResult> {
   try {
-    const response: AxiosResponse<{ entry: ChangelogEntry }> =
+    const response: AxiosResponse<{
+      entry: ChangelogEntry;
+      translations?: ChangelogEntry[];
+    }> =
       await http.post("/changelog", payload);
-    return response.data.entry;
+    return {
+      entry: response.data.entry,
+      translations: response.data.translations ?? [],
+    };
   } catch (error) {
     throw normaliseError(error);
   }

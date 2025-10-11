@@ -69,6 +69,18 @@ type UpdateInput struct {
 	Status      *string
 }
 
+// ResolveProviderByModelKey 返回指定模型 key 对应凭据的 provider。
+func (s *Service) ResolveProviderByModelKey(ctx context.Context, userID uint, modelKey string) (string, error) {
+	credential, err := s.repo.FindByModelKey(ctx, userID, modelKey)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return "", ErrCredentialNotFound
+		}
+		return "", fmt.Errorf("find credential: %w", err)
+	}
+	return normalizeProvider(credential.Provider), nil
+}
+
 // Service 提供模型凭据管理能力。
 // Service 聚合模型凭据仓储与用户仓储，用于跨层更新偏好设置。
 type Service struct {

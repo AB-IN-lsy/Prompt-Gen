@@ -4,8 +4,8 @@
  * @FilePath: \electron-go-app\frontend\src\components\layout\AppShell.tsx
  * @LastEditTime: 2025-10-11 23:07:56
  */
-import { NavLink, useNavigate } from "react-router-dom";
-import { ReactNode, useCallback, useMemo } from "react";
+import { NavLink, useLocation, useNavigate } from "react-router-dom";
+import { ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { cn } from "../../lib/utils";
 import {
@@ -16,7 +16,8 @@ import {
     Sparkles,
     LogOut,
     ListChecks,
-    FileClock
+    FileClock,
+    Rocket
 } from "lucide-react";
 import { Button } from "../ui/button";
 import { useAuth } from "../../hooks/useAuth";
@@ -41,6 +42,10 @@ export function AppShell({ children, rightSlot }: AppShellProps) {
     const navigate = useNavigate();
     const profile = useAuth((state) => state.profile);
     const logout = useAuth((state) => state.logout);
+    const location = useLocation();
+    const scrollContainerRef = useRef<HTMLDivElement>(null);
+    const [showScrollTop, setShowScrollTop] = useState(false);
+    const [fading, setFading] = useState(false);
 
     const handleLogout = useCallback(async () => {
         await logout();
@@ -53,6 +58,42 @@ export function AppShell({ children, rightSlot }: AppShellProps) {
         }
         return profile.user.username.charAt(0).toUpperCase();
     }, [profile?.user.username]);
+
+    useEffect(() => {
+        const node = scrollContainerRef.current;
+        if (!node) {
+            return;
+        }
+        const handleScroll = () => {
+            setShowScrollTop(node.scrollTop > 240);
+        };
+        handleScroll();
+        node.addEventListener("scroll", handleScroll);
+        return () => {
+            node.removeEventListener("scroll", handleScroll);
+        };
+    }, []);
+
+    useEffect(() => {
+        const node = scrollContainerRef.current;
+        if (!node) {
+            return;
+        }
+        node.scrollTo({ top: 0, behavior: "auto" });
+        setFading(true);
+        const id = window.setTimeout(() => setFading(false), 120);
+        return () => {
+            window.clearTimeout(id);
+        };
+    }, [location.pathname]);
+
+    const scrollToTop = useCallback(() => {
+        const node = scrollContainerRef.current;
+        if (!node) {
+            return;
+        }
+        node.scrollTo({ top: 0, behavior: "smooth" });
+    }, []);
 
     return (
         <div className="flex h-screen w-screen bg-[var(--bg)] text-[var(--fg)] transition-colors">
@@ -124,9 +165,16 @@ export function AppShell({ children, rightSlot }: AppShellProps) {
                     </div>
                 </header>
                 {/* 主内容区域，通过 children 注入各业务页面 */}
-                <div className="flex-1 overflow-y-auto bg-[var(--bg)] px-6 py-6 transition-colors">
+                <div ref={scrollContainerRef} className="flex-1 overflow-y-auto bg-[var(--bg)] px-6 py-6 transition-colors">
                     <div className="flex min-h-full flex-col gap-8">
-                        {children}
+                        <div
+                            className={cn(
+                                "flex flex-1 flex-col transition-opacity duration-200 ease-out",
+                                fading ? "opacity-0" : "opacity-100"
+                            )}
+                        >
+                            {children}
+                        </div>
                         <footer className="border-t border-white/60 pt-4 text-xs text-slate-400 transition-colors dark:border-slate-800/70 dark:text-slate-500">
                             <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                                 <span>Powered by AB-IN · 鲁ICP备2021035431号-1</span>
@@ -142,6 +190,18 @@ export function AppShell({ children, rightSlot }: AppShellProps) {
                         </footer>
                     </div>
                 </div>
+                {showScrollTop ? (
+                    <Button
+                        type="button"
+                        size="sm"
+                        variant="secondary"
+                        className="fixed bottom-6 right-6 z-20 shadow-lg"
+                        onClick={scrollToTop}
+                    >
+                        <Rocket className="mr-2 h-4 w-4" />
+                        {t("appShell.backToTop")}
+                    </Button>
+                ) : null}
             </main>
         </div>
     );

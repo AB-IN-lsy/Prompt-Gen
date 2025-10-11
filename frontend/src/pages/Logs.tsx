@@ -19,7 +19,8 @@ import {
     fetchChangelogEntries,
     updateChangelogEntry,
     type ChangelogEntry,
-    type ChangelogPayload
+    type ChangelogPayload,
+    type ChangelogCreateResult
 } from "../lib/api";
 import { useAuth } from "../hooks/useAuth";
 import { cn } from "../lib/utils";
@@ -120,10 +121,15 @@ export default function LogsPage() {
         });
     }, [editorState.locale]);
 
-    const createMutation = useMutation({
+    const createMutation = useMutation<ChangelogCreateResult, unknown, ChangelogPayload>({
         mutationFn: createChangelogEntry,
-        onSuccess: () => {
-            toast.success(t("logsPage.admin.successCreate"));
+        onSuccess: (result) => {
+            const translations = result.translations ?? [];
+            if (translations.length > 0) {
+                toast.success(t("logsPage.admin.successCreateWithTranslations", { count: translations.length }));
+            } else {
+                toast.success(t("logsPage.admin.successCreate"));
+            }
             dispatch({ type: "reset", locale });
             setAutoTranslate(false);
             setTranslateTargets(locale === "zh-CN" ? ["en"] : ["zh-CN"]);
@@ -136,7 +142,7 @@ export default function LogsPage() {
         }
     });
 
-    const updateMutation = useMutation({
+    const updateMutation = useMutation<ChangelogEntry, unknown, { id: number; payload: ChangelogPayload }>({
         mutationFn: ({ id, payload }: { id: number; payload: Parameters<typeof updateChangelogEntry>[1] }) =>
             updateChangelogEntry(id, payload),
         onSuccess: () => {

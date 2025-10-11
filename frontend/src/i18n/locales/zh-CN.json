@@ -99,11 +99,12 @@
       "successCreate": "日志已创建。",
       "successUpdate": "日志已更新。",
       "successDelete": "日志已删除。",
+      "successCreateWithTranslations": "日志已创建，并同步生成 {{count}} 个翻译版本。",
       "translate": "自动翻译",
       "translateDescription": "选择目标语言，保存时自动生成翻译版本并一同发布。",
       "translateTargets": "目标语言",
       "translateModelKey": "翻译使用的模型 key",
-      "translateModelHint": "会使用你在模型凭据中配置的对应 key（例如 deepseek-chat）。",
+      "translateModelHint": "会使用你在模型凭据中配置的对应 key（例如 deepseek-chat、doubao-1-5-thinking-pro-250415）。",
       "translateTargetsRequired": "请至少勾选一个目标语言。",
       "translateModelRequired": "请填写模型 key 用于翻译。",
       "localeOption": {
@@ -117,7 +118,8 @@
     "searchPlaceholder": "搜索主题或关键词...",
     "syncNow": "立即同步",
     "logout": "退出登录",
-    "logoutSuccess": "已安全退出登录"
+    "logoutSuccess": "已安全退出登录",
+    "backToTop": "回到顶部"
   },
   "avatarUploader": {
     "title": "头像",
