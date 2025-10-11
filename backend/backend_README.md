@@ -146,12 +146,14 @@ go run ./backend/cmd/sendmail -to you@example.com -name "测试账号"
 
 ### 模型凭据字段说明与 DeepSeek 示例
 
-- **provider**：服务商代号，保持小写，如 `deepseek`、`openai`。  
+- **provider**：服务商代号，保持小写，目前限定为 `deepseek` 或 `volcengine`。  
 - **model_key**：用户自定义的模型标识，需在账号范围内唯一，后端也会用它作为默认的 `model` 字段传给大模型，例如 `deepseek-chat`。  
 - **display_name**：前端展示名称，可写成 `DeepSeek Chat（团队密钥）`。  
 - **base_url**：可选，覆盖默认的 `https://api.deepseek.com/v1`，当你使用代理或企业网关时填写。  
 - **api_key**：实际的访问密钥，后端入库前会用 `MODEL_CREDENTIAL_MASTER_KEY` 加密。  
 - **extra_config**：可选 JSON，对应 DeepSeek `chat/completions` 的可选参数（如 `max_tokens`、`temperature`、`response_format` 等），未在请求体里显式提供时会自动回填。
+
+> 当前后端仅支持 DeepSeek；火山引擎模型适配正在规划中，后续会更新。
 
 例如将 DeepSeek 官方 Demo 注册进系统，可在“新增模型”表单输入：
 

@@ -320,6 +320,41 @@ func TestTestDeepSeekConnectionDisabled(t *testing.T) {
 	}
 }
 
+func TestInvokeDeepSeekUnsupportedProvider(t *testing.T) {
+	key := make([]byte, 32)
+	for i := range key {
+		key[i] = byte(i + 4)
+	}
+	os.Setenv("MODEL_CREDENTIAL_MASTER_KEY", base64.StdEncoding.EncodeToString(key))
+
+	svc, _, _, userID := newTestModelService(t)
+	cred, err := svc.Create(context.Background(), userID, modelsvc.CreateInput{
+		Provider:    "volcengine",
+		ModelKey:    "volcengine-chat",
+		DisplayName: "Volcengine",
+		BaseURL:     "https://api.volcengine.example.com",
+		APIKey:      "sk-volcano",
+		ExtraConfig: map[string]any{},
+	})
+	if err != nil {
+		t.Fatalf("create volcengine credential: %v", err)
+	}
+
+	_, err = svc.InvokeDeepSeekChatCompletion(context.Background(), userID, cred.ModelKey, deepseek.ChatCompletionRequest{
+		Messages: []deepseek.ChatMessage{{Role: "user", Content: "ping"}},
+	})
+	if !errors.Is(err, modelsvc.ErrUnsupportedProvider) {
+		t.Fatalf("expected ErrUnsupportedProvider, got %v", err)
+	}
+
+	_, err = svc.TestDeepSeekConnection(context.Background(), userID, cred.ID, deepseek.ChatCompletionRequest{
+		Messages: []deepseek.ChatMessage{{Role: "user", Content: "ping"}},
+	})
+	if !errors.Is(err, modelsvc.ErrUnsupportedProvider) {
+		t.Fatalf("expected ErrUnsupportedProvider on test connection, got %v", err)
+	}
+}
+
 func TestInvokeDeepSeekWithDisabledCredential(t *testing.T) {
 	key := make([]byte, 32)
 	for i := range key {

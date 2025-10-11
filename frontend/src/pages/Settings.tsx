@@ -63,7 +63,7 @@ export default function SettingsPage() {
 
   // 模型创建表单临时状态（界面提交时再转换）
   const [modelForm, setModelForm] = useState({
-    provider: "",
+    provider: "deepseek",
     model_key: "",
     display_name: "",
     base_url: "",
@@ -218,7 +218,7 @@ export default function SettingsPage() {
     onSuccess: async () => {
       toast.success(t("settings.modelCard.createSuccess"));
       setModelForm({
-        provider: "",
+        provider: "deepseek",
         model_key: "",
         display_name: "",
         base_url: "",
@@ -560,7 +560,11 @@ export default function SettingsPage() {
 
   const handleModelInputChange =
     (field: keyof typeof modelForm) =>
-    (event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    (
+      event: ChangeEvent<
+        HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement
+      >,
+    ) => {
       const value = event.target.value;
       setModelFormError(null);
       setModelForm((prev) => ({ ...prev, [field]: value }));
@@ -573,7 +577,7 @@ export default function SettingsPage() {
       return;
     }
 
-    const provider = modelForm.provider.trim();
+    const provider = modelForm.provider.trim().toLowerCase();
     const modelKey = modelForm.model_key.trim();
     const displayName = modelForm.display_name.trim();
     const apiKey = modelForm.api_key.trim();
@@ -659,6 +663,9 @@ export default function SettingsPage() {
   };
 
   const handleTestModel = (credential: UserModelCredential) => {
+    if ((credential.provider ?? "").toLowerCase() !== "deepseek") {
+      return;
+    }
     if (
       testModelMutation.isPending &&
       testModelMutation.variables?.id === credential.id
@@ -922,6 +929,9 @@ export default function SettingsPage() {
           <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
             {t("settings.modelCard.description")}
           </p>
+          <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">
+            {t("settings.modelCard.providersNote")}
+          </p>
         </div>
 
         <div className="space-y-3">
@@ -966,9 +976,13 @@ export default function SettingsPage() {
                   setPreferredMutation.variables === credential.model_key);
               const isEditing = editingModelId === credential.id;
               const editDisabled = isEditing || updateInFlight;
+              const providerNormalized =
+                credential.provider?.toLowerCase() ?? "";
+              const isTestable = providerNormalized === "deepseek";
               const testingDisabled =
-                testModelMutation.isPending &&
-                testModelMutation.variables?.id === credential.id;
+                !isTestable ||
+                (testModelMutation.isPending &&
+                  testModelMutation.variables?.id === credential.id);
 
               return (
                 <div
@@ -1023,9 +1037,12 @@ export default function SettingsPage() {
                         disabled={testingDisabled}
                         onClick={() => handleTestModel(credential)}
                       >
-                        {testingDisabled
-                          ? t("settings.modelCard.testing")
-                          : t("settings.modelCard.test")}
+                        {isTestable
+                          ? testModelMutation.isPending &&
+                            testModelMutation.variables?.id === credential.id
+                            ? t("settings.modelCard.testing")
+                            : t("settings.modelCard.test")
+                          : t("settings.modelCard.testUnavailable")}
                       </Button>
                       <Button
                         type="button"
@@ -1178,10 +1195,21 @@ export default function SettingsPage() {
               <label className="text-xs font-medium text-slate-500 dark:text-slate-400">
                 {t("settings.modelCard.provider")}
               </label>
-              <Input
+              <select
                 value={modelForm.provider}
                 onChange={handleModelInputChange("provider")}
-              />
+                className="h-10 w-full rounded-xl border border-white/70 bg-white/80 px-3 text-sm text-slate-700 shadow-sm transition focus:border-primary focus:shadow-glow focus:outline-none dark:border-slate-800 dark:bg-slate-900/70 dark:text-slate-200 dark:focus:border-primary/60"
+              >
+                <option value="deepseek">
+                  {t("settings.modelCard.providerOptionDeepseek")}
+                </option>
+                <option value="volcengine">
+                  {t("settings.modelCard.providerOptionVolcengine")}
+                </option>
+              </select>
+              <span className="text-xs text-slate-400 dark:text-slate-500">
+                {t("settings.modelCard.providerHint")}
+              </span>
             </div>
             <div className="flex flex-col gap-2">
               <label className="text-xs font-medium text-slate-500 dark:text-slate-400">
@@ -1190,7 +1218,11 @@ export default function SettingsPage() {
               <Input
                 value={modelForm.model_key}
                 onChange={handleModelInputChange("model_key")}
+                placeholder="deepseek-chat"
               />
+              <span className="text-xs text-slate-400 dark:text-slate-500">
+                {t("settings.modelCard.modelKeyHint")}
+              </span>
             </div>
             <div className="flex flex-col gap-2">
               <label className="text-xs font-medium text-slate-500 dark:text-slate-400">
@@ -1199,7 +1231,11 @@ export default function SettingsPage() {
               <Input
                 value={modelForm.display_name}
                 onChange={handleModelInputChange("display_name")}
+                placeholder="DeepSeek Chat"
               />
+              <span className="text-xs text-slate-400 dark:text-slate-500">
+                {t("settings.modelCard.displayNameHint")}
+              </span>
             </div>
             <div className="flex flex-col gap-2">
               <label className="text-xs font-medium text-slate-500 dark:text-slate-400">
@@ -1208,8 +1244,11 @@ export default function SettingsPage() {
               <Input
                 value={modelForm.base_url}
                 onChange={handleModelInputChange("base_url")}
-                placeholder="https://api.example.com"
+                placeholder="https://api.deepseek.com/v1"
               />
+              <span className="text-xs text-slate-400 dark:text-slate-500">
+                {t("settings.modelCard.baseUrlHint")}
+              </span>
             </div>
             <div className="flex flex-col gap-2 md:col-span-2">
               <label className="text-xs font-medium text-slate-500 dark:text-slate-400">
@@ -1219,8 +1258,11 @@ export default function SettingsPage() {
                 value={modelForm.api_key}
                 onChange={handleModelInputChange("api_key")}
                 type="password"
-                placeholder="sk-..."
+                placeholder="sk-xxxxxxxx"
               />
+              <span className="text-xs text-slate-400 dark:text-slate-500">
+                {t("settings.modelCard.apiKeyHint")}
+              </span>
             </div>
             <div className="flex flex-col gap-2 md:col-span-2">
               <label className="text-xs font-medium text-slate-500 dark:text-slate-400">
@@ -1229,7 +1271,7 @@ export default function SettingsPage() {
               <Textarea
                 value={modelForm.extra_config}
                 onChange={handleModelInputChange("extra_config")}
-                placeholder='{ "default_model": "gpt-5" }'
+                placeholder='{"max_tokens":4096,"temperature":1}'
                 rows={3}
               />
               <span className="text-xs text-slate-400 dark:text-slate-500">

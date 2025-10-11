@@ -255,6 +255,9 @@ func (s *Service) invokeDeepSeek(ctx context.Context, credential *domain.UserMod
 	if credential == nil {
 		return deepseek.ChatCompletionResponse{}, ErrCredentialNotFound
 	}
+	if !strings.EqualFold(strings.TrimSpace(credential.Provider), "deepseek") {
+		return deepseek.ChatCompletionResponse{}, ErrUnsupportedProvider
+	}
 	if strings.EqualFold(credential.Status, "disabled") {
 		return deepseek.ChatCompletionResponse{}, ErrCredentialDisabled
 	}

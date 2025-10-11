@@ -27,7 +27,14 @@ var (
 	ErrInvalidStatus        = errors.New("invalid credential status")
 	ErrStatusMismatchUpdate = errors.New("status update failed")
 	ErrCredentialDisabled   = errors.New("model credential disabled")
+	ErrUnsupportedProvider  = errors.New("unsupported model provider")
 )
+
+// supportedProviders 维护允许接入的模型提供方列表。
+var supportedProviders = map[string]struct{}{
+	"deepseek":   {},
+	"volcengine": {},
+}
 
 // Credential 表示对外返回的模型凭据（脱敏）。
 type Credential struct {
@@ -103,10 +110,12 @@ func (s *Service) Create(ctx context.Context, userID uint, input CreateInput) (C
 	if err != nil {
 		return Credential{}, err
 	}
+	provider := normalizeProvider(input.Provider)
+	modelKey := strings.TrimSpace(input.ModelKey)
 	entity := domain.UserModelCredential{
 		UserID:       userID,
-		Provider:     strings.TrimSpace(input.Provider),
-		ModelKey:     strings.TrimSpace(input.ModelKey),
+		Provider:     provider,
+		ModelKey:     modelKey,
 		DisplayName:  strings.TrimSpace(input.DisplayName),
 		BaseURL:      strings.TrimSpace(input.BaseURL),
 		APIKeyCipher: sealed,
@@ -198,10 +207,15 @@ func (s *Service) Delete(ctx context.Context, userID, id uint) error {
 }
 
 func (s *Service) validateCreateInput(ctx context.Context, userID uint, input CreateInput) error {
-	if strings.TrimSpace(input.Provider) == "" {
+	provider := normalizeProvider(input.Provider)
+	if provider == "" {
 		return errors.New("provider is required")
 	}
-	if strings.TrimSpace(input.ModelKey) == "" {
+	if !isSupportedProvider(provider) {
+		return ErrUnsupportedProvider
+	}
+	modelKey := strings.TrimSpace(input.ModelKey)
+	if modelKey == "" {
 		return errors.New("model_key is required")
 	}
 	if strings.TrimSpace(input.DisplayName) == "" {
@@ -210,7 +224,7 @@ func (s *Service) validateCreateInput(ctx context.Context, userID uint, input Cr
 	if strings.TrimSpace(input.APIKey) == "" {
 		return errors.New("api_key is required")
 	}
-	exists, err := s.repo.ExistsWithModelKey(ctx, userID, strings.TrimSpace(input.ModelKey), nil)
+	exists, err := s.repo.ExistsWithModelKey(ctx, userID, modelKey, nil)
 	if err != nil {
 		return fmt.Errorf("check duplicate: %w", err)
 	}
@@ -258,6 +272,17 @@ func toCredential(entity domain.UserModelCredential) (Credential, error) {
 		CreatedAt:      entity.CreatedAt,
 		UpdatedAt:      entity.UpdatedAt,
 	}, nil
+}
+
+// normalizeProvider 统一 provider 大小写与空白处理，便于比较。
+func normalizeProvider(provider string) string {
+	return strings.ToLower(strings.TrimSpace(provider))
+}
+
+// isSupportedProvider 判断 provider 是否在白名单内。
+func isSupportedProvider(provider string) bool {
+	_, ok := supportedProviders[normalizeProvider(provider)]
+	return ok
 }
 
 func normalizeStatus(status string) (string, error) {

@@ -87,6 +87,9 @@ func (h *ModelHandler) Create(c *gin.Context) {
 		case modelsvc.ErrDuplicatedModelKey:
 			response.Fail(c, http.StatusConflict, response.ErrConflict, err.Error(), gin.H{"field": "model_key"})
 			return
+		case modelsvc.ErrUnsupportedProvider:
+			response.Fail(c, http.StatusBadRequest, response.ErrBadRequest, err.Error(), gin.H{"field": "provider"})
+			return
 		default:
 			log.Errorw("create credential failed", "error", err, "user_id", userID)
 			response.Fail(c, http.StatusInternalServerError, response.ErrInternal, err.Error(), nil)

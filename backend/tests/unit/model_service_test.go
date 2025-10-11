@@ -77,10 +77,10 @@ func TestModelServiceCreateAndList(t *testing.T) {
 
 	extra := map[string]any{"default_model": "gpt-4o-mini"}
 	credential, err := svc.Create(ctx, userID, modelsvc.CreateInput{
-		Provider:    "openai",
+		Provider:    "deepseek",
 		ModelKey:    "primary",
 		DisplayName: "OpenAI 主账号",
-		BaseURL:     "https://api.openai.com",
+		BaseURL:     "https://api.deepseek.com",
 		APIKey:      "sk-test-001",
 		ExtraConfig: extra,
 	})
@@ -127,10 +127,10 @@ func TestModelServiceCreateDuplicate(t *testing.T) {
 	ctx := context.Background()
 
 	_, err := svc.Create(ctx, userID, modelsvc.CreateInput{
-		Provider:    "openai",
+		Provider:    "deepseek",
 		ModelKey:    "primary",
 		DisplayName: "OpenAI 主账号",
-		BaseURL:     "https://api.openai.com",
+		BaseURL:     "https://api.deepseek.com",
 		APIKey:      "sk-test-001",
 		ExtraConfig: map[string]any{},
 	})
@@ -139,10 +139,10 @@ func TestModelServiceCreateDuplicate(t *testing.T) {
 	}
 
 	_, err = svc.Create(ctx, userID, modelsvc.CreateInput{
-		Provider:    "openai",
+		Provider:    "deepseek",
 		ModelKey:    "primary",
 		DisplayName: "另一个账号",
-		BaseURL:     "https://api.openai.com",
+		BaseURL:     "https://api.deepseek.com",
 		APIKey:      "sk-test-002",
 		ExtraConfig: map[string]any{},
 	})
@@ -174,7 +174,7 @@ func TestModelServiceCreateValidation(t *testing.T) {
 		{
 			name: "missing model key",
 			input: modelsvc.CreateInput{
-				Provider:    "openai",
+				Provider:    "deepseek",
 				ModelKey:    "  ",
 				DisplayName: "Account",
 				BaseURL:     "https://example.com",
@@ -185,7 +185,7 @@ func TestModelServiceCreateValidation(t *testing.T) {
 		{
 			name: "missing display name",
 			input: modelsvc.CreateInput{
-				Provider:    "openai",
+				Provider:    "deepseek",
 				ModelKey:    "primary",
 				DisplayName: "",
 				BaseURL:     "https://example.com",
@@ -196,7 +196,7 @@ func TestModelServiceCreateValidation(t *testing.T) {
 		{
 			name: "missing api key",
 			input: modelsvc.CreateInput{
-				Provider:    "openai",
+				Provider:    "deepseek",
 				ModelKey:    "primary",
 				DisplayName: "Account",
 				BaseURL:     "https://example.com",
@@ -214,6 +214,26 @@ func TestModelServiceCreateValidation(t *testing.T) {
 			}
 		})
 	}
+
+	if _, err := svc.Create(ctx, userID, modelsvc.CreateInput{
+		Provider:    "deepseek",
+		ModelKey:    "primary",
+		DisplayName: "DeepSeek",
+		BaseURL:     "https://api.deepseek.com/v1",
+		APIKey:      "sk-allowed",
+	}); err != nil {
+		t.Fatalf("expected valid provider to succeed: %v", err)
+	}
+
+	if _, err := svc.Create(ctx, userID, modelsvc.CreateInput{
+		Provider:    "unknown",
+		ModelKey:    "secondary",
+		DisplayName: "Unknown",
+		BaseURL:     "https://api.unknown.com",
+		APIKey:      "sk-blocked",
+	}); !errors.Is(err, modelsvc.ErrUnsupportedProvider) {
+		t.Fatalf("expected ErrUnsupportedProvider, got %v", err)
+	}
 }
 
 func TestModelServiceUpdate(t *testing.T) {
@@ -221,10 +241,10 @@ func TestModelServiceUpdate(t *testing.T) {
 	ctx := context.Background()
 
 	cred, err := svc.Create(ctx, userID, modelsvc.CreateInput{
-		Provider:    "openai",
+		Provider:    "deepseek",
 		ModelKey:    "primary",
 		DisplayName: "OpenAI 主账号",
-		BaseURL:     "https://api.openai.com",
+		BaseURL:     "https://api.deepseek.com",
 		APIKey:      "sk-test-001",
 		ExtraConfig: map[string]any{"default_model": "gpt-4o-mini"},
 	})
@@ -281,10 +301,10 @@ func TestModelServiceDelete(t *testing.T) {
 	ctx := context.Background()
 
 	cred, err := svc.Create(ctx, userID, modelsvc.CreateInput{
-		Provider:    "openai",
+		Provider:    "deepseek",
 		ModelKey:    "primary",
 		DisplayName: "OpenAI 主账号",
-		BaseURL:     "https://api.openai.com",
+		BaseURL:     "https://api.deepseek.com",
 		APIKey:      "sk-test-001",
 		ExtraConfig: map[string]any{},
 	})
@@ -306,7 +326,7 @@ func TestModelServiceDeleteClearsPreferred(t *testing.T) {
 	ctx := context.Background()
 
 	_, err := svc.Create(ctx, userID, modelsvc.CreateInput{
-		Provider:    "openai",
+		Provider:    "deepseek",
 		ModelKey:    "primary",
 		DisplayName: "OpenAI",
 		BaseURL:     "",
@@ -350,7 +370,7 @@ func TestModelServiceDisableClearsPreferred(t *testing.T) {
 	ctx := context.Background()
 
 	cred, err := svc.Create(ctx, userID, modelsvc.CreateInput{
-		Provider:    "openai",
+		Provider:    "deepseek",
 		ModelKey:    "primary",
 		DisplayName: "OpenAI",
 		BaseURL:     "",
@@ -391,7 +411,7 @@ func TestModelServiceUpdateStatusNormalizesInput(t *testing.T) {
 	ctx := context.Background()
 
 	cred, err := svc.Create(ctx, userID, modelsvc.CreateInput{
-		Provider:    "openai",
+		Provider:    "deepseek",
 		ModelKey:    "primary",
 		DisplayName: "OpenAI",
 		BaseURL:     "",
@@ -435,7 +455,7 @@ func TestModelServiceUpdatePreservesExtraWhenNil(t *testing.T) {
 	ctx := context.Background()
 
 	cred, err := svc.Create(ctx, userID, modelsvc.CreateInput{
-		Provider:    "openai",
+		Provider:    "deepseek",
 		ModelKey:    "primary",
 		DisplayName: "OpenAI",
 		BaseURL:     "",
@@ -464,7 +484,7 @@ func TestModelServiceRejectsInvalidStatus(t *testing.T) {
 	ctx := context.Background()
 
 	cred, err := svc.Create(ctx, userID, modelsvc.CreateInput{
-		Provider:    "openai",
+		Provider:    "deepseek",
 		ModelKey:    "primary",
 		DisplayName: "OpenAI",
 		BaseURL:     "",
