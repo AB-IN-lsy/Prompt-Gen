@@ -1,280 +1,292 @@
 {
-    "app": {
-        "name": "PromptGen"
+  "app": {
+    "name": "PromptGen"
+  },
+  "nav": {
+    "dashboard": "Dashboard",
+    "myPrompts": "My Prompts",
+    "workbench": "Prompt Workbench",
+    "settings": "Settings",
+    "help": "Help & Logs"
+  },
+  "appShell": {
+    "searchPlaceholder": "Search topics or keywords...",
+    "syncNow": "Sync now",
+    "logout": "Sign out",
+    "logoutSuccess": "Signed out successfully"
+  },
+  "avatarUploader": {
+    "title": "Avatar",
+    "description": "PNG, JPG or WEBP up to 5 MB are supported.",
+    "upload": "Upload avatar",
+    "change": "Change avatar",
+    "remove": "Remove",
+    "uploading": "Uploading...",
+    "uploadSuccess": "Avatar uploaded",
+    "uploadError": "Failed to upload the avatar. Please try again."
+  },
+  "promptWorkbench": {
+    "keywordsTitle": "Keyword governance",
+    "keywordsSubtitle": "Sharpen your prompt focus",
+    "addKeyword": "Add keyword",
+    "inputPlaceholder": "Enter a keyword",
+    "positive": "Positive keyword",
+    "negative": "Negative keyword",
+    "topicDefault": "Frontend engineer interview",
+    "positiveSectionTitle": "Positive keywords",
+    "positiveHint": "Keep at least one item",
+    "negativeSectionTitle": "Negative keywords",
+    "emptySection": "No {{title}} yet. Use \"Add keyword\" to enrich it.",
+    "workbenchEyebrow": "Prompt workbench",
+    "workbenchTitle": "Craft your interview script",
+    "regenerate": "Regenerate",
+    "topicLabel": "Topic",
+    "modelLabel": "Model",
+    "draftLabel": "Prompt draft",
+    "draftPlaceholder": "Generate or edit your prompt...",
+    "autosave": "Auto save",
+    "autosaveSaving": "Saving...",
+    "autosaveSaved": "Latest changes saved automatically",
+    "cancel": "Cancel",
+    "saveDraft": "Save draft",
+    "publish": "Publish",
+    "weight": "Weight {{value}}",
+    "modelFallback": "Selected model is unavailable. Switched to {{model}}.",
+    "modelDisabled": "This model is disabled and can’t be selected."
+  },
+  "common": {
+    "language": "Language",
+    "confirm": "Confirm",
+    "close": "Close",
+    "loading": "Loading..."
+  },
+  "auth": {
+    "login": {
+      "title": "Welcome back",
+      "subtitle": "Sign in to continue crafting prompts",
+      "cta": "Sign in",
+      "switch": "Don't have an account?",
+      "switchCta": "Create one",
+      "success": "Signed in successfully"
     },
-    "nav": {
-        "dashboard": "Dashboard",
-        "myPrompts": "My Prompts",
-        "workbench": "Prompt Workbench",
-        "settings": "Settings",
-        "help": "Help & Logs"
+    "register": {
+      "title": "Create your PromptGen account",
+      "subtitle": "Join the workspace and start building prompts",
+      "cta": "Create account",
+      "switch": "Already registered?",
+      "switchCta": "Sign in",
+      "success": "Account created successfully"
     },
-    "appShell": {
-        "searchPlaceholder": "Search topics or keywords...",
-        "syncNow": "Sync now",
-        "logout": "Sign out",
-        "logoutSuccess": "Signed out successfully"
+    "form": {
+      "username": "Username",
+      "email": "Email",
+      "password": "Password",
+      "captcha": "Captcha"
     },
-    "avatarUploader": {
-        "title": "Avatar",
-        "description": "PNG, JPG or WEBP up to 5 MB are supported.",
-        "upload": "Upload avatar",
-        "change": "Change avatar",
-        "remove": "Remove",
-        "uploading": "Uploading...",
-        "uploadSuccess": "Avatar uploaded",
-        "uploadError": "Failed to upload the avatar. Please try again."
+    "validation": {
+      "usernameRequired": "Please enter a username.",
+      "usernameTooShort": "Username should be at least 2 characters.",
+      "usernameTaken": "This username is already in use.",
+      "emailInvalid": "Please enter a valid email address.",
+      "emailTaken": "This email address has already been registered.",
+      "passwordRequired": "Please enter a password.",
+      "passwordTooShort": "Password should contain at least 8 characters.",
+      "captchaRequired": "Please enter the captcha code."
     },
-    "promptWorkbench": {
-        "keywordsTitle": "Keyword governance",
-        "keywordsSubtitle": "Sharpen your prompt focus",
-        "addKeyword": "Add keyword",
-        "inputPlaceholder": "Enter a keyword",
-        "positive": "Positive keyword",
-        "negative": "Negative keyword",
-        "topicDefault": "Frontend engineer interview",
-        "positiveSectionTitle": "Positive keywords",
-        "positiveHint": "Keep at least one item",
-        "negativeSectionTitle": "Negative keywords",
-        "emptySection": "No {{title}} yet. Use \"Add keyword\" to enrich it.",
-        "workbenchEyebrow": "Prompt workbench",
-        "workbenchTitle": "Craft your interview script",
-        "regenerate": "Regenerate",
-        "topicLabel": "Topic",
-        "modelLabel": "Model",
-        "draftLabel": "Prompt draft",
-        "draftPlaceholder": "Generate or edit your prompt...",
-        "autosave": "Auto save",
-        "autosaveSaving": "Saving...",
-        "autosaveSaved": "Latest changes saved automatically",
-        "cancel": "Cancel",
-        "saveDraft": "Save draft",
-        "publish": "Publish",
-        "weight": "Weight {{value}}",
-        "modelFallback": "Selected model is unavailable. Switched to {{model}}.",
-        "modelDisabled": "This model is disabled and can’t be selected."
+    "captcha": {
+      "placeholder": "Enter the characters you see",
+      "refresh": "Refresh captcha",
+      "unavailable": "Captcha unavailable",
+      "alt": "Captcha image",
+      "required": "Please enter the captcha code",
+      "retrying": "Captcha failed to load, retrying ({{attempt}}/{{total}})…",
+      "failed": "Captcha couldn’t load. Click refresh to try again.",
+      "manualHint": "If the issue persists, please refresh the page or contact support."
     },
-    "common": {
-        "language": "Language",
-        "confirm": "Confirm",
-        "close": "Close",
-        "loading": "Loading..."
+    "verification": {
+      "required": "Your email address hasn’t been verified yet.",
+      "blockTitle": "Email verification required",
+      "blockMessage": "Click \"Send verification email\" and follow the link in your inbox to finish verifying your account.",
+      "helper": "Click the button below and follow the verification link we send to your inbox.",
+      "send": "Send verification email",
+      "sent": "Verification email sent. Please check your inbox.",
+      "sentWithToken": "Verification email sent (token: {{token}}).",
+      "sentNeutral": "If an account exists for this email, a verification message will arrive shortly.",
+      "confirmedManual": "Email verified. Please sign in again to continue.",
+      "confirmed": "Email verified successfully. Signing you in...",
+      "confirm": "Submit token",
+      "tokenPlaceholder": "Enter the token from the email",
+      "tokenRequired": "Please enter the verification token first.",
+      "devHint": "Development token preview:",
+      "pageTitle": "Verify your email",
+      "pageSubtitle": "Confirm your email address to unlock PromptGen.",
+      "emailPlaceholder": "Enter your email address",
+      "emailRequired": "Please enter your email address first.",
+      "autoSuccess": "Email verified. You can now sign in.",
+      "backToLogin": "Back to sign in",
+      "goToPage": "Open email verification page",
+      "emailReminder": "If nothing arrives within a minute, check the spam folder or try again.",
+      "pageIntro": "Enter the email you registered with and we’ll send a fresh verification link.",
+      "pageSteps": "After verifying via the email link, return here or sign in to continue."
+    }
+  },
+  "dashboard": {
+    "title": "Workspace dashboard",
+    "welcome": "Welcome back, {{name}}",
+    "subtitle": "Here's what's happening across your prompt workspace today.",
+    "createPrompt": "Create prompt",
+    "openWorkbench": "Open workbench",
+    "metrics": {
+      "activePrompts": "Active prompts",
+      "drafts": "Drafts awaiting review",
+      "successRate": "Average success rate"
     },
-    "auth": {
-        "login": {
-            "title": "Welcome back",
-            "subtitle": "Sign in to continue crafting prompts",
-            "cta": "Sign in",
-            "switch": "Don't have an account?",
-            "switchCta": "Create one",
-            "success": "Signed in successfully"
-        },
-        "register": {
-            "title": "Create your PromptGen account",
-            "subtitle": "Join the workspace and start building prompts",
-            "cta": "Create account",
-            "switch": "Already registered?",
-            "switchCta": "Sign in",
-            "success": "Account created successfully"
-        },
-        "form": {
-            "username": "Username",
-            "email": "Email",
-            "password": "Password",
-            "captcha": "Captcha"
-        },
-        "validation": {
-            "usernameRequired": "Please enter a username.",
-            "usernameTooShort": "Username should be at least 2 characters.",
-            "usernameTaken": "This username is already in use.",
-            "emailInvalid": "Please enter a valid email address.",
-            "emailTaken": "This email address has already been registered.",
-            "passwordRequired": "Please enter a password.",
-            "passwordTooShort": "Password should contain at least 8 characters.",
-            "captchaRequired": "Please enter the captcha code."
-        },
-        "captcha": {
-            "placeholder": "Enter the characters you see",
-            "refresh": "Refresh captcha",
-            "unavailable": "Captcha unavailable",
-            "alt": "Captcha image",
-            "required": "Please enter the captcha code",
-            "retrying": "Captcha failed to load, retrying ({{attempt}}/{{total}})…",
-            "failed": "Captcha couldn’t load. Click refresh to try again.",
-            "manualHint": "If the issue persists, please refresh the page or contact support."
-        },
-        "verification": {
-            "required": "Your email address hasn’t been verified yet.",
-            "blockTitle": "Email verification required",
-            "blockMessage": "Click \"Send verification email\" and follow the link in your inbox to finish verifying your account.",
-            "helper": "Click the button below and follow the verification link we send to your inbox.",
-            "send": "Send verification email",
-            "sent": "Verification email sent. Please check your inbox.",
-            "sentWithToken": "Verification email sent (token: {{token}}).",
-            "sentNeutral": "If an account exists for this email, a verification message will arrive shortly.",
-            "confirmedManual": "Email verified. Please sign in again to continue.",
-            "confirmed": "Email verified successfully. Signing you in...",
-            "confirm": "Submit token",
-            "tokenPlaceholder": "Enter the token from the email",
-            "tokenRequired": "Please enter the verification token first.",
-            "devHint": "Development token preview:",
-            "pageTitle": "Verify your email",
-            "pageSubtitle": "Confirm your email address to unlock PromptGen.",
-            "emailPlaceholder": "Enter your email address",
-            "emailRequired": "Please enter your email address first.",
-            "autoSuccess": "Email verified. You can now sign in.",
-            "backToLogin": "Back to sign in",
-            "goToPage": "Open email verification page",
-            "emailReminder": "If nothing arrives within a minute, check the spam folder or try again.",
-            "pageIntro": "Enter the email you registered with and we’ll send a fresh verification link.",
-            "pageSteps": "After verifying via the email link, return here or sign in to continue."
-        }
+    "trend": {
+      "up": "+{{value}} vs last week",
+      "down": "-{{value}} vs last week"
     },
-    "dashboard": {
-        "title": "Workspace dashboard",
-        "welcome": "Welcome back, {{name}}",
-        "subtitle": "Here's what's happening across your prompt workspace today.",
-        "createPrompt": "Create prompt",
-        "openWorkbench": "Open workbench",
-        "metrics": {
-            "activePrompts": "Active prompts",
-            "drafts": "Drafts awaiting review",
-            "successRate": "Average success rate"
-        },
-        "trend": {
-            "up": "+{{value}} vs last week",
-            "down": "-{{value}} vs last week"
-        },
-        "activity": {
-            "title": "Recent activity",
-            "empty": "No activity yet. Publish a prompt to see updates."
-        },
-        "activityItems": {
-            "promptPublished": "Published prompt “{{title}}”",
-            "promptUpdated": "Updated draft “{{title}}”",
-            "keywordAdded": "Added keyword “{{title}}”"
-        },
-        "performance": {
-            "title": "Prompt performance",
-            "cta": "See all analytics",
-            "columns": {
-                "prompt": "Prompt",
-                "model": "Model",
-                "conversion": "Conversion"
-            }
-        },
-        "insights": {
-            "title": "Keyword spotlight",
-            "subtitle": "Top performing keywords this week"
-        }
+    "activity": {
+      "title": "Recent activity",
+      "empty": "No activity yet. Publish a prompt to see updates."
     },
-    "settings": {
-        "title": "Settings",
-        "subtitle": "Update your profile and workspace preferences.",
-        "languageCardTitle": "Language",
-        "languageCardDescription": "Switch the interface language between English and Simplified Chinese.",
-        "languageSelectLabel": "Display language",
-        "themeCard": {
-            "title": "Theme",
-            "description": "Choose between light, dark or follow your system preference.",
-            "options": {
-                "system": "Follow system",
-                "light": "Light",
-                "dark": "Dark"
-            },
-            "optionDescriptions": {
-                "system": "Automatically switches with your OS preference",
-                "light": "Use a bright background and high contrast UI",
-                "dark": "Use a dimmed background with high contrast UI"
-            },
-            "systemHint": "Currently following system (showing {{mode}} mode)",
-            "systemHintLight": "light",
-            "systemHintDark": "dark"
-        },
-        "profileCard": {
-            "title": "Profile",
-            "description": "Update your username, email and prompt preferences.",
-            "username": "Username",
-            "email": "Email",
-            "preferredModel": "Preferred model",
-            "preferredModelPlaceholder": "e.g. deepseek, gpt-4o, claude",
-            "syncEnabled": "Cloud sync",
-            "syncEnabledLabel": "Keep prompt settings in sync across devices",
-            "save": "Save profile"
-        },
-        "profileSaveSuccess": "Profile updated",
-        "syncEnabledOn": "Enabled",
-        "syncEnabledOff": "Disabled",
-        "verificationPending": {
-            "notice": "Your email hasn’t been verified yet. Please verify to unlock the full experience.",
-            "action": "Verify now",
-            "openPage": "Open verification page",
-            "emailLabel": "We'll send the verification link to {{email}}.",
-            "emailLabelFallback": "Enter an email address to request a verification link.",
-            "sent": "Verification email sent. Please check your inbox.",
-            "sentDev": "Verification email sent (token: {{token}}).",
-            "sentNeutral": "If an account exists for this email, a verification link will arrive shortly.",
-            "emailMissing": "Please update your email address before requesting verification.",
-            "remaining": "{{count}} attempt(s) remaining today.",
-            "rateLimit": "Please wait {{seconds}}s before trying again."
-        },
-        "modelCard": {
-            "title": "Model credentials",
-            "description": "Store API keys for DeepSeek, GPT-5 and other providers, and choose your default model.",
-            "fetchError": "Failed to load the model list. Please try again later.",
-            "retry": "Reload",
-            "empty": "No models added yet. Use the form below to create one.",
-            "preferredBadge": "Preferred",
-            "statusEnabled": "Enabled",
-            "statusDisabled": "Disabled",
-            "meta": "Provider: {{provider}} ・ Model key: {{model}}",
-            "baseUrl": "Custom base URL: {{url}}",
-            "preferredCurrent": "Already preferred",
-            "setPreferred": "Set as preferred",
-            "enable": "Enable",
-            "disable": "Disable",
-            "delete": "Delete",
-            "deleteSuccess": "Model removed.",
-            "deleteConfirm": "Delete model “{{name}}”? This action cannot be undone.",
-            "enableSuccess": "Model enabled.",
-            "disableSuccess": "Model disabled and preference returned to default.",
-            "updateSuccess": "Model updated.",
-            "preferredSuccess": "Preferred model updated.",
-            "formRequired": "Provider, model key, display name and API key are required.",
-            "extraConfigInvalid": "Extra config must be valid JSON.",
-            "addTitle": "Add a model",
-            "addDescription": "Optional fields let you store a custom base URL and JSON config that will be persisted as-is.",
-            "provider": "Provider",
-            "modelKey": "Model key",
-            "displayName": "Display name",
-            "baseUrlLabel": "Custom base URL (optional)",
-            "apiKey": "API key",
-            "extraConfig": "Extra config JSON (optional)",
-            "extraConfigHint": "Example: {\"default_model\":\"gpt-5\"}. Leave blank to store an empty object.",
-            "createButton": "Add model",
-            "createSuccess": "Model created successfully."
-        },
-        "errors": {
-            "usernameRequired": "Please enter a username.",
-            "emailInvalid": "Please enter a valid email address.",
-            "emailTaken": "Email already in use by another account.",
-            "usernameTaken": "Username already in use by another account."
-        }
+    "activityItems": {
+      "promptPublished": "Published prompt “{{title}}”",
+      "promptUpdated": "Updated draft “{{title}}”",
+      "keywordAdded": "Added keyword “{{title}}”"
+    },
+    "performance": {
+      "title": "Prompt performance",
+      "cta": "See all analytics",
+      "columns": {
+        "prompt": "Prompt",
+        "model": "Model",
+        "conversion": "Conversion"
+      }
+    },
+    "insights": {
+      "title": "Keyword spotlight",
+      "subtitle": "Top performing keywords this week"
+    }
+  },
+  "settings": {
+    "title": "Settings",
+    "subtitle": "Update your profile and workspace preferences.",
+    "languageCardTitle": "Language",
+    "languageCardDescription": "Switch the interface language between English and Simplified Chinese.",
+    "languageSelectLabel": "Display language",
+    "themeCard": {
+      "title": "Theme",
+      "description": "Choose between light, dark or follow your system preference.",
+      "options": {
+        "system": "Follow system",
+        "light": "Light",
+        "dark": "Dark"
+      },
+      "optionDescriptions": {
+        "system": "Automatically switches with your OS preference",
+        "light": "Use a bright background and high contrast UI",
+        "dark": "Use a dimmed background with high contrast UI"
+      },
+      "systemHint": "Currently following system (showing {{mode}} mode)",
+      "systemHintLight": "light",
+      "systemHintDark": "dark"
+    },
+    "profileCard": {
+      "title": "Profile",
+      "description": "Update your username, email and prompt preferences.",
+      "username": "Username",
+      "email": "Email",
+      "preferredModel": "Preferred model",
+      "preferredModelPlaceholder": "e.g. deepseek, gpt-4o, claude",
+      "syncEnabled": "Cloud sync",
+      "syncEnabledLabel": "Keep prompt settings in sync across devices",
+      "save": "Save profile"
+    },
+    "profileSaveSuccess": "Profile updated",
+    "syncEnabledOn": "Enabled",
+    "syncEnabledOff": "Disabled",
+    "verificationPending": {
+      "notice": "Your email hasn’t been verified yet. Please verify to unlock the full experience.",
+      "action": "Verify now",
+      "openPage": "Open verification page",
+      "emailLabel": "We'll send the verification link to {{email}}.",
+      "emailLabelFallback": "Enter an email address to request a verification link.",
+      "sent": "Verification email sent. Please check your inbox.",
+      "sentDev": "Verification email sent (token: {{token}}).",
+      "sentNeutral": "If an account exists for this email, a verification link will arrive shortly.",
+      "emailMissing": "Please update your email address before requesting verification.",
+      "remaining": "{{count}} attempt(s) remaining today.",
+      "rateLimit": "Please wait {{seconds}}s before trying again."
+    },
+    "modelCard": {
+      "title": "Model credentials",
+      "description": "Store API keys for DeepSeek, GPT-5 and other providers, and choose your default model.",
+      "fetchError": "Failed to load the model list. Please try again later.",
+      "retry": "Reload",
+      "empty": "No models added yet. Use the form below to create one.",
+      "preferredBadge": "Preferred",
+      "statusEnabled": "Enabled",
+      "statusDisabled": "Disabled",
+      "meta": "Provider: {{provider}} ・ Model key: {{model}}",
+      "baseUrl": "Custom base URL: {{url}}",
+      "preferredCurrent": "Already preferred",
+      "setPreferred": "Set as preferred",
+      "enable": "Enable",
+      "disable": "Disable",
+      "delete": "Delete",
+      "deleteSuccess": "Model removed.",
+      "deleteConfirm": "Delete model “{{name}}”? This action cannot be undone.",
+      "enableSuccess": "Model enabled.",
+      "disableSuccess": "Model disabled and preference returned to default.",
+      "updateSuccess": "Model updated.",
+      "preferredSuccess": "Preferred model updated.",
+      "test": "Test connection",
+      "testing": "Testing…",
+      "testSuccess": "Connection test succeeded.",
+      "testSuccessWithReply": "Connection test succeeded. Reply: {{reply}}",
+      "edit": "Edit",
+      "editTitle": "Edit {{name}}",
+      "editApiKeyHint": "Leave blank to keep the current key.",
+      "editCancel": "Cancel",
+      "editSave": "Save changes",
+      "editDisplayNameRequired": "Display name cannot be empty.",
+      "lastVerified": "Last verified: {{time}}",
+      "lastVerifiedNever": "Never verified",
+      "formRequired": "Provider, model key, display name and API key are required.",
+      "extraConfigInvalid": "Extra config must be valid JSON.",
+      "addTitle": "Add a model",
+      "addDescription": "Optional fields let you store a custom base URL and JSON config that will be persisted as-is.",
+      "provider": "Provider",
+      "modelKey": "Model key",
+      "displayName": "Display name",
+      "baseUrlLabel": "Custom base URL (optional)",
+      "apiKey": "API key",
+      "extraConfig": "Extra config JSON (optional)",
+      "extraConfigHint": "Example: {\"default_model\":\"gpt-5\"}. Leave blank to store an empty object.",
+      "createButton": "Add model",
+      "createSuccess": "Model created successfully."
     },
     "errors": {
-        "generic": "Something went wrong. Please try again.",
-        "BAD_REQUEST": "The request was invalid.",
-        "UNAUTHORIZED": "Your session has expired. Please sign in again.",
-        "FORBIDDEN": "You don\u2019t have permission to perform this action.",
-        "NOT_FOUND": "The requested resource was not found.",
-        "CONFLICT": "The data you submitted conflicts with existing records.",
-        "TOO_MANY_REQUESTS": "You are sending requests too quickly. Please wait a moment.",
-        "INTERNAL_ERROR": "The server encountered an error.",
-        "CAPTCHA_INVALID": "The captcha code is incorrect.",
-        "CAPTCHA_EXPIRED": "The captcha has expired. Please request a new one.",
-        "CAPTCHA_REQUIRED": "Captcha verification is required.",
-        "EMAIL_NOT_VERIFIED": "Your email address hasn’t been verified yet.",
-        "EMAIL_ALREADY_VERIFIED": "This email address has already been verified.",
-        "VERIFICATION_TOKEN_INVALID": "The verification token is invalid or has expired."
+      "usernameRequired": "Please enter a username.",
+      "emailInvalid": "Please enter a valid email address.",
+      "emailTaken": "Email already in use by another account.",
+      "usernameTaken": "Username already in use by another account."
     }
+  },
+  "errors": {
+    "generic": "Something went wrong. Please try again.",
+    "BAD_REQUEST": "The request was invalid.",
+    "UNAUTHORIZED": "Your session has expired. Please sign in again.",
+    "FORBIDDEN": "You don\u2019t have permission to perform this action.",
+    "NOT_FOUND": "The requested resource was not found.",
+    "CONFLICT": "The data you submitted conflicts with existing records.",
+    "TOO_MANY_REQUESTS": "You are sending requests too quickly. Please wait a moment.",
+    "INTERNAL_ERROR": "The server encountered an error.",
+    "CAPTCHA_INVALID": "The captcha code is incorrect.",
+    "CAPTCHA_EXPIRED": "The captcha has expired. Please request a new one.",
+    "CAPTCHA_REQUIRED": "Captcha verification is required.",
+    "EMAIL_NOT_VERIFIED": "Your email address hasn’t been verified yet.",
+    "EMAIL_ALREADY_VERIFIED": "This email address has already been verified.",
+    "VERIFICATION_TOKEN_INVALID": "The verification token is invalid or has expired."
+  }
 }

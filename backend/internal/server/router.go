@@ -95,6 +95,7 @@ func NewRouter(opts RouterOptions) *gin.Engine {
 			}
 			models.GET("", opts.ModelHandler.List)
 			models.POST("", opts.ModelHandler.Create)
+			models.POST("/:id/test", opts.ModelHandler.TestConnection)
 			models.PUT("/:id", opts.ModelHandler.Update)
 			models.DELETE("/:id", opts.ModelHandler.Delete)
 		}

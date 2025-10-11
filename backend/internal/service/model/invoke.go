@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	domain "electron-go-app/backend/internal/domain/user"
 	"electron-go-app/backend/internal/infra/model/deepseek"
@@ -29,24 +30,32 @@ func (s *Service) InvokeDeepSeekChatCompletion(ctx context.Context, userID uint,
 		}
 		return deepseek.ChatCompletionResponse{}, fmt.Errorf("find credential: %w", err)
 	}
-	if strings.EqualFold(credential.Status, "disabled") {
-		return deepseek.ChatCompletionResponse{}, ErrCredentialDisabled
-	}
+	return s.invokeDeepSeek(ctx, credential, req)
+}
 
-	apiKeyPlain, err := security.Decrypt(credential.APIKeyCipher)
+// TestDeepSeekConnection 尝试使用指定凭据发起一次调用，并记录最新验证时间。
+func (s *Service) TestDeepSeekConnection(ctx context.Context, userID, id uint, req deepseek.ChatCompletionRequest) (deepseek.ChatCompletionResponse, error) {
+	credential, err := s.repo.FindByID(ctx, userID, id)
 	if err != nil {
-		return deepseek.ChatCompletionResponse{}, fmt.Errorf("decrypt api key: %w", err)
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return deepseek.ChatCompletionResponse{}, ErrCredentialNotFound
+		}
+		return deepseek.ChatCompletionResponse{}, fmt.Errorf("find credential: %w", err)
 	}
 
-	prepared, err := prepareDeepSeekRequest(req, credential)
+	// 与在线调用共享调用链，确保所有校验逻辑一致。
+	resp, err := s.invokeDeepSeek(ctx, credential, req)
 	if err != nil {
 		return deepseek.ChatCompletionResponse{}, err
 	}
 
-	baseURL := strings.TrimSpace(credential.BaseURL)
-	client := deepseek.NewClient(string(apiKeyPlain), deepseek.WithBaseURL(baseURL))
-
-	return client.ChatCompletion(ctx, prepared)
+	// 成功后刷新最近验证时间，帮助前端提示凭据连通状态。
+	now := time.Now()
+	credential.LastVerifiedAt = &now
+	if updateErr := s.repo.Update(ctx, credential); updateErr != nil {
+		return deepseek.ChatCompletionResponse{}, fmt.Errorf("update last_verified_at: %w", updateErr)
+	}
+	return resp, nil
 }
 
 // prepareDeepSeekRequest 会根据用户请求与持久化配置补齐模型参数，确保模型字段永远有值。
@@ -240,4 +249,28 @@ func asBool(value any) (bool, bool) {
 		}
 	}
 	return false, false
+}
+
+func (s *Service) invokeDeepSeek(ctx context.Context, credential *domain.UserModelCredential, req deepseek.ChatCompletionRequest) (deepseek.ChatCompletionResponse, error) {
+	if credential == nil {
+		return deepseek.ChatCompletionResponse{}, ErrCredentialNotFound
+	}
+	if strings.EqualFold(credential.Status, "disabled") {
+		return deepseek.ChatCompletionResponse{}, ErrCredentialDisabled
+	}
+
+	apiKeyPlain, err := security.Decrypt(credential.APIKeyCipher)
+	if err != nil {
+		return deepseek.ChatCompletionResponse{}, fmt.Errorf("decrypt api key: %w", err)
+	}
+
+	prepared, err := prepareDeepSeekRequest(req, credential)
+	if err != nil {
+		return deepseek.ChatCompletionResponse{}, err
+	}
+
+	baseURL := strings.TrimSpace(credential.BaseURL)
+	client := deepseek.NewClient(string(apiKeyPlain), deepseek.WithBaseURL(baseURL))
+
+	return client.ChatCompletion(ctx, prepared)
 }

@@ -209,6 +209,117 @@ func TestInvokeDeepSeekChatCompletion(t *testing.T) {
 	}
 }
 
+func TestTestDeepSeekConnection(t *testing.T) {
+	key := make([]byte, 32)
+	for i := range key {
+		key[i] = byte(i + 2)
+	}
+	os.Setenv("MODEL_CREDENTIAL_MASTER_KEY", base64.StdEncoding.EncodeToString(key))
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var payload map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+			t.Fatalf("decode request payload: %v", err)
+		}
+		if payload["model"] != "deepseek-chat" {
+			t.Fatalf("expected model deepseek-chat, got %v", payload["model"])
+		}
+
+		response := map[string]any{
+			"id":      "test-connection",
+			"object":  "chat.completion",
+			"created": 999,
+			"model":   "deepseek-chat",
+			"choices": []any{
+				map[string]any{
+					"index": 0,
+					"message": map[string]any{
+						"role":    "assistant",
+						"content": "pong",
+					},
+					"finish_reason": "stop",
+				},
+			},
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(response)
+	}))
+	defer server.Close()
+
+	svc, _, _, userID := newTestModelService(t)
+	credential, err := svc.Create(context.Background(), userID, modelsvc.CreateInput{
+		Provider:    "deepseek",
+		ModelKey:    "deepseek-chat",
+		DisplayName: "DeepSeek",
+		BaseURL:     server.URL,
+		APIKey:      "sk-test",
+		ExtraConfig: map[string]any{},
+	})
+	if err != nil {
+		t.Fatalf("create credential: %v", err)
+	}
+
+	resp, err := svc.TestDeepSeekConnection(context.Background(), userID, credential.ID, deepseek.ChatCompletionRequest{
+		Messages: []deepseek.ChatMessage{{Role: "user", Content: "ping"}},
+	})
+	if err != nil {
+		t.Fatalf("test connection: %v", err)
+	}
+	if resp.ID != "test-connection" {
+		t.Fatalf("unexpected response id: %s", resp.ID)
+	}
+
+	list, err := svc.List(context.Background(), userID)
+	if err != nil {
+		t.Fatalf("list credentials: %v", err)
+	}
+	found := false
+	for _, item := range list {
+		if item.ID == credential.ID {
+			found = true
+			if item.LastVerifiedAt == nil {
+				t.Fatalf("expected last_verified_at to be set")
+			}
+		}
+	}
+	if !found {
+		t.Fatalf("credential not found in list result")
+	}
+}
+
+func TestTestDeepSeekConnectionDisabled(t *testing.T) {
+	key := make([]byte, 32)
+	for i := range key {
+		key[i] = byte(i + 3)
+	}
+	os.Setenv("MODEL_CREDENTIAL_MASTER_KEY", base64.StdEncoding.EncodeToString(key))
+
+	svc, _, _, userID := newTestModelService(t)
+	credential, err := svc.Create(context.Background(), userID, modelsvc.CreateInput{
+		Provider:    "deepseek",
+		ModelKey:    "deepseek-chat",
+		DisplayName: "DeepSeek",
+		BaseURL:     "",
+		APIKey:      "sk-disabled",
+		ExtraConfig: map[string]any{},
+	})
+	if err != nil {
+		t.Fatalf("create credential: %v", err)
+	}
+
+	status := "disabled"
+	if _, err := svc.Update(context.Background(), userID, credential.ID, modelsvc.UpdateInput{Status: &status}); err != nil {
+		t.Fatalf("disable credential: %v", err)
+	}
+
+	_, err = svc.TestDeepSeekConnection(context.Background(), userID, credential.ID, deepseek.ChatCompletionRequest{
+		Messages: []deepseek.ChatMessage{{Role: "user", Content: "ping"}},
+	})
+	if !errors.Is(err, modelsvc.ErrCredentialDisabled) {
+		t.Fatalf("expected ErrCredentialDisabled, got %v", err)
+	}
+}
+
 func TestInvokeDeepSeekWithDisabledCredential(t *testing.T) {
 	key := make([]byte, 32)
 	for i := range key {

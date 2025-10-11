@@ -179,6 +179,7 @@ go run ./backend/cmd/sendmail -to you@example.com -name "测试账号"
 3. 合并 `extra_config` 与本次调用显式传入的参数，将缺失字段（如 `max_tokens`）补齐。  
 4. 发送 `POST {base_url}/chat/completions` 请求并返回标准结构。  
 5. 若 DeepSeek 返回 `4xx/5xx`，会封装为 `deepseek.APIError`，包含 `status_code` / `type` / `code` 信息，方便上层定位问题。
+6. 设置页新增了“测试连通性”操作，会调用 `POST /api/models/{id}/test`，成功后更新 `last_verified_at` 以便追踪最近一次验证时间。
 
 响应示例：
 

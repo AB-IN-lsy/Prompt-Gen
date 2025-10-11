@@ -1,280 +1,292 @@
 {
-    "app": {
-        "name": "PromptGen"
+  "app": {
+    "name": "PromptGen"
+  },
+  "nav": {
+    "dashboard": "Dashboard",
+    "myPrompts": "我的 Prompt",
+    "workbench": "Prompt 工作台",
+    "settings": "设置",
+    "help": "帮助与日志"
+  },
+  "appShell": {
+    "searchPlaceholder": "搜索主题或关键词...",
+    "syncNow": "立即同步",
+    "logout": "退出登录",
+    "logoutSuccess": "已安全退出登录"
+  },
+  "avatarUploader": {
+    "title": "头像",
+    "description": "支持 PNG、JPG、WEBP 等格式，大小不超过 5 MB。",
+    "upload": "上传头像",
+    "change": "重新上传",
+    "remove": "移除头像",
+    "uploading": "上传中...",
+    "uploadSuccess": "头像上传成功",
+    "uploadError": "头像上传失败，请稍后再试"
+  },
+  "promptWorkbench": {
+    "keywordsTitle": "关键词治理",
+    "keywordsSubtitle": "调优提示词焦点",
+    "addKeyword": "添加关键词",
+    "inputPlaceholder": "输入关键词",
+    "positive": "正向关键词",
+    "negative": "负向关键词",
+    "topicDefault": "前端工程师面试",
+    "positiveSectionTitle": "正向关键词",
+    "positiveHint": "至少保留一项",
+    "negativeSectionTitle": "负向关键词",
+    "emptySection": "暂无{{title}}，可通过“添加关键词”迅速补充。",
+    "workbenchEyebrow": "Prompt 工作台",
+    "workbenchTitle": "打造你的面试脚本",
+    "regenerate": "再次生成",
+    "topicLabel": "主题",
+    "modelLabel": "模型选择",
+    "draftLabel": "Prompt 草稿",
+    "draftPlaceholder": "生成或编辑你的 Prompt...",
+    "autosave": "自动保存",
+    "autosaveSaving": "保存中...",
+    "autosaveSaved": "最新变更已自动保存",
+    "cancel": "取消",
+    "saveDraft": "保存草稿",
+    "publish": "发布",
+    "weight": "权重 {{value}}",
+    "modelFallback": "模型不可用，已自动切换到 {{model}}。",
+    "modelDisabled": "该模型已禁用或不可用。"
+  },
+  "common": {
+    "language": "语言",
+    "confirm": "确认",
+    "close": "关闭",
+    "loading": "加载中..."
+  },
+  "auth": {
+    "login": {
+      "title": "欢迎回来",
+      "subtitle": "登录后继续打造你的 Prompt",
+      "cta": "登录",
+      "switch": "还没有账号？",
+      "switchCta": "立即注册",
+      "success": "登录成功"
     },
-    "nav": {
-        "dashboard": "Dashboard",
-        "myPrompts": "我的 Prompt",
-        "workbench": "Prompt 工作台",
-        "settings": "设置",
-        "help": "帮助与日志"
+    "register": {
+      "title": "注册 PromptGen 账号",
+      "subtitle": "加入工作台并开始构建提示词",
+      "cta": "创建账号",
+      "switch": "已经有账号？",
+      "switchCta": "直接登录",
+      "success": "账号创建成功"
     },
-    "appShell": {
-        "searchPlaceholder": "搜索主题或关键词...",
-        "syncNow": "立即同步",
-        "logout": "退出登录",
-        "logoutSuccess": "已安全退出登录"
+    "form": {
+      "username": "用户名",
+      "email": "邮箱",
+      "password": "密码",
+      "captcha": "验证码"
     },
-    "avatarUploader": {
-        "title": "头像",
-        "description": "支持 PNG、JPG、WEBP 等格式，大小不超过 5 MB。",
-        "upload": "上传头像",
-        "change": "重新上传",
-        "remove": "移除头像",
-        "uploading": "上传中...",
-        "uploadSuccess": "头像上传成功",
-        "uploadError": "头像上传失败，请稍后再试"
+    "validation": {
+      "usernameRequired": "请填写用户名",
+      "usernameTooShort": "用户名至少需要 2 个字符",
+      "usernameTaken": "该用户名已被使用",
+      "emailInvalid": "请填写合法的邮箱地址",
+      "emailTaken": "该邮箱已被注册",
+      "passwordRequired": "请填写密码",
+      "passwordTooShort": "密码至少需要 8 个字符",
+      "captchaRequired": "请填写验证码"
     },
-    "promptWorkbench": {
-        "keywordsTitle": "关键词治理",
-        "keywordsSubtitle": "调优提示词焦点",
-        "addKeyword": "添加关键词",
-        "inputPlaceholder": "输入关键词",
-        "positive": "正向关键词",
-        "negative": "负向关键词",
-        "topicDefault": "前端工程师面试",
-        "positiveSectionTitle": "正向关键词",
-        "positiveHint": "至少保留一项",
-        "negativeSectionTitle": "负向关键词",
-        "emptySection": "暂无{{title}}，可通过“添加关键词”迅速补充。",
-        "workbenchEyebrow": "Prompt 工作台",
-        "workbenchTitle": "打造你的面试脚本",
-        "regenerate": "再次生成",
-        "topicLabel": "主题",
-        "modelLabel": "模型选择",
-        "draftLabel": "Prompt 草稿",
-        "draftPlaceholder": "生成或编辑你的 Prompt...",
-        "autosave": "自动保存",
-        "autosaveSaving": "保存中...",
-        "autosaveSaved": "最新变更已自动保存",
-        "cancel": "取消",
-        "saveDraft": "保存草稿",
-        "publish": "发布",
-        "weight": "权重 {{value}}",
-        "modelFallback": "模型不可用，已自动切换到 {{model}}。",
-        "modelDisabled": "该模型已禁用或不可用。"
+    "captcha": {
+      "placeholder": "请输入图中的字符",
+      "refresh": "刷新验证码",
+      "unavailable": "暂无法获取验证码",
+      "alt": "验证码图片",
+      "required": "请填写上方的验证码",
+      "retrying": "验证码加载失败，正在自动重试 ({{attempt}}/{{total}})…",
+      "failed": "验证码仍未加载成功，请刷新后再试。",
+      "manualHint": "如多次失败，请刷新页面或联系管理员。"
     },
-    "common": {
-        "language": "语言",
-        "confirm": "确认",
-        "close": "关闭",
-        "loading": "加载中..."
+    "verification": {
+      "required": "邮箱尚未验证，请先完成验证再登录。",
+      "blockTitle": "需要验证邮箱",
+      "blockMessage": "点击下方的“发送验证邮件”，然后在邮箱里打开验证链接即可完成操作。",
+      "helper": "点击下方按钮发送验证邮件，并按照邮件内的提示完成验证。",
+      "send": "发送验证邮件",
+      "sent": "验证邮件已发送，请查收。",
+      "sentWithToken": "验证邮件已发送（Token：{{token}}）。",
+      "sentNeutral": "如果该邮箱存在账户，将会收到验证邮件。",
+      "confirmed": "邮箱已验证成功，正在为你登录...",
+      "confirmedManual": "邮箱验证成功，请再次点击“登录”继续。",
+      "confirm": "提交验证码",
+      "tokenPlaceholder": "输入邮件中的验证码",
+      "tokenRequired": "请先输入验证码。",
+      "devHint": "开发环境快捷验证令牌：",
+      "pageTitle": "验证邮箱",
+      "pageSubtitle": "确认邮箱地址后即可使用 PromptGen 全部能力。",
+      "emailPlaceholder": "请输入你的邮箱地址",
+      "emailRequired": "请先填写邮箱地址。",
+      "autoSuccess": "邮箱已验证，可以直接登录。",
+      "backToLogin": "返回登录",
+      "goToPage": "打开邮箱验证页面",
+      "emailReminder": "若未收到邮件，请检查垃圾箱或稍后再次发送。",
+      "pageIntro": "请输入注册时使用的邮箱，我们会立即发送新的验证链接。",
+      "pageSteps": "完成邮件中的验证后，可返回此页或直接登录继续使用。"
+    }
+  },
+  "dashboard": {
+    "title": "工作台概览",
+    "welcome": "欢迎回来，{{name}}",
+    "subtitle": "了解今天 Prompt 工作台的关键动态。",
+    "createPrompt": "创建 Prompt",
+    "openWorkbench": "打开工作台",
+    "metrics": {
+      "activePrompts": "在线 Prompt",
+      "drafts": "待审核草稿",
+      "successRate": "平均成功率"
     },
-    "auth": {
-        "login": {
-            "title": "欢迎回来",
-            "subtitle": "登录后继续打造你的 Prompt",
-            "cta": "登录",
-            "switch": "还没有账号？",
-            "switchCta": "立即注册",
-            "success": "登录成功"
-        },
-        "register": {
-            "title": "注册 PromptGen 账号",
-            "subtitle": "加入工作台并开始构建提示词",
-            "cta": "创建账号",
-            "switch": "已经有账号？",
-            "switchCta": "直接登录",
-            "success": "账号创建成功"
-        },
-        "form": {
-            "username": "用户名",
-            "email": "邮箱",
-            "password": "密码",
-            "captcha": "验证码"
-        },
-        "validation": {
-            "usernameRequired": "请填写用户名",
-            "usernameTooShort": "用户名至少需要 2 个字符",
-            "usernameTaken": "该用户名已被使用",
-            "emailInvalid": "请填写合法的邮箱地址",
-            "emailTaken": "该邮箱已被注册",
-            "passwordRequired": "请填写密码",
-            "passwordTooShort": "密码至少需要 8 个字符",
-            "captchaRequired": "请填写验证码"
-        },
-        "captcha": {
-            "placeholder": "请输入图中的字符",
-            "refresh": "刷新验证码",
-            "unavailable": "暂无法获取验证码",
-            "alt": "验证码图片",
-            "required": "请填写上方的验证码",
-            "retrying": "验证码加载失败，正在自动重试 ({{attempt}}/{{total}})…",
-            "failed": "验证码仍未加载成功，请刷新后再试。",
-            "manualHint": "如多次失败，请刷新页面或联系管理员。"
-        },
-        "verification": {
-            "required": "邮箱尚未验证，请先完成验证再登录。",
-            "blockTitle": "需要验证邮箱",
-            "blockMessage": "点击下方的“发送验证邮件”，然后在邮箱里打开验证链接即可完成操作。",
-            "helper": "点击下方按钮发送验证邮件，并按照邮件内的提示完成验证。",
-            "send": "发送验证邮件",
-            "sent": "验证邮件已发送，请查收。",
-            "sentWithToken": "验证邮件已发送（Token：{{token}}）。",
-            "sentNeutral": "如果该邮箱存在账户，将会收到验证邮件。",
-            "confirmed": "邮箱已验证成功，正在为你登录...",
-            "confirmedManual": "邮箱验证成功，请再次点击“登录”继续。",
-            "confirm": "提交验证码",
-            "tokenPlaceholder": "输入邮件中的验证码",
-            "tokenRequired": "请先输入验证码。",
-            "devHint": "开发环境快捷验证令牌：",
-            "pageTitle": "验证邮箱",
-            "pageSubtitle": "确认邮箱地址后即可使用 PromptGen 全部能力。",
-            "emailPlaceholder": "请输入你的邮箱地址",
-            "emailRequired": "请先填写邮箱地址。",
-            "autoSuccess": "邮箱已验证，可以直接登录。",
-            "backToLogin": "返回登录",
-            "goToPage": "打开邮箱验证页面",
-            "emailReminder": "若未收到邮件，请检查垃圾箱或稍后再次发送。",
-            "pageIntro": "请输入注册时使用的邮箱，我们会立即发送新的验证链接。",
-            "pageSteps": "完成邮件中的验证后，可返回此页或直接登录继续使用。"
-        }
+    "trend": {
+      "up": "较上周提升 {{value}}",
+      "down": "较上周下降 {{value}}"
     },
-    "dashboard": {
-        "title": "工作台概览",
-        "welcome": "欢迎回来，{{name}}",
-        "subtitle": "了解今天 Prompt 工作台的关键动态。",
-        "createPrompt": "创建 Prompt",
-        "openWorkbench": "打开工作台",
-        "metrics": {
-            "activePrompts": "在线 Prompt",
-            "drafts": "待审核草稿",
-            "successRate": "平均成功率"
-        },
-        "trend": {
-            "up": "较上周提升 {{value}}",
-            "down": "较上周下降 {{value}}"
-        },
-        "activity": {
-            "title": "最新动态",
-            "empty": "暂时没有动态，发布一个 Prompt 吧。"
-        },
-        "activityItems": {
-            "promptPublished": "发布了 Prompt「{{title}}」",
-            "promptUpdated": "更新了草稿「{{title}}」",
-            "keywordAdded": "新增关键词「{{title}}」"
-        },
-        "performance": {
-            "title": "Prompt 表现",
-            "cta": "查看全部分析",
-            "columns": {
-                "prompt": "Prompt",
-                "model": "模型",
-                "conversion": "转化率"
-            }
-        },
-        "insights": {
-            "title": "关键词聚焦",
-            "subtitle": "本周表现最佳的关键词"
-        }
+    "activity": {
+      "title": "最新动态",
+      "empty": "暂时没有动态，发布一个 Prompt 吧。"
     },
-    "settings": {
-        "title": "设置",
-        "subtitle": "更新账户资料和界面偏好。",
-        "languageCardTitle": "界面语言",
-        "languageCardDescription": "在英文与简体中文之间切换界面显示语言。",
-        "languageSelectLabel": "显示语言",
-        "themeCard": {
-            "title": "界面主题",
-            "description": "选择浅色、深色或跟随系统的模式。",
-            "options": {
-                "system": "跟随系统",
-                "light": "浅色模式",
-                "dark": "深色模式"
-            },
-            "optionDescriptions": {
-                "system": "根据系统偏好自动切换",
-                "light": "使用浅色背景与高亮界面",
-                "dark": "使用深色背景与高对比界面"
-            },
-            "systemHint": "当前根据系统设定显示{{mode}}模式",
-            "systemHintLight": "浅色",
-            "systemHintDark": "深色"
-        },
-        "profileCard": {
-            "title": "个人资料",
-            "description": "修改用户名、邮箱、偏好模型等信息。",
-            "username": "用户名",
-            "email": "邮箱",
-            "preferredModel": "偏好模型",
-            "preferredModelPlaceholder": "例如 deepseek、gpt-4o 等",
-            "syncEnabled": "云同步",
-            "syncEnabledLabel": "在多设备之间同步提示词设置",
-            "save": "保存资料"
-        },
-        "profileSaveSuccess": "资料已更新",
-        "syncEnabledOn": "已开启",
-        "syncEnabledOff": "已关闭",
-        "verificationPending": {
-            "notice": "你的邮箱尚未完成验证，建议尽快验证以解锁全部功能。",
-            "action": "立即验证",
-            "openPage": "打开验证页面",
-            "emailLabel": "我们会将验证邮件发送至 {{email}}。",
-            "emailLabelFallback": "请先填写邮箱地址再请求验证邮件。",
-            "sent": "验证邮件已发送，请检查收件箱。",
-            "sentDev": "验证邮件已发送（开发 token：{{token}}）。",
-            "sentNeutral": "如果该邮箱已有账号，将在稍后收到验证邮件。",
-            "emailMissing": "请先更新邮箱地址再请求验证邮件。",
-            "remaining": "今日还可尝试 {{count}} 次。",
-            "rateLimit": "请等待 {{seconds}} 秒后再试。"
-        },
-        "modelCard": {
-            "title": "模型凭据",
-            "description": "管理接入 DeepSeek、GPT-5 等模型所需的 API Key，并设置默认模型。",
-            "fetchError": "模型列表加载失败，请稍后重试。",
-            "retry": "重新加载",
-            "empty": "还没有任何模型配置，先在下方填写信息添加一个吧。",
-            "preferredBadge": "当前偏好",
-            "statusEnabled": "已启用",
-            "statusDisabled": "已禁用",
-            "meta": "提供方：{{provider}} ・ 模型键：{{model}}",
-            "baseUrl": "自定义地址：{{url}}",
-            "preferredCurrent": "已设为偏好模型",
-            "setPreferred": "设为偏好模型",
-            "enable": "启用",
-            "disable": "禁用",
-            "delete": "删除",
-            "deleteSuccess": "模型已删除。",
-            "deleteConfirm": "确定要删除模型「{{name}}」吗？该操作不可撤销。",
-            "enableSuccess": "模型已启用。",
-            "disableSuccess": "模型已禁用，已回退到默认模型。",
-            "updateSuccess": "模型信息已更新。",
-            "preferredSuccess": "偏好模型已更新。",
-            "formRequired": "请完整填写提供方、模型键、展示名称和 API Key。",
-            "extraConfigInvalid": "附加配置必须是合法的 JSON。",
-            "addTitle": "新增模型",
-            "addDescription": "支持填写自定义 Base URL 与额外参数，JSON 会原样传给后端保存。",
-            "provider": "提供方标识",
-            "modelKey": "模型键",
-            "displayName": "展示名称",
-            "baseUrlLabel": "自定义 Base URL（可选）",
-            "apiKey": "API Key",
-            "extraConfig": "附加配置 JSON（可选）",
-            "extraConfigHint": "示例：{\"default_model\":\"gpt-5\"}，留空则保存为 {}。",
-            "createButton": "添加模型",
-            "createSuccess": "模型添加成功。"
-        },
-        "errors": {
-            "usernameRequired": "请填写用户名",
-            "emailInvalid": "请输入合法的邮箱地址",
-            "emailTaken": "该邮箱已被其他账号使用",
-            "usernameTaken": "该用户名已被其他账号使用"
-        }
+    "activityItems": {
+      "promptPublished": "发布了 Prompt「{{title}}」",
+      "promptUpdated": "更新了草稿「{{title}}」",
+      "keywordAdded": "新增关键词「{{title}}」"
+    },
+    "performance": {
+      "title": "Prompt 表现",
+      "cta": "查看全部分析",
+      "columns": {
+        "prompt": "Prompt",
+        "model": "模型",
+        "conversion": "转化率"
+      }
+    },
+    "insights": {
+      "title": "关键词聚焦",
+      "subtitle": "本周表现最佳的关键词"
+    }
+  },
+  "settings": {
+    "title": "设置",
+    "subtitle": "更新账户资料和界面偏好。",
+    "languageCardTitle": "界面语言",
+    "languageCardDescription": "在英文与简体中文之间切换界面显示语言。",
+    "languageSelectLabel": "显示语言",
+    "themeCard": {
+      "title": "界面主题",
+      "description": "选择浅色、深色或跟随系统的模式。",
+      "options": {
+        "system": "跟随系统",
+        "light": "浅色模式",
+        "dark": "深色模式"
+      },
+      "optionDescriptions": {
+        "system": "根据系统偏好自动切换",
+        "light": "使用浅色背景与高亮界面",
+        "dark": "使用深色背景与高对比界面"
+      },
+      "systemHint": "当前根据系统设定显示{{mode}}模式",
+      "systemHintLight": "浅色",
+      "systemHintDark": "深色"
+    },
+    "profileCard": {
+      "title": "个人资料",
+      "description": "修改用户名、邮箱、偏好模型等信息。",
+      "username": "用户名",
+      "email": "邮箱",
+      "preferredModel": "偏好模型",
+      "preferredModelPlaceholder": "例如 deepseek、gpt-4o 等",
+      "syncEnabled": "云同步",
+      "syncEnabledLabel": "在多设备之间同步提示词设置",
+      "save": "保存资料"
+    },
+    "profileSaveSuccess": "资料已更新",
+    "syncEnabledOn": "已开启",
+    "syncEnabledOff": "已关闭",
+    "verificationPending": {
+      "notice": "你的邮箱尚未完成验证，建议尽快验证以解锁全部功能。",
+      "action": "立即验证",
+      "openPage": "打开验证页面",
+      "emailLabel": "我们会将验证邮件发送至 {{email}}。",
+      "emailLabelFallback": "请先填写邮箱地址再请求验证邮件。",
+      "sent": "验证邮件已发送，请检查收件箱。",
+      "sentDev": "验证邮件已发送（开发 token：{{token}}）。",
+      "sentNeutral": "如果该邮箱已有账号，将在稍后收到验证邮件。",
+      "emailMissing": "请先更新邮箱地址再请求验证邮件。",
+      "remaining": "今日还可尝试 {{count}} 次。",
+      "rateLimit": "请等待 {{seconds}} 秒后再试。"
+    },
+    "modelCard": {
+      "title": "模型凭据",
+      "description": "管理接入 DeepSeek、GPT-5 等模型所需的 API Key，并设置默认模型。",
+      "fetchError": "模型列表加载失败，请稍后重试。",
+      "retry": "重新加载",
+      "empty": "还没有任何模型配置，先在下方填写信息添加一个吧。",
+      "preferredBadge": "当前偏好",
+      "statusEnabled": "已启用",
+      "statusDisabled": "已禁用",
+      "meta": "提供方：{{provider}} ・ 模型键：{{model}}",
+      "baseUrl": "自定义地址：{{url}}",
+      "preferredCurrent": "已设为偏好模型",
+      "setPreferred": "设为偏好模型",
+      "enable": "启用",
+      "disable": "禁用",
+      "delete": "删除",
+      "deleteSuccess": "模型已删除。",
+      "deleteConfirm": "确定要删除模型「{{name}}」吗？该操作不可撤销。",
+      "enableSuccess": "模型已启用。",
+      "disableSuccess": "模型已禁用，已回退到默认模型。",
+      "updateSuccess": "模型信息已更新。",
+      "preferredSuccess": "偏好模型已更新。",
+      "test": "测试连通性",
+      "testing": "测试中…",
+      "testSuccess": "测试请求成功。",
+      "testSuccessWithReply": "测试成功，模型回复：{{reply}}",
+      "edit": "编辑",
+      "editTitle": "编辑 {{name}}",
+      "editApiKeyHint": "留空则保留现有密钥。",
+      "editCancel": "取消",
+      "editSave": "保存修改",
+      "editDisplayNameRequired": "展示名称不能为空。",
+      "lastVerified": "最近校验：{{time}}",
+      "lastVerifiedNever": "尚未校验",
+      "formRequired": "请完整填写提供方、模型键、展示名称和 API Key。",
+      "extraConfigInvalid": "附加配置必须是合法的 JSON。",
+      "addTitle": "新增模型",
+      "addDescription": "支持填写自定义 Base URL 与额外参数，JSON 会原样传给后端保存。",
+      "provider": "提供方标识",
+      "modelKey": "模型键",
+      "displayName": "展示名称",
+      "baseUrlLabel": "自定义 Base URL（可选）",
+      "apiKey": "API Key",
+      "extraConfig": "附加配置 JSON（可选）",
+      "extraConfigHint": "示例：{\"default_model\":\"gpt-5\"}，留空则保存为 {}。",
+      "createButton": "添加模型",
+      "createSuccess": "模型添加成功。"
     },
     "errors": {
-        "generic": "发生异常，请稍后重试。",
-        "BAD_REQUEST": "请求参数有误，请检查后重试。",
-        "UNAUTHORIZED": "登录状态已过期，请重新登录。",
-        "FORBIDDEN": "您没有执行该操作的权限。",
-        "NOT_FOUND": "未找到相关资源。",
-        "CONFLICT": "提交的数据与现有记录冲突。",
-        "TOO_MANY_REQUESTS": "请求过于频繁，请稍后再试。",
-        "INTERNAL_ERROR": "服务器开小差了。",
-        "CAPTCHA_INVALID": "验证码不正确。",
-        "CAPTCHA_EXPIRED": "验证码已过期，请重新获取。",
-        "CAPTCHA_REQUIRED": "需要填写验证码。",
-        "EMAIL_NOT_VERIFIED": "邮箱尚未验证，请先完成验证。",
-        "EMAIL_ALREADY_VERIFIED": "邮箱已验证，无需重复操作。",
-        "VERIFICATION_TOKEN_INVALID": "验证码无效或已过期，请重新获取。"
+      "usernameRequired": "请填写用户名",
+      "emailInvalid": "请输入合法的邮箱地址",
+      "emailTaken": "该邮箱已被其他账号使用",
+      "usernameTaken": "该用户名已被其他账号使用"
     }
+  },
+  "errors": {
+    "generic": "发生异常，请稍后重试。",
+    "BAD_REQUEST": "请求参数有误，请检查后重试。",
+    "UNAUTHORIZED": "登录状态已过期，请重新登录。",
+    "FORBIDDEN": "您没有执行该操作的权限。",
+    "NOT_FOUND": "未找到相关资源。",
+    "CONFLICT": "提交的数据与现有记录冲突。",
+    "TOO_MANY_REQUESTS": "请求过于频繁，请稍后再试。",
+    "INTERNAL_ERROR": "服务器开小差了。",
+    "CAPTCHA_INVALID": "验证码不正确。",
+    "CAPTCHA_EXPIRED": "验证码已过期，请重新获取。",
+    "CAPTCHA_REQUIRED": "需要填写验证码。",
+    "EMAIL_NOT_VERIFIED": "邮箱尚未验证，请先完成验证。",
+    "EMAIL_ALREADY_VERIFIED": "邮箱已验证，无需重复操作。",
+    "VERIFICATION_TOKEN_INVALID": "验证码无效或已过期，请重新获取。"
+  }
 }
