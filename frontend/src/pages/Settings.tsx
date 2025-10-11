@@ -4,9 +4,9 @@
  * @FilePath: \electron-go-app\frontend\src\pages\Settings.tsx
  * @LastEditTime: 2025-10-09 23:33:18
  */
-import { ChangeEvent, FormEvent, useEffect, useMemo, useState } from "react";
+import { ChangeEvent, FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
 import { GlassCard } from "../components/ui/glass-card";
@@ -15,9 +15,22 @@ import { LANGUAGE_OPTIONS } from "../i18n";
 import { Input } from "../components/ui/input";
 import { Button } from "../components/ui/button";
 import { Badge } from "../components/ui/badge";
+import { Textarea } from "../components/ui/textarea";
 import { AvatarUploader } from "../components/account/AvatarUploader";
 import { useAuth } from "../hooks/useAuth";
-import { updateCurrentUser, requestEmailVerification, type UpdateCurrentUserRequest } from "../lib/api";
+import {
+    updateCurrentUser,
+    requestEmailVerification,
+    fetchUserModels,
+    createUserModel,
+    updateUserModel,
+    deleteUserModel,
+    fetchCurrentUser,
+    type UpdateCurrentUserRequest,
+    type UserModelCredential,
+    type CreateUserModelRequest,
+    type UpdateUserModelRequest,
+} from "../lib/api";
 import { ApiError, isApiError } from "../lib/errors";
 import { EMAIL_VERIFIED_EVENT_KEY } from "../lib/verification";
 
@@ -35,6 +48,36 @@ export default function SettingsPage() {
     const setProfile = useAuth((state) => state.setProfile);
     const initializeAuth = useAuth((state) => state.initialize);
     const isEmailVerified = Boolean(profile?.user.email_verified_at);
+    const queryClient = useQueryClient();
+
+    // 模型创建表单临时状态（界面提交时再转换）
+    const [modelForm, setModelForm] = useState({
+        provider: "",
+        model_key: "",
+        display_name: "",
+        base_url: "",
+        api_key: "",
+        extra_config: "",
+    });
+    const [modelFormError, setModelFormError] = useState<string | null>(null);
+
+    // 读取模型凭据列表，用于展示和联动
+    const modelsQuery = useQuery<UserModelCredential[]>({
+        queryKey: ["models"],
+        queryFn: fetchUserModels,
+    });
+
+    // 成功操作后刷新用户资料，保证偏好模型实时同步
+    const refreshProfile = useCallback(async () => {
+        try {
+            const next = await fetchCurrentUser();
+            setProfile(next);
+            return next;
+        } catch (error) {
+            console.error("Failed to refresh profile", error);
+            return null;
+        }
+    }, [setProfile]);
 
     const [profileForm, setProfileForm] = useState({
         username: profile?.user.username ?? "",
@@ -64,6 +107,73 @@ export default function SettingsPage() {
         setVerificationTargetEmail(profile?.user.email ?? "");
         setVerificationFeedback(null);
     }, [profile]);
+
+    const handleModelRequestError = useCallback(
+        (error: unknown) => {
+            if (error instanceof ApiError) {
+                toast.error(error.message ?? t("errors.generic"));
+            } else {
+                toast.error(t("errors.generic"));
+            }
+        },
+        [t],
+    );
+
+    const createModelMutation = useMutation<UserModelCredential, unknown, CreateUserModelRequest>({
+        mutationFn: (payload: CreateUserModelRequest) => createUserModel(payload),
+        onSuccess: async () => {
+            toast.success(t("settings.modelCard.createSuccess"));
+            setModelForm({
+                provider: "",
+                model_key: "",
+                display_name: "",
+                base_url: "",
+                api_key: "",
+                extra_config: "",
+            });
+            setModelFormError(null);
+            await queryClient.invalidateQueries({ queryKey: ["models"] });
+        },
+        onError: handleModelRequestError,
+    });
+
+    const updateModelMutation = useMutation<UserModelCredential, unknown, { id: number; data: UpdateUserModelRequest }>({
+        mutationFn: ({ id, data }: { id: number; data: UpdateUserModelRequest }) => updateUserModel(id, data),
+        onSuccess: async (_credential, variables) => {
+            await queryClient.invalidateQueries({ queryKey: ["models"] });
+            if (variables.data.status) {
+                const isDisabled = variables.data.status.toLowerCase() === "disabled";
+                toast.success(
+                    isDisabled ? t("settings.modelCard.disableSuccess") : t("settings.modelCard.enableSuccess"),
+                );
+                if (isDisabled) {
+                    await refreshProfile();
+                }
+            } else {
+                toast.success(t("settings.modelCard.updateSuccess"));
+            }
+        },
+        onError: handleModelRequestError,
+    });
+
+    const deleteModelMutation = useMutation<void, unknown, number>({
+        mutationFn: (id: number) => deleteUserModel(id),
+        onSuccess: async (_, id) => {
+            toast.success(t("settings.modelCard.deleteSuccess"));
+            await queryClient.invalidateQueries({ queryKey: ["models"] });
+            await refreshProfile();
+        },
+        onError: handleModelRequestError,
+    });
+
+    const setPreferredMutation = useMutation<Awaited<ReturnType<typeof updateCurrentUser>>, unknown, string>({
+        mutationFn: (modelKey: string) => updateCurrentUser({ preferred_model: modelKey }),
+        onSuccess: (data) => {
+            setProfile(data);
+            toast.success(t("settings.modelCard.preferredSuccess"));
+        },
+        onError: handleModelRequestError,
+    });
 
     useEffect(() => {
         if (typeof window === "undefined") {
@@ -234,6 +344,99 @@ export default function SettingsPage() {
         },
     });
 
+    const handleModelInputChange =
+        (field: keyof typeof modelForm) =>
+        (event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+            const value = event.target.value;
+            setModelFormError(null);
+            setModelForm((prev) => ({ ...prev, [field]: value }));
+        };
+
+    // 表单校验 + 调用创建接口
+    const handleCreateModelSubmit = (event: FormEvent<HTMLFormElement>) => {
+        event.preventDefault();
+        if (createModelMutation.isPending) {
+            return;
+        }
+
+        const provider = modelForm.provider.trim();
+        const modelKey = modelForm.model_key.trim();
+        const displayName = modelForm.display_name.trim();
+        const apiKey = modelForm.api_key.trim();
+        const baseUrl = modelForm.base_url.trim();
+        const extraRaw = modelForm.extra_config.trim();
+
+        if (!provider || !modelKey || !displayName || !apiKey) {
+            setModelFormError(t("settings.modelCard.formRequired"));
+            return;
+        }
+
+        let extraConfig: Record<string, unknown> | undefined;
+        if (extraRaw) {
+            try {
+                const parsed = JSON.parse(extraRaw);
+                if (parsed && typeof parsed === "object") {
+                    extraConfig = parsed as Record<string, unknown>;
+                } else {
+                    throw new Error("Invalid extra config");
+                }
+            } catch (error) {
+                console.warn("Failed to parse extra_config", error);
+                setModelFormError(t("settings.modelCard.extraConfigInvalid"));
+                return;
+            }
+        }
+
+        const payload: CreateUserModelRequest = {
+            provider,
+            model_key: modelKey,
+            display_name: displayName,
+            api_key: apiKey,
+            base_url: baseUrl || undefined,
+            extra_config: extraConfig,
+        };
+
+        createModelMutation.mutate(payload);
+    };
+
+    // 启用/禁用模型开关
+    const handleToggleModelStatus = (credential: UserModelCredential) => {
+        const currentStatus = (credential.status ?? "enabled").toLowerCase();
+        const nextStatus = currentStatus === "enabled" ? "disabled" : "enabled";
+        updateModelMutation.mutate({
+            id: credential.id,
+            data: { status: nextStatus },
+        });
+    };
+
+    // 设置偏好模型（联动后端校验）
+    const handleSetPreferredModel = (credential: UserModelCredential) => {
+        if (setPreferredMutation.isPending && setPreferredMutation.variables === credential.model_key) {
+            return;
+        }
+        setPreferredMutation.mutate(credential.model_key);
+    };
+
+    // 删除模型凭据，附带二次确认
+    const handleDeleteModel = (credential: UserModelCredential) => {
+        if (
+            deleteModelMutation.isPending &&
+            deleteModelMutation.variables !== undefined &&
+            deleteModelMutation.variables === credential.id
+        ) {
+            return;
+        }
+        const confirmed = window.confirm(
+            t("settings.modelCard.deleteConfirm", {
+                name: credential.display_name || credential.model_key,
+            }),
+        );
+        if (!confirmed) {
+            return;
+        }
+        deleteModelMutation.mutate(credential.id);
+    };
+
     const themeOptions = useMemo(
         () => [
             {
@@ -254,6 +457,9 @@ export default function SettingsPage() {
         ],
         [t]
     );
+
+    const models = modelsQuery.data ?? [];
+    const currentPreferred = profile?.settings?.preferred_model ?? "";
 
     return (
         <div className="mx-auto flex w-full max-w-4xl flex-col gap-6 text-slate-700 transition-colors dark:text-slate-200">
@@ -416,6 +622,201 @@ export default function SettingsPage() {
                         </Button>
                     </div>
                 </form>
+            </GlassCard>
+
+            <GlassCard className="space-y-6">
+                <div>
+                    <h2 className="text-lg font-medium text-slate-800 dark:text-slate-100">{t("settings.modelCard.title")}</h2>
+                    <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{t("settings.modelCard.description")}</p>
+                </div>
+
+                <div className="space-y-3">
+                    {modelsQuery.isPending ? (
+                        <p className="text-sm text-slate-500 dark:text-slate-400">{t("common.loading")}</p>
+                    ) : modelsQuery.isError ? (
+                        <div className="rounded-xl border border-red-200 bg-red-50/70 px-4 py-3 text-sm text-red-700 dark:border-red-400/40 dark:bg-red-500/10 dark:text-red-200">
+                            <p>{t("settings.modelCard.fetchError")}</p>
+                            <Button
+                                type="button"
+                                variant="ghost"
+                                className="mt-2 text-sm text-red-600 hover:text-red-700 dark:text-red-300 dark:hover:text-red-200"
+                                onClick={() => modelsQuery.refetch()}
+                            >
+                                {t("settings.modelCard.retry")}
+                            </Button>
+                        </div>
+                    ) : models.length === 0 ? (
+                        <div className="rounded-xl border border-dashed border-slate-200 bg-white/60 px-4 py-6 text-center text-sm text-slate-500 dark:border-slate-700 dark:bg-slate-900/60 dark:text-slate-400">
+                            {t("settings.modelCard.empty")}
+                        </div>
+                    ) : (
+                        // 已有凭据列表，逐条展示操作按钮
+                        models.map((credential) => {
+                            const isPreferred = currentPreferred && credential.model_key === currentPreferred;
+                            const isDisabled = String(credential.status ?? "").toLowerCase() === "disabled";
+                            const toggleDisabled =
+                                updateModelMutation.isPending && updateModelMutation.variables?.id === credential.id;
+                            const deleteDisabled =
+                                deleteModelMutation.isPending && deleteModelMutation.variables === credential.id;
+                            const setPreferredDisabled =
+                                isDisabled ||
+                                isPreferred ||
+                                (setPreferredMutation.isPending &&
+                                    setPreferredMutation.variables === credential.model_key);
+
+                            return (
+                                <div
+                                    key={credential.id}
+                                    className="rounded-xl border border-white/60 bg-white/70 px-4 py-3 shadow-sm transition-colors dark:border-slate-800 dark:bg-slate-900/70"
+                                >
+                                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                                        <div className="space-y-1">
+                                            <div className="flex flex-wrap items-center gap-2">
+                                                <span className="text-sm font-medium text-slate-800 dark:text-slate-100">
+                                                    {credential.display_name || credential.model_key}
+                                                </span>
+                                                {isPreferred ? (
+                                                    <Badge className="bg-primary/10 text-primary dark:bg-primary/20">
+                                                        {t("settings.modelCard.preferredBadge")}
+                                                    </Badge>
+                                                ) : null}
+                                                <Badge
+                                                    variant={isDisabled ? "outline" : "default"}
+                                                    className={isDisabled ? "bg-slate-200 text-slate-600 dark:bg-slate-800/70 dark:text-slate-300" : ""}
+                                                >
+                                                    {isDisabled
+                                                        ? t("settings.modelCard.statusDisabled")
+                                                        : t("settings.modelCard.statusEnabled")}
+                                                </Badge>
+                                            </div>
+                                            <p className="text-xs text-slate-500 dark:text-slate-400">
+                                                {t("settings.modelCard.meta", {
+                                                    provider: credential.provider,
+                                                    model: credential.model_key,
+                                                })}
+                                            </p>
+                                            {credential.base_url ? (
+                                                <p className="text-xs text-slate-400 dark:text-slate-500">
+                                                    {t("settings.modelCard.baseUrl", { url: credential.base_url })}
+                                                </p>
+                                            ) : null}
+                                        </div>
+                                        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                                            <Button
+                                                type="button"
+                                                variant="outline"
+                                                disabled={setPreferredDisabled}
+                                                onClick={() => handleSetPreferredModel(credential)}
+                                            >
+                                                {isPreferred
+                                                    ? t("settings.modelCard.preferredCurrent")
+                                                    : t("settings.modelCard.setPreferred")}
+                                            </Button>
+                                            <Button
+                                                type="button"
+                                                variant="ghost"
+                                                disabled={toggleDisabled}
+                                                onClick={() => handleToggleModelStatus(credential)}
+                                            >
+                                                {isDisabled
+                                                    ? t("settings.modelCard.enable")
+                                                    : t("settings.modelCard.disable")}
+                                            </Button>
+                                            <Button
+                                                type="button"
+                                                variant="ghost"
+                                                className="text-red-600 hover:text-red-700 dark:text-red-300 dark:hover:text-red-200"
+                                                disabled={deleteDisabled}
+                                                onClick={() => handleDeleteModel(credential)}
+                                            >
+                                                {t("settings.modelCard.delete")}
+                                            </Button>
+                                        </div>
+                                    </div>
+                                </div>
+                            );
+                        })
+                    )}
+                </div>
+
+                <div className="border-t border-white/60 pt-4 dark:border-slate-800/70">
+                    {/* 新增模型表单，默认保存 JSON 字符串 */}
+                    <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-200">
+                        {t("settings.modelCard.addTitle")}
+                    </h3>
+                    <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                        {t("settings.modelCard.addDescription")}
+                    </p>
+                    <form className="mt-4 grid gap-3 md:grid-cols-2" onSubmit={handleCreateModelSubmit}>
+                        <div className="flex flex-col gap-2">
+                            <label className="text-xs font-medium text-slate-500 dark:text-slate-400">
+                                {t("settings.modelCard.provider")}
+                            </label>
+                            <Input value={modelForm.provider} onChange={handleModelInputChange("provider")} />
+                        </div>
+                        <div className="flex flex-col gap-2">
+                            <label className="text-xs font-medium text-slate-500 dark:text-slate-400">
+                                {t("settings.modelCard.modelKey")}
+                            </label>
+                            <Input value={modelForm.model_key} onChange={handleModelInputChange("model_key")} />
+                        </div>
+                        <div className="flex flex-col gap-2">
+                            <label className="text-xs font-medium text-slate-500 dark:text-slate-400">
+                                {t("settings.modelCard.displayName")}
+                            </label>
+                            <Input value={modelForm.display_name} onChange={handleModelInputChange("display_name")} />
+                        </div>
+                        <div className="flex flex-col gap-2">
+                            <label className="text-xs font-medium text-slate-500 dark:text-slate-400">
+                                {t("settings.modelCard.baseUrlLabel")}
+                            </label>
+                            <Input
+                                value={modelForm.base_url}
+                                onChange={handleModelInputChange("base_url")}
+                                placeholder="https://api.example.com"
+                            />
+                        </div>
+                        <div className="flex flex-col gap-2 md:col-span-2">
+                            <label className="text-xs font-medium text-slate-500 dark:text-slate-400">
+                                {t("settings.modelCard.apiKey")}
+                            </label>
+                            <Input
+                                value={modelForm.api_key}
+                                onChange={handleModelInputChange("api_key")}
+                                type="password"
+                                placeholder="sk-..."
+                            />
+                        </div>
+                        <div className="flex flex-col gap-2 md:col-span-2">
+                            <label className="text-xs font-medium text-slate-500 dark:text-slate-400">
+                                {t("settings.modelCard.extraConfig")}
+                            </label>
+                            <Textarea
+                                value={modelForm.extra_config}
+                                onChange={handleModelInputChange("extra_config")}
+                                placeholder='{ "default_model": "gpt-5" }'
+                                rows={3}
+                            />
+                            <span className="text-xs text-slate-400 dark:text-slate-500">
+                                {t("settings.modelCard.extraConfigHint")}
+                            </span>
+                        </div>
+                        {modelFormError ? (
+                            <div className="md:col-span-2">
+                                <p className="rounded-lg border border-red-200 bg-red-50/70 px-3 py-2 text-xs text-red-700 dark:border-red-400/40 dark:bg-red-500/10 dark:text-red-200">
+                                    {modelFormError}
+                                </p>
+                            </div>
+                        ) : null}
+                        <div className="md:col-span-2 flex justify-end">
+                            <Button type="submit" disabled={createModelMutation.isPending}>
+                                {createModelMutation.isPending
+                                    ? t("common.loading")
+                                    : t("settings.modelCard.createButton")}
+                            </Button>
+                        </div>
+                    </form>
+                </div>
             </GlassCard>
 
             <GlassCard className="space-y-4">

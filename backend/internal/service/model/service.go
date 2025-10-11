@@ -26,6 +26,7 @@ var (
 	ErrDuplicatedModelKey   = errors.New("model credential already exists")
 	ErrInvalidStatus        = errors.New("invalid credential status")
 	ErrStatusMismatchUpdate = errors.New("status update failed")
+	ErrCredentialDisabled   = errors.New("model credential disabled")
 )
 
 // Credential 表示对外返回的模型凭据（脱敏）。

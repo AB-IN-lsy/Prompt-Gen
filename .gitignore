@@ -1,5 +1,5 @@
 #design
-design/
+# design/
 
 # Logs
 logs
@@ -29,6 +29,8 @@ release/
 release-builds/
 /tmp/
 /temp/
+.gocache/
+.gomodcache/
 
 # Electron packaging
 *.asar

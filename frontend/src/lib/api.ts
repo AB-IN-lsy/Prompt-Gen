@@ -123,6 +123,42 @@ export interface AuthProfile {
   settings: UserSettings;
 }
 
+// 模型凭据状态（默认仅启用/禁用，也保留字符串向后兼容）
+export type ModelStatus = "enabled" | "disabled" | string;
+
+// 用户保存的模型凭据结构体，后端会脱敏返回
+export interface UserModelCredential {
+  id: number;
+  provider: string;
+  model_key: string;
+  display_name: string;
+  base_url?: string;
+  extra_config: Record<string, unknown>;
+  status: ModelStatus;
+  last_verified_at?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+// 新增模型凭据时的入参
+export interface CreateUserModelRequest {
+  provider: string;
+  model_key: string;
+  display_name: string;
+  base_url?: string;
+  api_key: string;
+  extra_config?: Record<string, unknown>;
+}
+
+// 更新模型凭据支持的字段（包括启用/禁用）
+export interface UpdateUserModelRequest {
+  display_name?: string;
+  base_url?: string | null;
+  api_key?: string;
+  extra_config?: Record<string, unknown>;
+  status?: ModelStatus;
+}
+
 export interface AuthResponse {
   user: AuthUser;
   tokens: AuthTokens;
@@ -239,6 +275,45 @@ export async function regeneratePrompt(payload: PromptPayload): Promise<PromptRe
 export async function saveDraft(payload: PromptPayload): Promise<void> {
   try {
     await http.post("/prompts", { ...payload, status: payload.status ?? "draft" });
+  } catch (error) {
+    throw normaliseError(error);
+  }
+}
+
+/** 列出当前用户配置的所有模型凭据。 */
+export async function fetchUserModels(): Promise<UserModelCredential[]> {
+  try {
+    const response: AxiosResponse<UserModelCredential[]> = await http.get("/models");
+    return response.data;
+  } catch (error) {
+    throw normaliseError(error);
+  }
+}
+
+/** 创建新的模型凭据。 */
+export async function createUserModel(payload: CreateUserModelRequest): Promise<UserModelCredential> {
+  try {
+    const response: AxiosResponse<UserModelCredential> = await http.post("/models", payload);
+    return response.data;
+  } catch (error) {
+    throw normaliseError(error);
+  }
+}
+
+/** 更新现有模型凭据，支持替换 API Key、修改状态等。 */
+export async function updateUserModel(id: number, payload: UpdateUserModelRequest): Promise<UserModelCredential> {
+  try {
+    const response: AxiosResponse<UserModelCredential> = await http.put(`/models/${id}`, payload);
+    return response.data;
+  } catch (error) {
+    throw normaliseError(error);
+  }
+}
+
+/** 删除模型凭据。 */
+export async function deleteUserModel(id: number): Promise<void> {
+  try {
+    await http.delete(`/models/${id}`);
   } catch (error) {
     throw normaliseError(error);
   }

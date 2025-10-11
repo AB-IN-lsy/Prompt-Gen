@@ -21,6 +21,7 @@
 - 引入 `MODEL_CREDENTIAL_MASTER_KEY` 环境变量，使用 AES-256-GCM 加解密用户提交的模型凭据。
 - 数据库自动迁移包含 `user_model_credentials` 表，服务启动即可创建所需数据结构。
 - 模型凭据禁用或删除时，会自动清理用户偏好的 `preferred_model`，避免指向不可用的模型；`PUT /api/users/me` 也会验证偏好模型是否存在并已启用。
+- 新增 `infra/model/deepseek` 模块与 `Service.InvokeDeepSeekChatCompletion`，可使用存量凭据直接向 DeepSeek Chat Completion API 发起调用。
 
 ## 环境变量
 
@@ -142,6 +143,68 @@ go run ./backend/cmd/sendmail -to you@example.com -name "测试账号"
 | `POST` | `/api/models` | 新增模型凭据并加密存储 | JSON：`provider`、`label`、`api_key`、`metadata` |
 | `PUT` | `/api/models/:id` | 更新模型凭据（可替换 API Key） | JSON：`label`、`api_key`、`metadata` |
 | `DELETE` | `/api/models/:id` | 删除模型凭据 | 无 |
+
+### 模型凭据字段说明与 DeepSeek 示例
+
+- **provider**：服务商代号，保持小写，如 `deepseek`、`openai`。  
+- **model_key**：用户自定义的模型标识，需在账号范围内唯一，后端也会用它作为默认的 `model` 字段传给大模型，例如 `deepseek-chat`。  
+- **display_name**：前端展示名称，可写成 `DeepSeek Chat（团队密钥）`。  
+- **base_url**：可选，覆盖默认的 `https://api.deepseek.com/v1`，当你使用代理或企业网关时填写。  
+- **api_key**：实际的访问密钥，后端入库前会用 `MODEL_CREDENTIAL_MASTER_KEY` 加密。  
+- **extra_config**：可选 JSON，对应 DeepSeek `chat/completions` 的可选参数（如 `max_tokens`、`temperature`、`response_format` 等），未在请求体里显式提供时会自动回填。
+
+例如将 DeepSeek 官方 Demo 注册进系统，可在“新增模型”表单输入：
+
+```json
+{
+  "provider": "deepseek",
+  "model_key": "deepseek-chat",
+  "display_name": "DeepSeek Chat（主力）",
+  "base_url": "https://api.deepseek.com/v1",
+  "api_key": "sk-...替换成自己的密钥...",
+  "extra_config": {
+    "max_tokens": 4096,
+    "temperature": 1,
+    "response_format": {
+      "type": "text"
+    }
+  }
+}
+```
+
+前端在工作台或设置页触发模型调用时，会通过 `InvokeDeepSeekChatCompletion` 流程完成以下动作：
+
+1. 读取并校验模型凭据，确认状态为 `enabled`。  
+2. 使用 AES-256-GCM 解密 API Key，并根据 `base_url` 创建 DeepSeek 客户端。  
+3. 合并 `extra_config` 与本次调用显式传入的参数，将缺失字段（如 `max_tokens`）补齐。  
+4. 发送 `POST {base_url}/chat/completions` 请求并返回标准结构。  
+5. 若 DeepSeek 返回 `4xx/5xx`，会封装为 `deepseek.APIError`，包含 `status_code` / `type` / `code` 信息，方便上层定位问题。
+
+响应示例：
+
+```json
+{
+  "id": "7bce4a57-c144-4162-a3f9-1bde7b7f195f",
+  "object": "chat.completion",
+  "created": 1760181608,
+  "model": "deepseek-chat",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "Hello! How can I assist you today? 😊"
+      },
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 10,
+    "completion_tokens": 11,
+    "total_tokens": 21
+  }
+}
+```
 
 ### 静态资源与上传目录
 

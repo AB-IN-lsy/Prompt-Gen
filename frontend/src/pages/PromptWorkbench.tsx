@@ -4,7 +4,7 @@
  * @FilePath: \electron-go-app\frontend\src\pages\PromptWorkbench.tsx
  * @LastEditTime: 2025-10-11 00:19:57
  */
-import { ChangeEvent, useEffect, useMemo, useState } from "react";
+import { ChangeEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { LoaderCircle, Plus, Sparkles } from "lucide-react";
 import { useTranslation } from "react-i18next";
@@ -16,7 +16,14 @@ import { Button } from "../components/ui/button";
 import { Badge } from "../components/ui/badge";
 import { Textarea } from "../components/ui/textarea";
 import { cn } from "../lib/utils";
-import { regeneratePrompt, fetchKeywords, saveDraft, updateCurrentUser } from "../lib/api";
+import {
+    regeneratePrompt,
+    fetchKeywords,
+    saveDraft,
+    updateCurrentUser,
+    fetchUserModels,
+    type UserModelCredential,
+} from "../lib/api";
 import { ApiError } from "../lib/errors";
 import type { Keyword, PromptKeywordRef } from "../lib/api";
 import { usePromptWorkbench } from "../hooks/usePromptWorkbench";
@@ -57,6 +64,28 @@ export default function PromptWorkbenchPage() {
         queryFn: () => fetchKeywords({ topic }),
         enabled: !!topic,
     });
+    // 读取模型列表，结合偏好配置控制前端模型可选项
+    const modelsQuery = useQuery<UserModelCredential[]>({
+        queryKey: ["models"],
+        queryFn: fetchUserModels,
+    });
+    const enabledModelKeys = useMemo(() => {
+        if (!modelsQuery.data) {
+            return [];
+        }
+        return modelsQuery.data
+            .filter((model) => String(model.status ?? "").toLowerCase() !== "disabled")
+            .map((model) => model.model_key);
+    }, [modelsQuery.data]);
+    const isModelSelectable = useCallback(
+        (key: "deepseek" | "gpt-5") => {
+            if (!modelsQuery.data || enabledModelKeys.length === 0) {
+                return true;
+            }
+            return enabledModelKeys.includes(key);
+        },
+        [enabledModelKeys, modelsQuery.data],
+    );
 
     useEffect(() => {
         if (!topic) {
@@ -79,6 +108,37 @@ export default function PromptWorkbenchPage() {
             }
         }
     }, [profile?.settings?.preferred_model, setModel]);
+
+    // 当后端模型禁用/删除时，自动回退到可用模型并提示用户
+    useEffect(() => {
+        if (!modelsQuery.data) {
+            return;
+        }
+        const currentEnabled = new Set(enabledModelKeys);
+        const currentModel = model;
+        const preferred = profile?.settings?.preferred_model ?? "";
+
+        let fallbackKey: string | null = null;
+
+        if (currentEnabled.size === 0) {
+            fallbackKey = "deepseek";
+        } else if (!currentEnabled.has(currentModel)) {
+            if (preferred && currentEnabled.has(preferred)) {
+                fallbackKey = preferred;
+            } else {
+                fallbackKey = Array.from(currentEnabled)[0];
+            }
+        }
+
+        if (fallbackKey) {
+            const fallbackModel: "deepseek" | "gpt-5" = fallbackKey === "gpt-5" ? "gpt-5" : "deepseek";
+            if (fallbackModel !== currentModel) {
+                setModel(fallbackModel);
+                const displayName = fallbackModel === "gpt-5" ? "GPT-5" : "DeepSeek";
+                toast.info(t("promptWorkbench.modelFallback", { model: displayName }));
+            }
+        }
+    }, [enabledModelKeys, model, modelsQuery.data, profile?.settings?.preferred_model, setModel, t]);
 
     // 转换关键词数据结构，方便和后端交互保持一致。
     const toPromptKeywordRefs = (keywords: Keyword[]): PromptKeywordRef[] =>
@@ -128,9 +188,16 @@ export default function PromptWorkbenchPage() {
     });
 
     const hasPositive = positiveKeywords.length > 0;
+    const deepseekSelectable = isModelSelectable("deepseek");
+    const gptSelectable = isModelSelectable("gpt-5");
 
+    // 选择模型，同时持久化偏好
     const handleModelSelect = (nextModel: "deepseek" | "gpt-5") => {
         if (model === nextModel) {
+            return;
+        }
+        if (!isModelSelectable(nextModel)) {
+            toast.error(t("promptWorkbench.modelDisabled"));
             return;
         }
         setModel(nextModel);
@@ -261,20 +328,24 @@ export default function PromptWorkbenchPage() {
                             <Badge
                                 className={cn(
                                     "cursor-pointer px-3 py-1",
+                                    !deepseekSelectable && "cursor-not-allowed opacity-60",
                                     model === "deepseek" && "border-transparent bg-primary text-white",
                                 )}
                                 variant={model === "deepseek" ? "default" : "outline"}
                                 onClick={() => handleModelSelect("deepseek")}
+                                aria-disabled={!deepseekSelectable}
                             >
                                 DeepSeek
                             </Badge>
                             <Badge
                                 className={cn(
                                     "cursor-pointer px-3 py-1",
+                                    !gptSelectable && "cursor-not-allowed opacity-60",
                                     model === "gpt-5" && "border-transparent bg-secondary text-white",
                                 )}
                                 variant={model === "gpt-5" ? "default" : "outline"}
                                 onClick={() => handleModelSelect("gpt-5")}
+                                aria-disabled={!gptSelectable}
                             >
                                 GPT-5
                             </Badge>
