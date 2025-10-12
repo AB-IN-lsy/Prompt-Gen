@@ -199,6 +199,99 @@ export interface AuthResponse {
   tokens: AuthTokens;
 }
 
+export interface PromptKeywordInput {
+  keyword_id?: number | string;
+  word: string;
+  polarity: KeywordPolarity;
+  source?: string;
+}
+
+export interface PromptKeywordResult {
+  keyword_id?: number;
+  word: string;
+  polarity: KeywordPolarity;
+  source?: string;
+}
+
+export interface InterpretPromptResponse {
+  topic: string;
+  confidence: number;
+  positive_keywords: PromptKeywordResult[];
+  negative_keywords: PromptKeywordResult[];
+  workspace_token?: string;
+}
+
+export interface AugmentPromptKeywordsRequest {
+  topic: string;
+  model_key: string;
+  language?: string;
+  positive_limit?: number;
+  negative_limit?: number;
+  existing_positive: PromptKeywordInput[];
+  existing_negative: PromptKeywordInput[];
+  workspace_token?: string;
+}
+
+export interface AugmentPromptKeywordsResponse {
+  positive: PromptKeywordResult[];
+  negative: PromptKeywordResult[];
+}
+
+export interface ManualPromptKeywordRequest {
+  topic: string;
+  word: string;
+  polarity: KeywordPolarity;
+  workspace_token?: string;
+  prompt_id?: number;
+  language?: string;
+}
+
+export interface GeneratePromptRequest {
+  topic: string;
+  model_key: string;
+  positive_keywords: PromptKeywordInput[];
+  negative_keywords: PromptKeywordInput[];
+  prompt_id?: number;
+  language?: string;
+  instructions?: string;
+  tone?: string;
+  temperature?: number;
+  max_tokens?: number;
+  include_keyword_reference?: boolean;
+  workspace_token?: string;
+}
+
+export interface GeneratePromptResponse {
+  prompt: string;
+  model: string;
+  duration_ms?: number;
+  usage?: ChatCompletionUsage;
+  positive_keywords?: PromptKeywordResult[];
+  negative_keywords?: PromptKeywordResult[];
+  workspace_token?: string;
+}
+
+export interface SavePromptRequest {
+  prompt_id?: number;
+  topic?: string;
+  body?: string;
+  model?: string;
+  publish?: boolean;
+  status?: string;
+  tags?: string[];
+  positive_keywords: PromptKeywordInput[];
+  negative_keywords: PromptKeywordInput[];
+  workspace_token?: string;
+}
+
+export interface SavePromptResponse {
+  prompt_id: number;
+  status: string;
+  version: number;
+  task_id?: string;
+  workspace_token?: string;
+}
+
 export interface LoginRequest {
   identifier: string;
   password: string;
@@ -340,17 +433,36 @@ export async function deleteKeyword(id: string): Promise<void> {
   }
 }
 
-/**
- * Calls the prompt regeneration endpoint to produce a refined prompt using the selected
- * keywords and chosen model.
- */
-export async function regeneratePrompt(
-  payload: PromptPayload,
-): Promise<PromptRegenerateResponse> {
+const normalisePromptKeyword = (keyword: PromptKeywordInput) => {
+  const { keyword_id, ...rest } = keyword;
+  if (typeof keyword_id === "number") {
+    return { ...rest, keyword_id };
+  }
+  if (typeof keyword_id === "string" && keyword_id.trim() !== "") {
+    const parsed = Number(keyword_id);
+    if (!Number.isNaN(parsed)) {
+      return { ...rest, keyword_id: parsed };
+    }
+  }
+  return rest;
+};
+
+export async function interpretPromptDescription(payload: {
+  description: string;
+  model_key: string;
+  language?: string;
+  workspace_token?: string | null;
+}): Promise<InterpretPromptResponse> {
   try {
-    const response: AxiosResponse<PromptRegenerateResponse> = await http.post(
-      "/prompts/regenerate",
-      payload,
+    const requestBody = {
+      description: payload.description,
+      model_key: payload.model_key,
+      language: payload.language,
+      workspace_token: payload.workspace_token ?? undefined,
+    };
+    const response: AxiosResponse<InterpretPromptResponse> = await http.post(
+      "/prompts/interpret",
+      requestBody,
     );
     return response.data;
   } catch (error) {
@@ -358,13 +470,103 @@ export async function regeneratePrompt(
   }
 }
 
-/** Persists a prompt payload as a draft. */
-export async function saveDraft(payload: PromptPayload): Promise<void> {
+export async function augmentPromptKeywords(
+  payload: AugmentPromptKeywordsRequest,
+): Promise<AugmentPromptKeywordsResponse> {
   try {
-    await http.post("/prompts", {
-      ...payload,
-      status: payload.status ?? "draft",
-    });
+    const response: AxiosResponse<AugmentPromptKeywordsResponse> =
+      await http.post("/prompts/keywords/augment", {
+        topic: payload.topic,
+        model_key: payload.model_key,
+        language: payload.language,
+        workspace_token: payload.workspace_token ?? undefined,
+        positive_limit: payload.positive_limit,
+        negative_limit: payload.negative_limit,
+        existing_positive: payload.existing_positive.map(
+          normalisePromptKeyword,
+        ),
+        existing_negative: payload.existing_negative.map(
+          normalisePromptKeyword,
+        ),
+      });
+    return response.data;
+  } catch (error) {
+    throw normaliseError(error);
+  }
+}
+
+export async function createManualPromptKeyword(
+  payload: ManualPromptKeywordRequest,
+): Promise<PromptKeywordResult> {
+  try {
+    const response: AxiosResponse<PromptKeywordResult> = await http.post(
+      "/prompts/keywords/manual",
+      {
+        ...payload,
+        workspace_token: payload.workspace_token ?? undefined,
+      },
+    );
+    return response.data;
+  } catch (error) {
+    throw normaliseError(error);
+  }
+}
+
+export async function generatePromptPreview(
+  payload: GeneratePromptRequest,
+): Promise<GeneratePromptResponse> {
+  try {
+    const response: AxiosResponse<GeneratePromptResponse> = await http.post(
+      "/prompts/generate",
+      {
+        topic: payload.topic,
+        model_key: payload.model_key,
+        language: payload.language,
+        instructions: payload.instructions,
+        tone: payload.tone,
+        temperature: payload.temperature,
+        max_tokens: payload.max_tokens,
+        prompt_id: payload.prompt_id,
+        include_keyword_reference: payload.include_keyword_reference,
+        workspace_token: payload.workspace_token ?? undefined,
+        positive_keywords: payload.positive_keywords.map(
+          normalisePromptKeyword,
+        ),
+        negative_keywords: payload.negative_keywords.map(
+          normalisePromptKeyword,
+        ),
+      },
+    );
+    return response.data;
+  } catch (error) {
+    throw normaliseError(error);
+  }
+}
+
+export async function savePrompt(
+  payload: SavePromptRequest,
+): Promise<SavePromptResponse> {
+  try {
+    const response: AxiosResponse<SavePromptResponse> = await http.post(
+      "/prompts",
+      {
+        prompt_id: payload.prompt_id,
+        topic: payload.topic,
+        body: payload.body,
+        model: payload.model,
+        publish: payload.publish ?? false,
+        status: payload.status,
+        tags: payload.tags,
+        workspace_token: payload.workspace_token ?? undefined,
+        positive_keywords: payload.positive_keywords.map(
+          normalisePromptKeyword,
+        ),
+        negative_keywords: payload.negative_keywords.map(
+          normalisePromptKeyword,
+        ),
+      },
+    );
+    return response.data;
   } catch (error) {
     throw normaliseError(error);
   }
@@ -649,10 +851,12 @@ export async function fetchChangelogEntries(
   locale?: string,
 ): Promise<ChangelogEntry[]> {
   try {
-    const response: AxiosResponse<{ items: ChangelogEntry[] }> =
-      await http.get("/changelog", {
+    const response: AxiosResponse<{ items: ChangelogEntry[] }> = await http.get(
+      "/changelog",
+      {
         params: locale ? { locale } : undefined,
-      });
+      },
+    );
     return response.data.items ?? [];
   } catch (error) {
     throw normaliseError(error);
@@ -666,8 +870,7 @@ export async function createChangelogEntry(
     const response: AxiosResponse<{
       entry: ChangelogEntry;
       translations?: ChangelogEntry[];
-    }> =
-      await http.post("/changelog", payload);
+    }> = await http.post("/changelog", payload);
     return {
       entry: response.data.entry,
       translations: response.data.translations ?? [],
@@ -682,8 +885,10 @@ export async function updateChangelogEntry(
   payload: ChangelogPayload,
 ): Promise<ChangelogEntry> {
   try {
-    const response: AxiosResponse<{ entry: ChangelogEntry }> =
-      await http.put(`/changelog/${id}`, payload);
+    const response: AxiosResponse<{ entry: ChangelogEntry }> = await http.put(
+      `/changelog/${id}`,
+      payload,
+    );
     return response.data.entry;
   } catch (error) {
     throw normaliseError(error);

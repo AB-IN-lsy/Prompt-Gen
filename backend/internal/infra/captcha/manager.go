@@ -14,10 +14,10 @@ import (
 )
 
 var (
-    ErrCaptchaNotFound = errors.New("captcha not found or expired")
-    ErrCaptchaMismatch = errors.New("captcha code mismatch")
-    ErrRateLimited     = errors.New("captcha requests too frequent")
-    ErrCaptchaDisabled = errors.New("captcha disabled")
+	ErrCaptchaNotFound = errors.New("captcha not found or expired")
+	ErrCaptchaMismatch = errors.New("captcha code mismatch")
+	ErrRateLimited     = errors.New("captcha requests too frequent")
+	ErrCaptchaDisabled = errors.New("captcha disabled")
 )
 
 type Generator interface {
@@ -211,5 +211,5 @@ func (m *Manager) checkRateLimit(ctx context.Context, ip string) (int, error) {
 
 // Enabled 始终返回 true，便于统一的动态管理器判断状态。
 func (m *Manager) Enabled() bool {
-    return m != nil
+	return m != nil
 }

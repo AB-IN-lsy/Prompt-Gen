@@ -75,9 +75,9 @@
 
 | 变量 | 作用 |
 | --- | --- |
-| `PROMPT_INTERPRET_LIMIT` | 自然语言解析接口限流次数，默认 `3` |
+| `PROMPT_INTERPRET_LIMIT` | 自然语言解析接口限流次数，默认 `8` |
 | `PROMPT_INTERPRET_WINDOW` | 自然语言解析限流窗口，如 `60s`，默认 `1m` |
-| `PROMPT_GENERATE_LIMIT` | Prompt 生成接口限流次数，默认 `3` |
+| `PROMPT_GENERATE_LIMIT` | Prompt 生成接口限流次数，默认 `5` |
 | `PROMPT_GENERATE_WINDOW` | Prompt 生成限流窗口，默认 `1m` |
 
 #### SMTP 发信（可选）
@@ -731,13 +731,54 @@ backend/
 
 ## Prompt 工作台流程
 
-1. **自然语言解析**：前端调用 `POST /api/prompts/interpret`，服务端使用用户配置的模型提炼 `topic` 与首批正/负关键词，并将结果写入关键词字典（来源标记为 `model`）。  
-2. **关键词补足**：当用户需要更多词汇时，调用 `POST /api/prompts/keywords/augment`，系统会基于现有词库和模型输出返回缺口关键词，同时自动去重。手动输入则通过 `POST /api/prompts/keywords/manual` 落库，来源标记为 `manual`。  
-3. **生成 Prompt**：点击生成按钮触发 `POST /api/prompts/generate`，带上最终确认的主题与关键词，返回 Prompt 正文、调用耗时与 token 统计。接口默认 60 秒内限 3 次，防止误触。  
-4. **保存与发布**：草稿阶段调用 `POST /api/prompts` 持久化（`publish=false`），正文与关键词 JSON 储存在 `prompts` 表；发布时将 `publish=true` 并写入 `prompt_versions` 表保留快照，最近版本号保存在 `latest_version_no` 中以便回滚。  
-5. **关键词回收**：每次 interpret/augment/manual 调用都会更新 `keywords` 表与 `prompt_keywords` 关联，确保后续搜索与推荐可以复用历史内容，复合唯一索引 `(user_id, topic, word)` 保证去重。
+> 新方案：解析阶段不再直接写 MySQL，而是把 Prompt 工作区缓存在 Redis，降低接口耗时并支持高频编辑；最终保存/发布时再异步落库，确保主题与关键词仍旧持久化在 MySQL。
 
-> **说明**：`LONGTEXT` 字段用于保存 JSON 字符串（正/负关键词、标签等），插入时请确保写入合法 JSON 文本，例如 `'[]'`。
+1. **自然语言解析**：`POST /api/prompts/interpret` 调用模型返回 `topic` 及首批正/负关键词。服务端生成 `workspace_token`，将解析结果写入 Redis（详情见下文），并把 token、topic、keywords 返回给前端。  
+2. **关键词补足/手动维护**：`POST /api/prompts/keywords/augment` 和 `POST /api/prompts/keywords/manual` 统一操作 Redis 中的工作区数据：  
+   - 模型补词直接 `ZADD` 到对应关键词集合（按 `word` 去重，`score` 记录权重或插入时间）。  
+   - 手动增删改在 Redis 完成，响应即时返回。  
+3. **生成 Prompt**：`POST /api/prompts/generate` 读取 Redis 中最新的 topic 与关键词，调用模型生成正文；生成结果同样写回工作区缓存，便于之后继续修改。  
+4. **保存草稿/发布**：`POST /api/prompts` 会从 Redis 工作区拉取快照，立即将 Prompt 正文、关键词字典及 `prompt_keywords` 关联一并写入 MySQL，并在发布时生成最新的 `prompt_versions`。若工作区或请求体中携带已有 `prompt_id`，则执行更新；否则创建新的草稿记录并将 `prompt_id` 与最新状态写回工作区，供后续发布复用。  
+5. **关键词回收与回放**：后台 worker 在 MySQL 完成入库后，同步更新 Redis 补全缓存（若仍在有效期内），确保后续 interpret/augment 可以复用历史词条；用户重新打开工作台时，优先用 Redis 中的工作区数据，若不存在再回源查询 MySQL。
+
+> **说明**：仍保留 `PersistenceTask` 队列能力，用于后续扩展批量或重型任务；任务幂等关键字段为 `(user_id, prompt_id, workspace_token)`。
+
+### Redis 工作区模型
+
+- **工作区标识**：`prompt:workspace:{userID}:{workspaceToken}`（Hash），存储 `topic`、`language`、`model_key`、`draft_body`、`updated_at` 等元数据。  
+- **正/负关键词集合**：`prompt:workspace:{userID}:{workspaceToken}:positive` / `:negative`（ZSET），`member` 为小写 `word`，`score` 可存储权重或 `unix timestamp`。实际关键词内容存放在 Hash `prompt:workspace:{userID}:{workspaceToken}:keywords` 中，字段为 `polarity|word`，值为 JSON（包含 `source`、`weight`、`display_word` 等）。  
+- **Prompt 元信息**：Hash 额外缓存 `prompt_id` 与 `status`（draft/published），创建或更新成功后立即写回，保证前端后续的保存/发布可以基于同一条记录继续编辑。  
+- **TTL 策略**：工作区默认保留 30~60 分钟未操作即自动过期；每次写操作需刷新 TTL，避免活跃编辑被提前清理。  
+- **并发控制**：使用 `WATCH`/`MULTI` 或 Lua 保证批量写入的原子性；对于生成/保存操作，在将任务入队前记录 `version` 字段，worker 按版本校验，防止旧任务覆盖新内容。  
+- **降级策略**：若 Redis 不可用，Handler 会回退到旧流程直接写 MySQL（伴随较长延迟），并在响应头返回 `X-Cache-Bypass: 1` 供前端提示用户稍后重试。  
+
+> **说明**：`LONGTEXT` 字段继续用于 MySQL 中保存最终的 JSON（正/负关键词、标签等），Redis 中的结构旨在加速编辑期的高频读写，而最终数据模型保持兼容。
+
+### 模型调用超时与上下文拆分
+
+- interpret / augment / generate / 保存发布等需要访问大模型的能力，统一通过 `modelInvocationContext` 创建调用上下文：基于 `context.WithoutCancel` 拆离 Gin 的请求生命周期，外层再包裹 35 秒的安全超时。
+  1. 为什么不用原始 request.Context()？
+     Gin 的 Context 底层包的是一个 request.Context()。一旦 HTTP 响应写回，Gin 会调用 cancel()，把整个请求链路的 context 标记为 done。
+     如果我们直接把这个 context 传给模型 SDK，Gin 一返回 200 就会取消 context，模型那边还没回包就被强制中止，常见错误就是 context canceled。
+  2. context.WithoutCancel(parent) 做了什么？
+     它会复制一个新的 context，并保留原 context 的 Value / Deadline / Err 等信息，但是不会继承 cancel 信号。
+     这就相当于“把 request.Context() 里的附件（比如 TraceID、用户 ID）拷贝出来，但切断 cancel 链条”，从而避免 Gin 的 cancel 影响模型请求。
+  3. 为什么还要 context.WithTimeout(..., 35s)？
+     如果完全不设置超时，请求可能一直卡住。35 秒是一个兜底值，表示“即便外层没有限制，也最多等 35 秒”。
+     同时，如果外层本身就带着一个更短的 Deadline（例如调用方自己设置了 10 秒），代码里会优先沿用原来的截止时间：
+
+     if deadline, ok := parent.Deadline(); ok && remaining <= 35s {
+         return parent, noopCancel
+     }
+     也就是说，不会把 10 秒的 Deadline 硬生生拉长成 35 秒。
+  4. 返回值为什么要 cancel？
+     外层 context.WithTimeout 会返回 (ctx, cancel)。模型调用结束后记得 defer cancel()，及时释放定时器资源。如果走的是上面“沿用已有 Deadline”的分支，就返回一
+     个空的 cancel，外层调用 defer cancel() 也不会出错。
+
+- context.WithoutCancel 用来复制一个不会被 Gin 取消的上下文。
+- 再给它套一个 35 秒的 timeout，避免长时间阻塞。
+- 如果外层有更严格的 Deadline，就尊重原有限制。
+- 这样既保留 Request 链上的 Value / Trace，又不会被 Gin 提前 cancel。
 
 ## 待办与安全增强排期
 

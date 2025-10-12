@@ -20,6 +20,7 @@ import (
 	"electron-go-app/backend/internal/handler"
 	"electron-go-app/backend/internal/infra/captcha"
 	"electron-go-app/backend/internal/infra/email"
+	promptinfra "electron-go-app/backend/internal/infra/prompt"
 	"electron-go-app/backend/internal/infra/ratelimit"
 	"electron-go-app/backend/internal/infra/token"
 	"electron-go-app/backend/internal/middleware"
@@ -62,6 +63,15 @@ func BuildApplication(ctx context.Context, logger *zap.SugaredLogger, resources 
 	changelogRepo := repository.NewChangelogRepository(resources.DBConn())
 	promptRepo := repository.NewPromptRepository(resources.DBConn())
 	keywordRepo := repository.NewKeywordRepository(resources.DBConn())
+
+	var (
+		workspaceStore   promptsvc.WorkspaceStore
+		persistenceQueue promptsvc.PersistenceQueue
+	)
+	if resources.Redis != nil {
+		workspaceStore = promptinfra.NewWorkspaceStore(resources.Redis)
+		persistenceQueue = promptinfra.NewPersistenceQueue(resources.Redis, "")
+	}
 
 	// 刷新令牌优先落在 Redis，便于服务重启后继续验证。
 	var refreshStore authsvc.RefreshTokenStore
@@ -110,9 +120,12 @@ func BuildApplication(ctx context.Context, logger *zap.SugaredLogger, resources 
 
 	modelService := modelsvc.NewService(modelRepo, userRepo)
 	modelHandler := handler.NewModelHandler(modelService)
-	promptService := promptsvc.NewService(promptRepo, keywordRepo, modelService, logger)
+	promptService := promptsvc.NewService(promptRepo, keywordRepo, modelService, workspaceStore, persistenceQueue, logger)
 	promptRateLimit := loadPromptRateLimit(logger)
 	promptHandler := handler.NewPromptHandler(promptService, promptLimiter, promptRateLimit)
+	if workspaceStore != nil && persistenceQueue != nil {
+		promptService.StartPersistenceWorker(ctx, 0)
+	}
 	changelogService := changelogsrv.NewService(changelogRepo)
 	changelogHandler := handler.NewChangelogHandler(changelogService, modelService)
 

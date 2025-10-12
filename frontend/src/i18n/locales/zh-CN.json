@@ -65,9 +65,21 @@
       "title": "更多资源",
       "description": "探索由 AB-IN 维护的资料、源码与支持渠道。",
       "contacts": [
-        { "label": "AB-IN CSDN 博客 · ab-in.blog.csdn.net", "href": "https://ab-in.blog.csdn.net/", "type": "external" },
-        { "label": "GitHub · AB-IN/Prompt-Gen", "href": "https://github.com/AB-IN-lsy/Prompt-Gen", "type": "external" },
-        { "label": "邮箱 · ab-in-liusy@outlook.com", "href": "mailto:ab-in-liusy@outlook.com", "type": "email" }
+        {
+          "label": "AB-IN CSDN 博客 · ab-in.blog.csdn.net",
+          "href": "https://ab-in.blog.csdn.net/",
+          "type": "external"
+        },
+        {
+          "label": "GitHub · AB-IN/Prompt-Gen",
+          "href": "https://github.com/AB-IN-lsy/Prompt-Gen",
+          "type": "external"
+        },
+        {
+          "label": "邮箱 · ab-in-liusy@outlook.com",
+          "href": "mailto:ab-in-liusy@outlook.com",
+          "type": "email"
+        }
       ],
       "cta": "访问 CSDN 博客",
       "note": "Powered by AB-IN · 鲁ICP备2021035431号-1"
@@ -132,6 +144,30 @@
     "uploadError": "头像上传失败，请稍后再试"
   },
   "promptWorkbench": {
+    "modelEyebrow": "模型设置",
+    "modelTitle": "选择生成模型",
+    "modelHint": "解析需求、补词与生成都会使用该模型。",
+    "modelEmptyHint": "暂无可用模型，请先在设置页配置。",
+    "descriptionEyebrow": "需求解析",
+    "descriptionTitle": "告诉我们你想要什么",
+    "descriptionPlaceholder": "例如：生成一份聚焦 React Hooks 的技术面试 Prompt",
+    "descriptionRequired": "请先填写需求描述，AI 才能理解你的意图。",
+    "instructionsLabel": "补充要求",
+    "instructionsPlaceholder": "（可选）语气、结构、输出格式等",
+    "confidence": "解析置信度 {{value}}",
+    "confidenceHint": "点击按钮让 AI 解析描述",
+    "interpret": "解析描述",
+    "descriptionHelper": "解析后会自动填写主题并补充首批关键词，可继续手动或 AI 调整。",
+    "interpretSuccess": "描述解析完成",
+    "augmentKeywords": "AI 补充关键词",
+    "augmentSuccess": "已补充关键词",
+    "keywordAdded": "关键词已添加",
+    "generateSuccess": "生成完成",
+    "saveQueued": "已提交保存任务，稍后自动落库",
+    "keywordRemoveHint": "点击标签可移除",
+    "removeKeywordAria": "移除关键词",
+    "topicMissing": "请先填写主题",
+    "promptEmpty": "提示词内容不能为空",
     "keywordsTitle": "关键词治理",
     "keywordsSubtitle": "调优提示词焦点",
     "addKeyword": "添加关键词",
@@ -147,13 +183,14 @@
     "workbenchTitle": "打造你的面试脚本",
     "regenerate": "再次生成",
     "topicLabel": "主题",
+    "topicPlaceholder": "例如：前端面试技术提示词",
     "modelLabel": "模型选择",
     "draftLabel": "Prompt 草稿",
     "draftPlaceholder": "生成或编辑你的 Prompt...",
     "autosave": "自动保存",
     "autosaveSaving": "保存中...",
     "autosaveSaved": "最新变更已自动保存",
-    "cancel": "取消",
+    "cancel": "重置",
     "saveDraft": "保存草稿",
     "publish": "发布",
     "weight": "权重 {{value}}",

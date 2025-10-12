@@ -3,6 +3,7 @@ package handler
 import (
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	response "electron-go-app/backend/internal/infra/common"
@@ -35,9 +36,9 @@ type PromptRateLimit struct {
 
 const (
 	// DefaultInterpretLimit 控制解析接口默认限额（次/窗口）。
-	DefaultInterpretLimit = 3
+	DefaultInterpretLimit = 8
 	// DefaultGenerateLimit 控制生成接口默认限额（次/窗口）。
-	DefaultGenerateLimit = 3
+	DefaultGenerateLimit = 5
 	// DefaultInterpretWindow 控制解析接口限流窗口长度。
 	DefaultInterpretWindow = time.Minute
 	// DefaultGenerateWindow 控制生成接口限流窗口长度。
@@ -94,15 +95,17 @@ type augmentRequest struct {
 	NegativeLimit    int              `json:"negative_limit"`
 	ExistingPositive []KeywordPayload `json:"existing_positive"`
 	ExistingNegative []KeywordPayload `json:"existing_negative"`
+	WorkspaceToken   string           `json:"workspace_token"`
 }
 
 // manualKeywordRequest 负责接收手动新增关键词的参数。
 type manualKeywordRequest struct {
-	Topic    string `json:"topic" binding:"required"`
-	Word     string `json:"word" binding:"required"`
-	Polarity string `json:"polarity"`
-	Language string `json:"language"`
-	PromptID uint   `json:"prompt_id"`
+	Topic          string `json:"topic" binding:"required"`
+	Word           string `json:"word" binding:"required"`
+	Polarity       string `json:"polarity"`
+	Language       string `json:"language"`
+	PromptID       uint   `json:"prompt_id"`
+	WorkspaceToken string `json:"workspace_token"`
 }
 
 // generateRequest 描述生成 Prompt 的输入。
@@ -118,19 +121,21 @@ type generateRequest struct {
 	IncludeKeywordRef bool             `json:"include_keyword_reference"`
 	PositiveKeywords  []KeywordPayload `json:"positive_keywords" binding:"required,dive"`
 	NegativeKeywords  []KeywordPayload `json:"negative_keywords"`
+	WorkspaceToken    string           `json:"workspace_token"`
 }
 
 // saveRequest 接收保存草稿或发布 Prompt 的参数。
 type saveRequest struct {
 	PromptID         uint             `json:"prompt_id"`
-	Topic            string           `json:"topic" binding:"required"`
-	Body             string           `json:"body" binding:"required"`
+	Topic            string           `json:"topic"`
+	Body             string           `json:"body"`
 	Model            string           `json:"model"`
 	Status           string           `json:"status"`
 	Publish          bool             `json:"publish"`
 	Tags             []string         `json:"tags"`
 	PositiveKeywords []KeywordPayload `json:"positive_keywords" binding:"required,dive"`
 	NegativeKeywords []KeywordPayload `json:"negative_keywords"`
+	WorkspaceToken   string           `json:"workspace_token"`
 }
 
 // Interpret 解析自然语言描述，返回主题与关键词建议。
@@ -170,6 +175,7 @@ func (h *PromptHandler) Interpret(c *gin.Context) {
 		"positive_keywords": toKeywordResponse(result.PositiveKeywords),
 		"negative_keywords": toKeywordResponse(result.NegativeKeywords),
 		"confidence":        result.Confidence,
+		"workspace_token":   result.WorkspaceToken,
 	}, nil)
 }
 
@@ -194,6 +200,7 @@ func (h *PromptHandler) AugmentKeywords(c *gin.Context) {
 		Topic:             req.Topic,
 		ModelKey:          req.ModelKey,
 		Language:          req.Language,
+		WorkspaceToken:    strings.TrimSpace(req.WorkspaceToken),
 		RequestedPositive: req.PositiveLimit,
 		RequestedNegative: req.NegativeLimit,
 		ExistingPositive:  toServiceKeywords(req.ExistingPositive),
@@ -228,12 +235,13 @@ func (h *PromptHandler) AddManualKeyword(c *gin.Context) {
 	}
 
 	item, err := h.service.AddManualKeyword(c.Request.Context(), promptsvc.ManualKeywordInput{
-		UserID:   userID,
-		Topic:    req.Topic,
-		Word:     req.Word,
-		Polarity: req.Polarity,
-		Language: req.Language,
-		PromptID: req.PromptID,
+		UserID:         userID,
+		Topic:          req.Topic,
+		Word:           req.Word,
+		Polarity:       req.Polarity,
+		Language:       req.Language,
+		PromptID:       req.PromptID,
+		WorkspaceToken: strings.TrimSpace(req.WorkspaceToken),
 	})
 	if err != nil {
 		log.Warnw("add manual keyword failed", "error", err, "user_id", userID)
@@ -277,6 +285,7 @@ func (h *PromptHandler) GeneratePrompt(c *gin.Context) {
 		IncludeKeywordRef: req.IncludeKeywordRef,
 		PositiveKeywords:  toServiceKeywords(req.PositiveKeywords),
 		NegativeKeywords:  toServiceKeywords(req.NegativeKeywords),
+		WorkspaceToken:    strings.TrimSpace(req.WorkspaceToken),
 	})
 	if err != nil {
 		log.Errorw("generate prompt failed", "error", err, "user_id", userID)
@@ -293,6 +302,9 @@ func (h *PromptHandler) GeneratePrompt(c *gin.Context) {
 	}
 	if out.Usage != nil {
 		payload["usage"] = out.Usage
+	}
+	if token := strings.TrimSpace(req.WorkspaceToken); token != "" {
+		payload["workspace_token"] = token
 	}
 	response.Success(c, http.StatusOK, payload, nil)
 }
@@ -324,6 +336,7 @@ func (h *PromptHandler) SavePrompt(c *gin.Context) {
 		Tags:             req.Tags,
 		PositiveKeywords: toServiceKeywords(req.PositiveKeywords),
 		NegativeKeywords: toServiceKeywords(req.NegativeKeywords),
+		WorkspaceToken:   strings.TrimSpace(req.WorkspaceToken),
 	})
 	if err != nil {
 		log.Errorw("save prompt failed", "error", err, "user_id", userID, "prompt_id", req.PromptID)

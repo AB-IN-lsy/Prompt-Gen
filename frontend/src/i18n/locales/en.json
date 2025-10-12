@@ -65,9 +65,21 @@
       "title": "More resources",
       "description": "Discover community knowledge, source code, and support channels maintained by AB-IN.",
       "contacts": [
-        { "label": "AB-IN CSDN Blog · ab-in.blog.csdn.net", "href": "https://ab-in.blog.csdn.net/", "type": "external" },
-        { "label": "GitHub · AB-IN/Prompt-Gen", "href": "https://github.com/AB-IN-lsy/Prompt-Gen", "type": "external" },
-        { "label": "Email · ab-in-liusy@outlook.com", "href": "mailto:ab-in-liusy@outlook.com", "type": "email" }
+        {
+          "label": "AB-IN CSDN Blog · ab-in.blog.csdn.net",
+          "href": "https://ab-in.blog.csdn.net/",
+          "type": "external"
+        },
+        {
+          "label": "GitHub · AB-IN/Prompt-Gen",
+          "href": "https://github.com/AB-IN-lsy/Prompt-Gen",
+          "type": "external"
+        },
+        {
+          "label": "Email · ab-in-liusy@outlook.com",
+          "href": "mailto:ab-in-liusy@outlook.com",
+          "type": "email"
+        }
       ],
       "cta": "Open CSDN blog",
       "note": "Powered by AB-IN · ICP License 鲁ICP备2021035431号-1"
@@ -132,6 +144,30 @@
     "uploadError": "Failed to upload the avatar. Please try again."
   },
   "promptWorkbench": {
+    "modelEyebrow": "Model",
+    "modelTitle": "Choose a model",
+    "modelHint": "The selected model will be used to interpret, augment and generate prompts.",
+    "modelEmptyHint": "No models available yet. Configure them in settings.",
+    "descriptionEyebrow": "Natural language",
+    "descriptionTitle": "Describe your need",
+    "descriptionPlaceholder": "e.g. generate an interview prompt focusing on React Hooks",
+    "descriptionRequired": "Please describe what you need so the AI can help.",
+    "instructionsLabel": "Additional instructions",
+    "instructionsPlaceholder": "(Optional) tone, structure, output format…",
+    "confidence": "Confidence {{value}}",
+    "confidenceHint": "Click the button to interpret your description",
+    "interpret": "Interpret",
+    "descriptionHelper": "Once interpreted, the topic and initial keywords will be filled automatically so you can keep refining.",
+    "interpretSuccess": "Description parsed.",
+    "augmentKeywords": "Augment keywords",
+    "augmentSuccess": "Keywords augmented.",
+    "keywordAdded": "Keyword added.",
+    "generateSuccess": "Prompt generated.",
+    "saveQueued": "Save job queued and will persist shortly.",
+    "keywordRemoveHint": "Click a chip to remove it.",
+    "removeKeywordAria": "Remove keyword",
+    "topicMissing": "Please provide a topic first.",
+    "promptEmpty": "Prompt can't be empty.",
     "keywordsTitle": "Keyword governance",
     "keywordsSubtitle": "Sharpen your prompt focus",
     "addKeyword": "Add keyword",
@@ -147,6 +183,7 @@
     "workbenchTitle": "Craft your interview script",
     "regenerate": "Regenerate",
     "topicLabel": "Topic",
+    "topicPlaceholder": "e.g. Frontend interview cheat sheet",
     "modelLabel": "Model",
     "draftLabel": "Prompt draft",
     "draftPlaceholder": "Generate or edit your prompt...",

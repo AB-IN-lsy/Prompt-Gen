@@ -22,7 +22,12 @@ import axios, {
   InternalAxiosRequestConfig,
 } from "axios";
 import { ApiError, ErrorPayload } from "./errors";
-import { clearTokenPair, getTokenPair, isAccessTokenExpired, setTokenPair } from "./tokenStorage";
+import {
+  clearTokenPair,
+  getTokenPair,
+  isAccessTokenExpired,
+  setTokenPair,
+} from "./tokenStorage";
 
 function resolveDefaultBaseUrl(): string {
   const fallback = "http://localhost:9090/api";
@@ -39,7 +44,7 @@ function resolveDefaultBaseUrl(): string {
 }
 
 const API_BASE_URL = resolveDefaultBaseUrl();
-const REQUEST_TIMEOUT = 8_000;
+const REQUEST_TIMEOUT = 30_000;
 
 interface EnvelopeSuccess<T> {
   success: true;
@@ -83,7 +88,9 @@ const refreshHttp: AxiosInstance = axios.create({
 let isRefreshing = false;
 let refreshQueue: Array<(token: string | null, error?: ApiError) => void> = [];
 
-function queueRefreshSubscriber(cb: (token: string | null, error?: ApiError) => void): void {
+function queueRefreshSubscriber(
+  cb: (token: string | null, error?: ApiError) => void,
+): void {
   refreshQueue.push(cb);
 }
 
@@ -100,9 +107,12 @@ async function performRefresh(): Promise<string | null> {
 
   try {
     // 通过刷新接口获取新的 token 对，并在成功后更新本地缓存。
-    const response = await refreshHttp.post<Envelope<RefreshResponse>>("/auth/refresh", {
-      refresh_token: cached.refreshToken,
-    });
+    const response = await refreshHttp.post<Envelope<RefreshResponse>>(
+      "/auth/refresh",
+      {
+        refresh_token: cached.refreshToken,
+      },
+    );
     const { data } = unwrapResponse(response);
     const tokens = data.tokens;
     setTokenPair(tokens.access_token, tokens.refresh_token, tokens.expires_in);
@@ -114,7 +124,10 @@ async function performRefresh(): Promise<string | null> {
   }
 }
 
-function setAuthorizationHeader(config: InternalAxiosRequestConfig, token: string): InternalAxiosRequestConfig {
+function setAuthorizationHeader(
+  config: InternalAxiosRequestConfig,
+  token: string,
+): InternalAxiosRequestConfig {
   if (!token) {
     return config;
   }
@@ -132,7 +145,9 @@ function setAuthorizationHeader(config: InternalAxiosRequestConfig, token: strin
   return config;
 }
 
-function attachAuthorization(config: InternalAxiosRequestConfig): InternalAxiosRequestConfig {
+function attachAuthorization(
+  config: InternalAxiosRequestConfig,
+): InternalAxiosRequestConfig {
   const cached = getTokenPair();
   if (cached?.accessToken) {
     return setAuthorizationHeader(config, cached.accessToken);
@@ -149,7 +164,9 @@ http.interceptors.request.use((config: InternalAxiosRequestConfig) => {
   return attachAuthorization(config);
 });
 
-async function handlePreemptiveRefresh(config: InternalAxiosRequestConfig): Promise<InternalAxiosRequestConfig> {
+async function handlePreemptiveRefresh(
+  config: InternalAxiosRequestConfig,
+): Promise<InternalAxiosRequestConfig> {
   if (isRefreshing) {
     return new Promise((resolve, reject) => {
       queueRefreshSubscriber((token, error) => {
@@ -188,7 +205,8 @@ http.interceptors.response.use(
   (response) => unwrapResponse(response),
   async (error: AxiosError) => {
     if (error.config) {
-      (error.config as AxiosRequestConfigWithRetry)._retry = (error.config as AxiosRequestConfigWithRetry)._retry ?? false;
+      (error.config as AxiosRequestConfigWithRetry)._retry =
+        (error.config as AxiosRequestConfigWithRetry)._retry ?? false;
     }
 
     if (shouldAttemptRefresh(error)) {
@@ -250,7 +268,10 @@ async function retryWithRefresh(error: AxiosError): Promise<any> {
     setAuthorizationHeader(originalConfig, token);
     return http(originalConfig);
   } catch (refreshError) {
-    const apiError = refreshError instanceof ApiError ? refreshError : normaliseError(refreshError);
+    const apiError =
+      refreshError instanceof ApiError
+        ? refreshError
+        : normaliseError(refreshError);
     flushRefreshQueue(null, apiError);
     throw apiError;
   } finally {
@@ -258,7 +279,9 @@ async function retryWithRefresh(error: AxiosError): Promise<any> {
   }
 }
 
-function unwrapResponse<T>(response: AxiosResponse<Envelope<T>>): AxiosResponse<T> {
+function unwrapResponse<T>(
+  response: AxiosResponse<Envelope<T>>,
+): AxiosResponse<T> {
   const payload = response.data;
   if (payload && typeof payload === "object" && "success" in payload) {
     if (payload.success) {
@@ -290,7 +313,8 @@ function normaliseError(error: unknown): ApiError {
     const axiosError = error as AxiosError<EnvelopeFailure>;
     const status = axiosError.response?.status;
     const payload = axiosError.response?.data;
-    const message = payload?.error?.message ?? axiosError.message ?? "Network error";
+    const message =
+      payload?.error?.message ?? axiosError.message ?? "Network error";
     return new ApiError({
       status,
       code: payload?.error?.code,

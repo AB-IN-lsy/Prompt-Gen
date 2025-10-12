@@ -54,6 +54,18 @@ func (r *PromptRepository) FindByID(ctx context.Context, userID, id uint) (*prom
 	return &entity, nil
 }
 
+// FindByUserAndTopic 根据用户与 Topic 查找 Prompt，常用于处理工作区失效后的兜底逻辑。
+func (r *PromptRepository) FindByUserAndTopic(ctx context.Context, userID uint, topic string) (*promptdomain.Prompt, error) {
+	var entity promptdomain.Prompt
+	if err := r.db.WithContext(ctx).
+		Where("user_id = ? AND topic = ?", userID, topic).
+		Order("updated_at DESC").
+		First(&entity).Error; err != nil {
+		return nil, err
+	}
+	return &entity, nil
+}
+
 // CreateVersion 记录 Prompt 的历史版本。
 func (r *PromptRepository) CreateVersion(ctx context.Context, version *promptdomain.PromptVersion) error {
 	if version == nil {
@@ -196,4 +208,20 @@ func (r *KeywordRepository) ListPromptKeywords(ctx context.Context, promptID uin
 		return nil, fmt.Errorf("list prompt keywords: %w", err)
 	}
 	return relations, nil
+}
+
+// ReplacePromptKeywords 先清理 prompt 现有关联，再批量插入新的关联关系。
+func (r *KeywordRepository) ReplacePromptKeywords(ctx context.Context, promptID uint, entries []promptdomain.PromptKeyword) error {
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("prompt_id = ?", promptID).Delete(&promptdomain.PromptKeyword{}).Error; err != nil {
+			return fmt.Errorf("delete prompt keywords: %w", err)
+		}
+		if len(entries) == 0 {
+			return nil
+		}
+		if err := tx.Create(&entries).Error; err != nil {
+			return fmt.Errorf("insert prompt keywords: %w", err)
+		}
+		return nil
+	})
 }

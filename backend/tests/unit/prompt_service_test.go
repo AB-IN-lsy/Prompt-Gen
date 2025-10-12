@@ -55,7 +55,7 @@ func setupPromptService(t *testing.T) (*promptsvc.Service, *repository.PromptRep
 	promptRepo := repository.NewPromptRepository(db)
 	keywordRepo := repository.NewKeywordRepository(db)
 	modelStub := &fakeModelInvoker{}
-	service := promptsvc.NewService(promptRepo, keywordRepo, modelStub, nil)
+	service := promptsvc.NewService(promptRepo, keywordRepo, modelStub, nil, nil, nil)
 	return service, promptRepo, keywordRepo, db, modelStub
 }
 

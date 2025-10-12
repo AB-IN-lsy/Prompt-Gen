@@ -54,7 +54,7 @@ func refreshCaptchaConfig(ctx context.Context, cfg WatchConfig, manager *Dynamic
 	if err != nil {
 		logger.Warnw("fetch captcha config failed", "error", err)
 		return
-}
+	}
 
 	if raw == *lastRaw {
 		return
@@ -90,4 +90,3 @@ func refreshCaptchaConfig(ctx context.Context, cfg WatchConfig, manager *Dynamic
 	logger.Infow("captcha config updated", "data_id", cfg.DataID, "group", cfg.Group)
 	*lastRaw = raw
 }
-
