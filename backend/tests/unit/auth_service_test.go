@@ -36,6 +36,7 @@ type fakeCaptcha struct {
 	expectedCode string
 	returnErr    error
 	verifyCalls  int
+	enabled      bool
 }
 
 func (f *fakeCaptcha) Generate(_ context.Context, _ string) (string, string, int, error) {
@@ -51,6 +52,17 @@ func (f *fakeCaptcha) Verify(_ context.Context, id string, answer string) error 
 		return errors.New("unexpected captcha payload")
 	}
 	return nil
+}
+
+func (f *fakeCaptcha) Enabled() bool {
+	if f == nil {
+		return false
+	}
+	if f.enabled {
+		return true
+	}
+	// 默认开启
+	return true
 }
 
 // newTestAuthService 创建内存版鉴权服务和仓储，便于单元测试隔离数据库依赖。

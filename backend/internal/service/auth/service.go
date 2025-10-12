@@ -49,6 +49,7 @@ const emailVerificationTTL = 24 * time.Hour
 type CaptchaManager interface {
 	captcha.Generator
 	captcha.Verifier
+	Enabled() bool
 }
 
 // TokenPair 表示一次鉴权流程中生成的访问令牌、刷新令牌及其过期时间。
@@ -160,7 +161,7 @@ func (s *Service) Register(ctx context.Context, params RegisterParams) (*domain.
 
 	log.Infow("register attempt")
 
-	if s.captcha != nil {
+	if s.captcha != nil && s.captcha.Enabled() {
 		if strings.TrimSpace(params.CaptchaID) == "" || strings.TrimSpace(params.CaptchaCode) == "" {
 			log.Warn("captcha required but missing")
 			return nil, TokenPair{}, ErrCaptchaRequired
@@ -175,6 +176,10 @@ func (s *Service) Register(ctx context.Context, params RegisterParams) (*domain.
 				log.Warnw("captcha mismatch", "captcha_id", params.CaptchaID)
 				return nil, TokenPair{}, ErrCaptchaInvalid
 			default:
+				if errors.Is(err, captcha.ErrCaptchaDisabled) {
+					log.Infow("captcha disabled during verification, skip check")
+					break
+				}
 				log.Errorw("captcha verify failed", "error", err)
 				return nil, TokenPair{}, fmt.Errorf("captcha verify: %w", err)
 			}
@@ -435,7 +440,7 @@ func (s *Service) issueEmailVerificationToken(ctx context.Context, user *domain.
 
 // CaptchaEnabled 表示当前服务是否启用了验证码依赖。
 func (s *Service) CaptchaEnabled() bool {
-	return s != nil && s.captcha != nil
+	return s != nil && s.captcha != nil && s.captcha.Enabled()
 }
 
 // GenerateCaptcha 调用底层验证码管理器生成图形验证码。
@@ -446,6 +451,9 @@ func (s *Service) GenerateCaptcha(ctx context.Context, ip string) (string, strin
 
 	id, b64, remaining, err := s.captcha.Generate(ctx, ip)
 	if err != nil {
+		if errors.Is(err, captcha.ErrCaptchaDisabled) {
+			return "", "", 0, ErrCaptchaRequired
+		}
 		if errors.Is(err, captcha.ErrRateLimited) {
 			return "", "", 0, ErrCaptchaRateLimited
 		}

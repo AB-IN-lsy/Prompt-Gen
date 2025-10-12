@@ -4,8 +4,8 @@ import "encoding/json"
 
 // ChatMessage 表示向火山引擎发起请求或从响应中解析出的单条消息。
 type ChatMessage struct {
-	Role    string `json:"role"`
-	Content string `json:"content"`
+	Role             string `json:"role"`
+	Content          string `json:"content"`
 	ReasoningContent string `json:"reasoning_content,omitempty"`
 }
 

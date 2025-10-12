@@ -13,6 +13,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 
 	"electron-go-app/backend/internal/app"
@@ -27,6 +28,7 @@ import (
 	authsvc "electron-go-app/backend/internal/service/auth"
 	changelogsrv "electron-go-app/backend/internal/service/changelog"
 	modelsvc "electron-go-app/backend/internal/service/model"
+	promptsvc "electron-go-app/backend/internal/service/prompt"
 	usersvc "electron-go-app/backend/internal/service/user"
 
 	"go.uber.org/zap"
@@ -44,6 +46,7 @@ type Application struct {
 	AuthSvc   *authsvc.Service
 	UserSvc   *usersvc.Service
 	ModelSvc  *modelsvc.Service
+	PromptSvc *promptsvc.Service
 	Changelog *changelogsrv.Service
 	Router    http.Handler
 }
@@ -57,6 +60,8 @@ func BuildApplication(ctx context.Context, logger *zap.SugaredLogger, resources 
 	tokens := token.NewJWTManager(cfg.JWTSecret, cfg.AccessTTL, cfg.RefreshTTL)
 	modelRepo := repository.NewModelCredentialRepository(resources.DBConn())
 	changelogRepo := repository.NewChangelogRepository(resources.DBConn())
+	promptRepo := repository.NewPromptRepository(resources.DBConn())
+	keywordRepo := repository.NewKeywordRepository(resources.DBConn())
 
 	// 刷新令牌优先落在 Redis，便于服务重启后继续验证。
 	var refreshStore authsvc.RefreshTokenStore
@@ -68,7 +73,7 @@ func BuildApplication(ctx context.Context, logger *zap.SugaredLogger, resources 
 	}
 
 	// 验证码管理器是可选的：未启用时返回 nil，后续 Handler 会自检。
-	captchaManager, err := initCaptchaManager(resources, logger)
+	captchaManager, err := initCaptchaManager(ctx, resources, logger)
 	if err != nil {
 		return nil, err
 	}
@@ -86,6 +91,12 @@ func BuildApplication(ctx context.Context, logger *zap.SugaredLogger, resources 
 	} else {
 		limiter = ratelimit.NewMemoryLimiter()
 	}
+	var promptLimiter ratelimit.Limiter
+	if resources.Redis != nil {
+		promptLimiter = ratelimit.NewRedisLimiter(resources.Redis, "prompt")
+	} else {
+		promptLimiter = ratelimit.NewMemoryLimiter()
+	}
 
 	// 支持通过环境变量自定义验证邮件的频率限制。
 	verificationLimit, verificationWindow := loadEmailVerificationRateConfig(logger)
@@ -99,6 +110,9 @@ func BuildApplication(ctx context.Context, logger *zap.SugaredLogger, resources 
 
 	modelService := modelsvc.NewService(modelRepo, userRepo)
 	modelHandler := handler.NewModelHandler(modelService)
+	promptService := promptsvc.NewService(promptRepo, keywordRepo, modelService, logger)
+	promptRateLimit := loadPromptRateLimit(logger)
+	promptHandler := handler.NewPromptHandler(promptService, promptLimiter, promptRateLimit)
 	changelogService := changelogsrv.NewService(changelogRepo)
 	changelogHandler := handler.NewChangelogHandler(changelogService, modelService)
 
@@ -113,6 +127,7 @@ func BuildApplication(ctx context.Context, logger *zap.SugaredLogger, resources 
 		UploadHandler:    uploadHandler,
 		ModelHandler:     modelHandler,
 		ChangelogHandler: changelogHandler,
+		PromptHandler:    promptHandler,
 		AuthMW:           authMiddleware,
 	})
 
@@ -121,20 +136,21 @@ func BuildApplication(ctx context.Context, logger *zap.SugaredLogger, resources 
 		AuthSvc:   authService,
 		UserSvc:   userService,
 		ModelSvc:  modelService,
+		PromptSvc: promptService,
 		Changelog: changelogService,
 		Router:    router,
 	}, nil
 }
 
-func initCaptchaManager(resources *app.Resources, logger *zap.SugaredLogger) (authsvc.CaptchaManager, error) {
-	// 从环境变量解析验证码图像、限流等配置。
-	captchaOpts, captchaEnabled, err := captcha.LoadOptionsFromEnv()
+func initCaptchaManager(ctx context.Context, resources *app.Resources, logger *zap.SugaredLogger) (authsvc.CaptchaManager, error) {
+	opts, enabled, watchCfg, err := captcha.LoadOptions(ctx)
 	if err != nil {
 		logger.Errorw("load captcha config failed", "error", err)
 		return nil, fmt.Errorf("load captcha config: %w", err)
 	}
 
-	if !captchaEnabled {
+	if !enabled && watchCfg == nil {
+		logger.Infow("captcha disabled")
 		return nil, nil
 	}
 
@@ -142,11 +158,28 @@ func initCaptchaManager(resources *app.Resources, logger *zap.SugaredLogger) (au
 		return nil, fmt.Errorf("captcha enabled but redis not configured")
 	}
 
-	// 为验证码生成独立限流前缀，防止与邮箱验证冲突。
-	limiter := ratelimit.NewRedisLimiter(resources.Redis, fmt.Sprintf("%s_rl", captchaOpts.Prefix))
-	manager := captcha.NewManager(resources.Redis, limiter, captchaOpts)
-	logger.Infow("captcha enabled", "prefix", captchaOpts.Prefix, "ttl", captchaOpts.TTL)
-	return manager, nil
+	prefix := opts.Prefix
+	if strings.TrimSpace(prefix) == "" {
+		prefix = "captcha"
+	}
+	limiter := ratelimit.NewRedisLimiter(resources.Redis, fmt.Sprintf("%s_rl", prefix))
+	dynamicManager := captcha.NewDynamicManager(resources.Redis, limiter)
+	if err := dynamicManager.Swap(opts, enabled); err != nil {
+		return nil, fmt.Errorf("init captcha manager: %w", err)
+	}
+
+	if watchCfg != nil {
+		go captcha.StartWatcher(ctx, *watchCfg, dynamicManager, logger)
+		logger.Infow("captcha watcher started", "data_id", watchCfg.DataID, "group", watchCfg.Group, "interval", watchCfg.PollInterval)
+	}
+
+	if dynamicManager.Enabled() {
+		logger.Infow("captcha enabled", "prefix", opts.Prefix, "ttl", opts.TTL)
+	} else {
+		logger.Infow("captcha currently disabled")
+	}
+
+	return dynamicManager, nil
 }
 
 func initEmailSender(logger *zap.SugaredLogger) (authsvc.EmailSender, error) {
@@ -201,4 +234,43 @@ func loadEmailVerificationRateConfig(logger *zap.SugaredLogger) (int, time.Durat
 	}
 
 	return limit, window
+}
+
+func loadPromptRateLimit(logger *zap.SugaredLogger) handler.PromptRateLimit {
+	interpretLimit := parseIntEnv("PROMPT_INTERPRET_LIMIT", handler.DefaultInterpretLimit, logger)
+	interpretWindow := parseDurationEnv("PROMPT_INTERPRET_WINDOW", handler.DefaultInterpretWindow, logger)
+	generateLimit := parseIntEnv("PROMPT_GENERATE_LIMIT", handler.DefaultGenerateLimit, logger)
+	generateWindow := parseDurationEnv("PROMPT_GENERATE_WINDOW", handler.DefaultGenerateWindow, logger)
+	return handler.PromptRateLimit{
+		InterpretLimit:  interpretLimit,
+		InterpretWindow: interpretWindow,
+		GenerateLimit:   generateLimit,
+		GenerateWindow:  generateWindow,
+	}
+}
+
+func parseIntEnv(key string, defaultValue int, logger *zap.SugaredLogger) int {
+	raw := strings.TrimSpace(os.Getenv(key))
+	if raw == "" {
+		return defaultValue
+	}
+	value, err := strconv.Atoi(raw)
+	if err != nil || value <= 0 {
+		logger.Warnw("invalid integer env, fallback to default", "key", key, "value", raw, "default", defaultValue, "error", err)
+		return defaultValue
+	}
+	return value
+}
+
+func parseDurationEnv(key string, defaultValue time.Duration, logger *zap.SugaredLogger) time.Duration {
+	raw := strings.TrimSpace(os.Getenv(key))
+	if raw == "" {
+		return defaultValue
+	}
+	value, err := time.ParseDuration(raw)
+	if err != nil || value <= 0 {
+		logger.Warnw("invalid duration env, fallback to default", "key", key, "value", raw, "default", defaultValue, "error", err)
+		return defaultValue
+	}
+	return value
 }

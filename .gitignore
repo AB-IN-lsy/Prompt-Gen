@@ -78,3 +78,4 @@ Thumbs.db
 # avatar images
 backend/public/avatars/*
 !backend/public/avatars/.gitkeep
+/docs

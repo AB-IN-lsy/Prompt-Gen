@@ -18,6 +18,7 @@ type RouterOptions struct {
 	UploadHandler    *handler.UploadHandler
 	ModelHandler     *handler.ModelHandler
 	ChangelogHandler *handler.ChangelogHandler
+	PromptHandler    *handler.PromptHandler
 	AuthMW           *middleware.AuthMiddleware
 }
 
@@ -99,6 +100,18 @@ func NewRouter(opts RouterOptions) *gin.Engine {
 			models.POST("/:id/test", opts.ModelHandler.TestConnection)
 			models.PUT("/:id", opts.ModelHandler.Update)
 			models.DELETE("/:id", opts.ModelHandler.Delete)
+		}
+
+		if opts.PromptHandler != nil {
+			prompts := api.Group("/prompts")
+			if opts.AuthMW != nil {
+				prompts.Use(opts.AuthMW.Handle())
+			}
+			prompts.POST("/interpret", opts.PromptHandler.Interpret)
+			prompts.POST("/keywords/augment", opts.PromptHandler.AugmentKeywords)
+			prompts.POST("/keywords/manual", opts.PromptHandler.AddManualKeyword)
+			prompts.POST("/generate", opts.PromptHandler.GeneratePrompt)
+			prompts.POST("", opts.PromptHandler.SavePrompt)
 		}
 
 		if opts.UploadHandler != nil {

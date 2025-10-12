@@ -49,7 +49,7 @@ func setupAuthFlow(t *testing.T) *gin.Engine {
 		t.Fatalf("open sqlite: %v", err)
 	}
 
-	if err := db.AutoMigrate(&domain.User{}, &domain.EmailVerificationToken{}); err != nil {
+	if err := db.AutoMigrate(&domain.User{}, &domain.EmailVerificationToken{}, &domain.UserModelCredential{}); err != nil {
 		t.Fatalf("auto migrate: %v", err)
 	}
 
@@ -59,7 +59,8 @@ func setupAuthFlow(t *testing.T) *gin.Engine {
 	jwtManager := token.NewJWTManager(secret, time.Minute*5, time.Hour)
 	refreshStore := token.NewMemoryRefreshTokenStore()
 	authService := authsvc.NewService(repo, verificationRepo, jwtManager, refreshStore, nil, noopEmailSender{})
-	userService := usersvc.NewService(repo)
+	modelRepo := repository.NewModelCredentialRepository(db)
+	userService := usersvc.NewService(repo, modelRepo)
 
 	authHandler := handler.NewAuthHandler(authService, nil, 0, 0)
 	userHandler := handler.NewUserHandler(userService)
@@ -149,8 +150,8 @@ func TestAuthFlow_RegisterLoginAndFetchProfile(t *testing.T) {
 
 	// Step 2: login should be blocked until email verified
 	loginResp := performJSONRequest(t, router, http.MethodPost, "/api/auth/login", map[string]any{
-		"email":    email,
-		"password": password,
+		"identifier": email,
+		"password":   password,
 	}, nil)
 
 	if loginResp.Code != http.StatusForbidden {
@@ -158,7 +159,7 @@ func TestAuthFlow_RegisterLoginAndFetchProfile(t *testing.T) {
 	}
 
 	// Step 3: request verification token
-	requestResp := performJSONRequest(t, router, http.MethodPost, "/api/auth/request-email-verification", map[string]any{
+	requestResp := performJSONRequest(t, router, http.MethodPost, "/api/auth/verify-email/request", map[string]any{
 		"email": email,
 	}, nil)
 
@@ -186,7 +187,7 @@ func TestAuthFlow_RegisterLoginAndFetchProfile(t *testing.T) {
 	}
 
 	// Step 4: verify email
-	verifyResp := performJSONRequest(t, router, http.MethodPost, "/api/auth/verify-email", map[string]any{
+	verifyResp := performJSONRequest(t, router, http.MethodPost, "/api/auth/verify-email/confirm", map[string]any{
 		"token": tokenVal,
 	}, nil)
 
@@ -196,8 +197,8 @@ func TestAuthFlow_RegisterLoginAndFetchProfile(t *testing.T) {
 
 	// Step 5: login after verification
 	loginResp = performJSONRequest(t, router, http.MethodPost, "/api/auth/login", map[string]any{
-		"email":    email,
-		"password": password,
+		"identifier": email,
+		"password":   password,
 	}, nil)
 
 	if loginResp.Code != http.StatusOK {

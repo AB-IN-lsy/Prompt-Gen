@@ -35,10 +35,13 @@
 | `JWT_SECRET` | JWT 签名密钥，必填 |
 | `JWT_ACCESS_TTL` | 访问令牌有效期，如 `15m` |
 | `JWT_REFRESH_TTL` | 刷新令牌有效期，如 `168h` |
-| `NACOS_ENDPOINT` | Nacos 地址，形如 `ip:port` |
+| `NACOS_ENDPOINT` | Nacos 地址，形如 `ip:port`（仅在继续使用配置中心时需要） |
 | `NACOS_USERNAME` / `NACOS_PASSWORD` | Nacos 登录凭证 |
-| `NACOS_GROUP` / `NACOS_NAMESPACE` | Nacos 读取 MySQL 配置所用的分组与命名空间 |
-| `MYSQL_CONFIG_DATA_ID` / `MYSQL_CONFIG_GROUP` | Nacos 中 MySQL 配置的 DataId 与 Group |
+| `NACOS_GROUP` / `NACOS_NAMESPACE` | Nacos 配置读取时使用的分组与命名空间 |
+| `MYSQL_HOST` / `MYSQL_PORT` | MySQL 主机与端口（默认 `3306`） |
+| `MYSQL_USERNAME` / `MYSQL_PASSWORD` | MySQL 连接账号与密码 |
+| `MYSQL_DATABASE` | 默认数据库名，未填时为 `prompt` |
+| `MYSQL_PARAMS` | 追加在 DSN 末尾的参数，默认 `charset=utf8mb4&parseTime=true&loc=Local` |
 | `MODEL_CREDENTIAL_MASTER_KEY` | 32 字节主密钥（需使用 Base64 编码后写入），用于加解密模型 API Key |
 
 ### 验证码与 Redis
@@ -55,6 +58,10 @@
 | `CAPTCHA_MAX_SKEW` / `CAPTCHA_DOT_COUNT` | 图片扭曲、噪点参数 |
 | `CAPTCHA_RATE_LIMIT_PER_MIN` | 每个 IP 在窗口内允许请求次数 |
 | `CAPTCHA_RATE_LIMIT_WINDOW` | 限流窗口时长，例如 `1m` |
+| `CAPTCHA_CONFIG_DATA_ID` / `CAPTCHA_CONFIG_GROUP` | （可选）若填则从 Nacos 拉取验证码配置 JSON，未填时使用环境变量 |
+| `CAPTCHA_CONFIG_POLL_INTERVAL` | 拉取 Nacos 配置的轮询间隔，默认 `30s` |
+
+> 当设置 `CAPTCHA_CONFIG_DATA_ID` 时，服务启动后会按 `CAPTCHA_CONFIG_POLL_INTERVAL` 轮询 Nacos，实时应用修改；配置 JSON 中的 `enabled` 字段用于动态开关验证码功能。
 
 ### 邮箱验证与邮件发送
 
@@ -63,6 +70,15 @@
 | `APP_PUBLIC_BASE_URL` | 前端公共地址，用于拼接验证链接，例如 `https://app.example.com` |
 | `EMAIL_VERIFICATION_LIMIT` | 邮箱验证重发限频次数，默认 `5` |
 | `EMAIL_VERIFICATION_WINDOW` | 邮箱验证限频窗口时长，默认 `1h` |
+
+### Prompt 工作台限流（可选）
+
+| 变量 | 作用 |
+| --- | --- |
+| `PROMPT_INTERPRET_LIMIT` | 自然语言解析接口限流次数，默认 `3` |
+| `PROMPT_INTERPRET_WINDOW` | 自然语言解析限流窗口，如 `60s`，默认 `1m` |
+| `PROMPT_GENERATE_LIMIT` | Prompt 生成接口限流次数，默认 `3` |
+| `PROMPT_GENERATE_WINDOW` | Prompt 生成限流窗口，默认 `1m` |
 
 #### SMTP 发信（可选）
 
@@ -145,6 +161,11 @@ go run ./backend/cmd/sendmail -to you@example.com -name "测试账号"
 | `POST` | `/api/models` | 新增模型凭据并加密存储 | JSON：`provider`、`label`、`api_key`、`metadata` |
 | `PUT` | `/api/models/:id` | 更新模型凭据（可替换 API Key） | JSON：`label`、`api_key`、`metadata` |
 | `DELETE` | `/api/models/:id` | 删除模型凭据 | 无 |
+| `POST` | `/api/prompts/interpret` | 自然语言解析主题与关键词 | JSON：`description`、`model_key`、`language` |
+| `POST` | `/api/prompts/keywords/augment` | 补充关键词并去重 | JSON：`topic`、`model_key`、`existing_positive[]`、`existing_negative[]` |
+| `POST` | `/api/prompts/keywords/manual` | 手动新增关键词并落库 | JSON：`topic`、`word`、`polarity`、`prompt_id` |
+| `POST` | `/api/prompts/generate` | 调模型生成 Prompt 正文 | JSON：`topic`、`model_key`、`positive_keywords[]`、`negative_keywords[]` |
+| `POST` | `/api/prompts` | 保存草稿或发布 Prompt | JSON：`prompt_id`、`topic`、`body`、`status`、`publish` |
 | `GET` | `/api/changelog` | 获取更新日志列表 | Query：`locale`（可选，默认 `en`） |
 | `POST` | `/api/changelog` | 新增更新日志（管理员） | JSON：`locale`、`badge`、`title`、`summary`、`items[]`、`published_at` |
 | `PUT` | `/api/changelog/:id` | 编辑指定日志（管理员） | 同 `POST` |
@@ -157,30 +178,6 @@ go run ./backend/cmd/sendmail -to you@example.com -name "测试账号"
 - 管理员身份通过用户表中的 `is_admin` 字段判定；JWT 会携带该布尔值，鉴权中间件会将其写入 `Gin Context` 供 Handler 使用。  
 - 创建日志时可传入 `translate_to`（字符串数组）与 `translation_model_key` 字段，后端会调用管理员名下的大模型凭据完成自动翻译，并为每个目标语言生成额外的 changelog 记录。支持 DeepSeek（如 `deepseek-chat`）以及火山引擎方舟模型（如 `doubao-1-5-thinking-pro-250415`）。  
 - 如需手动初始化数据，可执行以下 SQL 新建表并将目标账号标记为管理员：
-
-```sql
-ALTER TABLE `users`
-  ADD COLUMN `is_admin` TINYINT(1) NOT NULL DEFAULT 0 AFTER `password_hash`;
-
-CREATE TABLE `changelog_entries` (
-  `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
-  `locale` VARCHAR(16) NOT NULL DEFAULT 'en',
-  `badge` VARCHAR(64) NOT NULL,
-  `title` VARCHAR(255) NOT NULL,
-  `summary` TEXT NOT NULL,
-  `items` JSON NOT NULL,
-  `published_at` DATETIME NOT NULL,
-  `author_id` BIGINT UNSIGNED DEFAULT NULL,
-  `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  PRIMARY KEY (`id`),
-  KEY `idx_changelog_locale_date` (`locale`, `published_at`),
-  CONSTRAINT `fk_changelog_author`
-    FOREIGN KEY (`author_id`) REFERENCES `users` (`id`) ON DELETE SET NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
-UPDATE `users` SET `is_admin` = 1 WHERE `email` = 'your-admin@example.com';
-```
 
 > 现阶段仍保留 i18n 中的静态 changelog 文案，用作空库时的兜底展示；待生产环境数据稳定后，可将这些静态条目迁移成初始 SQL 种子，再移除冗余文案。
 
@@ -547,6 +544,96 @@ UPDATE `users` SET `is_admin` = 1 WHERE `email` = 'your-admin@example.com';
 - **成功响应**：`204`。
 - **常见错误**：记录不存在 → `404`。
 
+#### POST /api/prompts/interpret
+
+- **用途**：解析用户输入的自然语言描述，生成主题与首批关键词建议。
+- **请求体**
+
+  ```json
+  {
+    "description": "帮我准备 React 前端工程师面试，聚焦 Hooks 和性能优化，排除 jQuery",
+    "model_key": "deepseek-chat",
+    "language": "中文"
+  }
+  ```
+
+- **成功响应**：`200`，返回 `topic`、`positive_keywords[]`、`negative_keywords[]`、`confidence`。同一用户 60 秒内默认限 3 次，超限返回 `429` 并在 `error.details.retry_after_seconds` 给出冷却时间。
+- **常见错误**：描述为空或模型未配置 → `400`。
+
+#### POST /api/prompts/keywords/augment
+
+- **用途**：基于已有关键词调用模型补充新词，同时写入关键词字典，重复词会被自动过滤。
+- **请求体**
+
+  ```json
+  {
+    "topic": "React 前端面试",
+    "model_key": "deepseek-chat",
+    "existing_positive": [{"word": "React"}],
+    "existing_negative": [{"word": "过时框架"}]
+  }
+  ```
+
+- **成功响应**：`200`，返回新增的 `positive[]`、`negative[]`。
+- **常见错误**：缺少主题或模型 → `400`。
+
+#### POST /api/prompts/keywords/manual
+
+- **用途**：手动录入关键词，系统会在用户词典中落库并可选关联到当前 Prompt。
+- **请求体**
+
+  ```json
+  {
+    "topic": "React 前端面试",
+    "word": "组件设计",
+    "polarity": "positive",
+    "prompt_id": 18
+  }
+  ```
+
+- **成功响应**：`201`，返回 `keyword_id`、`word`、`polarity`、`source`。
+- **常见错误**：缺少词语或主题 → `400`。
+
+#### POST /api/prompts/generate
+
+- **用途**：根据主题与关键词调用用户配置的大模型生成 Prompt 正文。
+- **请求体**
+
+  ```json
+  {
+    "topic": "React 前端面试",
+    "model_key": "deepseek-chat",
+    "positive_keywords": [{"word": "React"}, {"word": "Hooks"}],
+    "negative_keywords": [{"word": "陈旧框架"}],
+    "instructions": "使用 STAR 框架组织问题",
+    "temperature": 0.7
+  }
+  ```
+
+- **成功响应**：`200`，返回 `prompt`、`model`、`duration_ms`、`usage`、关键词快照。同一用户 60 秒内默认限 3 次。
+- **常见错误**：正向关键词为空 → `400`；模型调用失败 → `502`。
+
+#### POST /api/prompts
+
+- **用途**：保存 Prompt 草稿或发布版本；传入 `prompt_id` 表示更新，否则创建新草稿。
+- **请求体**
+
+  ```json
+  {
+    "prompt_id": 18,
+    "topic": "React 前端面试",
+    "body": "Prompt 正文……",
+    "model": "deepseek-chat",
+    "status": "draft",
+    "publish": false,
+    "positive_keywords": [{"word": "React"}],
+    "negative_keywords": []
+  }
+  ```
+
+- **成功响应**：`200`，返回 `prompt_id`、`status`、`version`。当 `publish=true` 时生成历史版本并更新 `published_at`。
+- **常见错误**：缺少 body/topic → `400`；目标 Prompt 不存在 → `404`。
+
 ## 启动与测试
 
 ```powershell
@@ -585,11 +672,14 @@ backend/
 │  ├─ config/
 │  │  └─ env_loader.go           # 加载 .env / 环境变量
 │  ├─ domain/
+│  │  ├─ prompt/
+│  │  │  └─ entity.go            # Prompt / Keyword / 版本实体定义
 │  │  └─ user/
 │  │     └─ entity.go            # User 实体与 Settings 结构
 │  ├─ handler/
 │  │  ├─ auth_handler.go         # /api/auth/* 接口
 │  │  ├─ user_handler.go         # /api/users/me 查询与更新
+│  │  ├─ prompt_handler.go       # /api/prompts/* 工作台接口
 │  │  └─ upload_handler.go       # /api/uploads/avatar 上传
 │  ├─ infra/
 │  │  ├─ captcha/
@@ -609,13 +699,15 @@ backend/
 │  │  └─ auth_middleware.go      # Bearer Token 鉴权
 │  ├─ repository/
 │  │  ├─ user_repository.go      # User GORM 操作与唯一性检查
-│  │  └─ model_credential_repository.go # 模型凭据持久化
+│  │  ├─ model_credential_repository.go # 模型凭据持久化
+│  │  └─ prompt_repository.go    # Prompt / Keyword / 版本存储
 │  ├─ server/
 │  │  └─ router.go               # Gin 路由、CORS、静态资源配置
 │  └─ service/
 │     ├─ auth/service.go         # 注册、登录、刷新、登出逻辑
 │     ├─ user/service.go         # 用户资料、设置更新
-│     └─ model/service.go        # 模型凭据加密与业务逻辑
+│     ├─ model/service.go        # 模型凭据加密与业务逻辑
+│     └─ prompt/service.go       # Prompt 工作台核心流程
 ├─ tests/
 │  ├─ unit/
 │  │  ├─ auth_service_test.go
@@ -636,6 +728,16 @@ backend/
 ```
 
 需要新增模块时，推荐按照上述分层模式扩展，保持 Handler、Service、Repository 等职责清晰，并优先在 `tests/` 中补充对应的单元/集成测试。
+
+## Prompt 工作台流程
+
+1. **自然语言解析**：前端调用 `POST /api/prompts/interpret`，服务端使用用户配置的模型提炼 `topic` 与首批正/负关键词，并将结果写入关键词字典（来源标记为 `model`）。  
+2. **关键词补足**：当用户需要更多词汇时，调用 `POST /api/prompts/keywords/augment`，系统会基于现有词库和模型输出返回缺口关键词，同时自动去重。手动输入则通过 `POST /api/prompts/keywords/manual` 落库，来源标记为 `manual`。  
+3. **生成 Prompt**：点击生成按钮触发 `POST /api/prompts/generate`，带上最终确认的主题与关键词，返回 Prompt 正文、调用耗时与 token 统计。接口默认 60 秒内限 3 次，防止误触。  
+4. **保存与发布**：草稿阶段调用 `POST /api/prompts` 持久化（`publish=false`），正文与关键词 JSON 储存在 `prompts` 表；发布时将 `publish=true` 并写入 `prompt_versions` 表保留快照，最近版本号保存在 `latest_version_no` 中以便回滚。  
+5. **关键词回收**：每次 interpret/augment/manual 调用都会更新 `keywords` 表与 `prompt_keywords` 关联，确保后续搜索与推荐可以复用历史内容，复合唯一索引 `(user_id, topic, word)` 保证去重。
+
+> **说明**：`LONGTEXT` 字段用于保存 JSON 字符串（正/负关键词、标签等），插入时请确保写入合法 JSON 文本，例如 `'[]'`。
 
 ## 待办与安全增强排期
 

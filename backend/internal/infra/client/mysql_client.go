@@ -12,6 +12,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strconv"
+	"strings"
 	"time"
 
 	"electron-go-app/backend/internal/config"
@@ -23,6 +25,12 @@ import (
 
 const (
 	mysqlConfigDataIDEnv = "MYSQL_CONFIG_DATA_ID"
+	envMySQLHost         = "MYSQL_HOST"
+	envMySQLPort         = "MYSQL_PORT"
+	envMySQLUsername     = "MYSQL_USERNAME"
+	envMySQLPassword     = "MYSQL_PASSWORD"
+	envMySQLDatabase     = "MYSQL_DATABASE"
+	envMySQLParams       = "MYSQL_PARAMS"
 )
 
 const (
@@ -58,6 +66,43 @@ func LoadMySQLConfig(ctx context.Context, opts NacosOptions, group string) (MySQ
 
 	cfg, err := ParseMySQLConfig([]byte(content))
 	if err != nil {
+		return MySQLConfig{}, err
+	}
+
+	return cfg, nil
+}
+
+// LoadMySQLConfigFromEnv 从环境变量读取 MySQL 配置。
+func LoadMySQLConfigFromEnv() (MySQLConfig, error) {
+	config.LoadEnvFiles()
+
+	cfg := MySQLConfig{
+		Host:     strings.TrimSpace(os.Getenv(envMySQLHost)),
+		Username: strings.TrimSpace(os.Getenv(envMySQLUsername)),
+		Password: strings.TrimSpace(os.Getenv(envMySQLPassword)),
+		Database: strings.TrimSpace(os.Getenv(envMySQLDatabase)),
+		Params:   strings.TrimSpace(os.Getenv(envMySQLParams)),
+	}
+
+	if portStr := strings.TrimSpace(os.Getenv(envMySQLPort)); portStr != "" {
+		if port, err := strconv.Atoi(portStr); err == nil && port > 0 {
+			cfg.Port = port
+		} else {
+			return MySQLConfig{}, fmt.Errorf("invalid MYSQL_PORT: %s", portStr)
+		}
+	}
+
+	if cfg.Port == 0 {
+		cfg.Port = defaultMySQLPort
+	}
+	if cfg.Database == "" {
+		cfg.Database = defaultMySQLDatabase
+	}
+	if cfg.Params == "" {
+		cfg.Params = defaultMySQLParams
+	}
+
+	if err := validateMySQLConfig(cfg); err != nil {
 		return MySQLConfig{}, err
 	}
 

@@ -1,0 +1,259 @@
+package unit
+
+import (
+	"context"
+	"encoding/json"
+	"testing"
+	"time"
+
+	promptdomain "electron-go-app/backend/internal/domain/prompt"
+	deepseek "electron-go-app/backend/internal/infra/model/deepseek"
+	"electron-go-app/backend/internal/repository"
+	promptsvc "electron-go-app/backend/internal/service/prompt"
+
+	"gorm.io/driver/sqlite"
+	"gorm.io/gorm"
+)
+
+// fakeModelInvoker 用于在单元测试中模拟大模型响应。
+type fakeModelInvoker struct {
+	responses []deepseek.ChatCompletionResponse
+	err       error
+	requests  []deepseek.ChatCompletionRequest
+}
+
+func (f *fakeModelInvoker) InvokeChatCompletion(_ context.Context, _ uint, _ string, req deepseek.ChatCompletionRequest) (deepseek.ChatCompletionResponse, error) {
+	f.requests = append(f.requests, req)
+	if len(f.responses) == 0 {
+		return deepseek.ChatCompletionResponse{}, f.err
+	}
+	resp := f.responses[0]
+	f.responses = f.responses[1:]
+	return resp, nil
+}
+
+func setupPromptService(t *testing.T) (*promptsvc.Service, *repository.PromptRepository, *repository.KeywordRepository, *gorm.DB, *fakeModelInvoker) {
+	t.Helper()
+
+	dsn := "file:" + t.Name() + "?mode=memory&cache=shared"
+	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("open sqlite: %v", err)
+	}
+
+	sqlDB, err := db.DB()
+	if err != nil {
+		t.Fatalf("get sql db: %v", err)
+	}
+	sqlDB.SetMaxOpenConns(1)
+	sqlDB.SetMaxIdleConns(1)
+
+	if err := db.AutoMigrate(&promptdomain.Prompt{}, &promptdomain.Keyword{}, &promptdomain.PromptKeyword{}, &promptdomain.PromptVersion{}); err != nil {
+		t.Fatalf("auto migrate: %v", err)
+	}
+
+	promptRepo := repository.NewPromptRepository(db)
+	keywordRepo := repository.NewKeywordRepository(db)
+	modelStub := &fakeModelInvoker{}
+	service := promptsvc.NewService(promptRepo, keywordRepo, modelStub, nil)
+	return service, promptRepo, keywordRepo, db, modelStub
+}
+
+// TestPromptServiceInterpret 验证自然语言解析会落地关键词并正确去重。
+func TestPromptServiceInterpret(t *testing.T) {
+	service, _, keywordRepo, db, modelStub := setupPromptService(t)
+	defer func() {
+		sqlDB, _ := db.DB()
+		sqlDB.Close()
+	}()
+
+	payload := map[string]any{
+		"topic":             "React 前端面试",
+		"positive_keywords": []string{"React", "Hooks", "状态管理", "React"},
+		"negative_keywords": []string{"过时框架", "重复"},
+		"confidence":        0.92,
+	}
+	content, _ := json.Marshal(payload)
+	modelStub.responses = []deepseek.ChatCompletionResponse{
+		{
+			Model: "deepseek-chat",
+			Choices: []deepseek.ChatCompletionChoice{
+				{Message: deepseek.ChatMessage{Role: "assistant", Content: string(content)}},
+			},
+		},
+	}
+
+	result, err := service.Interpret(context.Background(), promptsvc.InterpretInput{
+		UserID:      1,
+		Description: "帮我准备一份 React 前端面试的问答提示词，别出现过时框架",
+		ModelKey:    "deepseek-chat",
+		Language:    "中文",
+	})
+	if err != nil {
+		t.Fatalf("Interpret returned error: %v", err)
+	}
+	if result.Topic != "React 前端面试" {
+		t.Fatalf("unexpected topic: %s", result.Topic)
+	}
+	if len(result.PositiveKeywords) != 3 {
+		t.Fatalf("expected 3 positive keywords, got %d", len(result.PositiveKeywords))
+	}
+	if len(result.NegativeKeywords) != 2 {
+		t.Fatalf("expected 2 negative keywords, got %d", len(result.NegativeKeywords))
+	}
+
+	// 关键词应已写入数据库，方便后续补全。
+	stored, err := keywordRepo.ListByTopic(context.Background(), 1, "React 前端面试")
+	if err != nil {
+		t.Fatalf("list keywords failed: %v", err)
+	}
+	if len(stored) != 5 {
+		t.Fatalf("expected 5 stored keywords, got %d", len(stored))
+	}
+}
+
+// TestPromptServiceAugmentKeywords 验证模型补充关键词时会自动跳过重复项。
+func TestPromptServiceAugmentKeywords(t *testing.T) {
+	service, _, _, db, modelStub := setupPromptService(t)
+	defer func() {
+		sqlDB, _ := db.DB()
+		sqlDB.Close()
+	}()
+
+	payload := map[string]any{
+		"positive_keywords": []string{"性能优化", "状态管理"},
+		"negative_keywords": []string{"重复"},
+	}
+	content, _ := json.Marshal(payload)
+	modelStub.responses = []deepseek.ChatCompletionResponse{
+		{
+			Model: "deepseek-chat",
+			Choices: []deepseek.ChatCompletionChoice{
+				{Message: deepseek.ChatMessage{Role: "assistant", Content: string(content)}},
+			},
+		},
+	}
+
+	out, err := service.AugmentKeywords(context.Background(), promptsvc.AugmentInput{
+		UserID:           1,
+		Topic:            "React 前端面试",
+		ModelKey:         "deepseek-chat",
+		ExistingPositive: []promptsvc.KeywordItem{{Word: "状态管理", Polarity: promptdomain.KeywordPolarityPositive}},
+		ExistingNegative: []promptsvc.KeywordItem{},
+	})
+	if err != nil {
+		t.Fatalf("AugmentKeywords error: %v", err)
+	}
+	if len(out.Positive) != 1 {
+		t.Fatalf("expected 1 positive keyword after dedupe, got %d", len(out.Positive))
+	}
+	if out.Positive[0].Word != "性能优化" {
+		t.Fatalf("unexpected positive keyword: %+v", out.Positive[0])
+	}
+	if len(out.Negative) != 1 || out.Negative[0].Word != "重复" {
+		t.Fatalf("unexpected negative keywords: %+v", out.Negative)
+	}
+}
+
+// TestPromptServiceGeneratePrompt 验证生成流程会返回模型的正文。
+func TestPromptServiceGeneratePrompt(t *testing.T) {
+	service, _, _, db, modelStub := setupPromptService(t)
+	defer func() {
+		sqlDB, _ := db.DB()
+		sqlDB.Close()
+	}()
+
+	modelStub.responses = []deepseek.ChatCompletionResponse{
+		{
+			Model: "deepseek-chat",
+			Choices: []deepseek.ChatCompletionChoice{
+				{Message: deepseek.ChatMessage{Role: "assistant", Content: "这是准备 React 技术面试的 Prompt 正文"}},
+			},
+			Usage: &deepseek.ChatCompletionUsage{
+				PromptTokens:     10,
+				CompletionTokens: 20,
+				TotalTokens:      30,
+			},
+		},
+	}
+
+	start := time.Now()
+	out, err := service.GeneratePrompt(context.Background(), promptsvc.GenerateInput{
+		UserID:           1,
+		Topic:            "React 面试",
+		ModelKey:         "deepseek-chat",
+		PositiveKeywords: []promptsvc.KeywordItem{{Word: "React"}, {Word: "Hooks"}},
+		NegativeKeywords: []promptsvc.KeywordItem{{Word: "陈旧方案"}},
+	})
+	if err != nil {
+		t.Fatalf("GeneratePrompt error: %v", err)
+	}
+	if out.Prompt == "" {
+		t.Fatalf("expected non-empty prompt content")
+	}
+	if out.Duration <= 0 || out.Duration > time.Since(start) {
+		t.Fatalf("unexpected duration: %v", out.Duration)
+	}
+	if out.Usage == nil || out.Usage.TotalTokens != 30 {
+		t.Fatalf("unexpected usage: %+v", out.Usage)
+	}
+}
+
+// TestPromptServiceSave 验证保存草稿与发布版本的行为。
+func TestPromptServiceSave(t *testing.T) {
+	service, promptRepo, _, db, _ := setupPromptService(t)
+	defer func() {
+		sqlDB, _ := db.DB()
+		sqlDB.Close()
+	}()
+
+	saveDraft, err := service.Save(context.Background(), promptsvc.SaveInput{
+		UserID:           1,
+		Topic:            "React 面试",
+		Body:             "Draft Prompt Body",
+		Model:            "deepseek-chat",
+		Status:           promptdomain.PromptStatusDraft,
+		PositiveKeywords: []promptsvc.KeywordItem{{Word: "React"}},
+		NegativeKeywords: []promptsvc.KeywordItem{},
+	})
+	if err != nil {
+		t.Fatalf("save draft error: %v", err)
+	}
+	if saveDraft.Status != promptdomain.PromptStatusDraft {
+		t.Fatalf("expected draft status, got %s", saveDraft.Status)
+	}
+	if saveDraft.PromptID == 0 {
+		t.Fatalf("expected prompt id generated")
+	}
+
+	savePublish, err := service.Save(context.Background(), promptsvc.SaveInput{
+		UserID:           1,
+		PromptID:         saveDraft.PromptID,
+		Topic:            "React 面试",
+		Body:             "Published Prompt Body",
+		Model:            "deepseek-chat",
+		Publish:          true,
+		PositiveKeywords: []promptsvc.KeywordItem{{Word: "React"}},
+		NegativeKeywords: []promptsvc.KeywordItem{},
+	})
+	if err != nil {
+		t.Fatalf("publish error: %v", err)
+	}
+	if savePublish.Status != promptdomain.PromptStatusPublished {
+		t.Fatalf("expected published status, got %s", savePublish.Status)
+	}
+	if savePublish.Version != 1 {
+		t.Fatalf("expected version 1, got %d", savePublish.Version)
+	}
+
+	versions, err := promptRepo.ListVersions(context.Background(), saveDraft.PromptID, 10)
+	if err != nil {
+		t.Fatalf("list versions error: %v", err)
+	}
+	if len(versions) != 1 {
+		t.Fatalf("expected 1 version stored, got %d", len(versions))
+	}
+	if versions[0].Body != "Published Prompt Body" {
+		t.Fatalf("unexpected version body: %s", versions[0].Body)
+	}
+}

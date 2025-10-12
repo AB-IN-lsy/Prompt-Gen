@@ -41,7 +41,7 @@ func requireE2EEnabled(t *testing.T) {
 	}
 }
 
-// loadRemoteMySQLConfig 优先读取显式配置，其次走 Nacos 获取线上数据源。
+// loadRemoteMySQLConfig 优先读取显式配置。
 func loadRemoteMySQLConfig(t *testing.T, ctx context.Context) client.MySQLConfig {
 	t.Helper()
 
@@ -49,19 +49,9 @@ func loadRemoteMySQLConfig(t *testing.T, ctx context.Context) client.MySQLConfig
 		return cfg
 	}
 
-	opts, err := client.NewDefaultNacosOptions()
+	cfg, err := client.LoadMySQLConfigFromEnv()
 	if err != nil {
-		t.Fatalf("build nacos options: %v", err)
-	}
-
-	group := os.Getenv("MYSQL_CONFIG_GROUP")
-	if group == "" {
-		group = "DEFAULT_GROUP"
-	}
-
-	cfg, err := client.LoadMySQLConfig(ctx, opts, group)
-	if err != nil {
-		t.Fatalf("load mysql config: %v", err)
+		t.Fatalf("load mysql config from env: %v", err)
 	}
 
 	return cfg
@@ -114,7 +104,7 @@ func connectRedis(t *testing.T, ctx context.Context) *redis.Client {
 }
 
 // setupRemoteRouter 复用生产 Handler，但不真正启动 HTTP 端口。
-func setupRemoteRouter(t *testing.T, userRepo *repository.UserRepository, verificationRepo *repository.EmailVerificationRepository, redisClient *redis.Client, secret string) *gin.Engine {
+func setupRemoteRouter(t *testing.T, userRepo *repository.UserRepository, modelRepo *repository.ModelCredentialRepository, verificationRepo *repository.EmailVerificationRepository, redisClient *redis.Client, secret string) *gin.Engine {
 	t.Helper()
 
 	gin.SetMode(gin.ReleaseMode)
@@ -123,7 +113,7 @@ func setupRemoteRouter(t *testing.T, userRepo *repository.UserRepository, verifi
 	refreshStore := token.NewRedisRefreshTokenStore(redisClient, "")
 	limiter := ratelimit.NewRedisLimiter(redisClient, "verify_email")
 	authService := authsvc.NewService(userRepo, verificationRepo, jwtManager, refreshStore, nil, nil)
-	userService := usersvc.NewService(userRepo)
+	userService := usersvc.NewService(userRepo, modelRepo)
 
 	authHandler := handler.NewAuthHandler(authService, limiter, 0, 0)
 	userHandler := handler.NewUserHandler(userService)
@@ -173,7 +163,7 @@ func TestRemoteAuthFlow(t *testing.T) {
 	// Step 0: 验证远端 Redis 是否可用（基础依赖探活）。
 	redisClient := connectRedis(t, ctx)
 
-	// Step 1: 通过 ENV / Nacos 解析 MySQL 配置，与线上数据库建立连接。
+	// Step 1: 通过环境变量解析 MySQL 配置，与线上数据库建立连接。
 	cfg := loadRemoteMySQLConfig(t, ctx)
 	t.Logf("connecting mysql host=%s db=%s", cfg.Host, cfg.Database)
 	gormDB, sqlDB, err := client.NewGORMMySQL(cfg)
@@ -184,13 +174,14 @@ func TestRemoteAuthFlow(t *testing.T) {
 
 	repo := repository.NewUserRepository(gormDB)
 	verificationRepo := repository.NewEmailVerificationRepository(gormDB)
+	modelRepo := repository.NewModelCredentialRepository(gormDB)
 
 	secret := os.Getenv("E2E_JWT_SECRET")
 	if secret == "" {
 		secret = fmt.Sprintf("e2e-secret-%d", time.Now().UnixNano())
 	}
 
-	router := setupRemoteRouter(t, repo, verificationRepo, redisClient, secret)
+	router := setupRemoteRouter(t, repo, modelRepo, verificationRepo, redisClient, secret)
 
 	randSuffix := rand.New(rand.NewSource(time.Now().UnixNano())).Int63()
 	email := fmt.Sprintf("e2e+%d@example.com", randSuffix)

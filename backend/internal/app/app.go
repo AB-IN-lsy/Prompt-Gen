@@ -15,6 +15,7 @@ import (
 
 	"electron-go-app/backend/internal/config"
 	changelog "electron-go-app/backend/internal/domain/changelog"
+	promptdomain "electron-go-app/backend/internal/domain/prompt"
 	domain "electron-go-app/backend/internal/domain/user"
 	infra "electron-go-app/backend/internal/infra/client"
 	appLogger "electron-go-app/backend/internal/infra/logger"
@@ -23,9 +24,8 @@ import (
 	"gorm.io/gorm"
 )
 
-// AppConfig 描述应用启动所需的核心配置，如 Nacos 与 MySQL。
+// AppConfig 描述应用启动所需的核心配置（MySQL、Redis 等）。
 type AppConfig struct {
-	Nacos infra.NacosOptions
 	MySQL infra.MySQLConfig
 	Redis *infra.RedisOptions
 }
@@ -43,17 +43,7 @@ type Resources struct {
 func InitResources(ctx context.Context) (*Resources, error) {
 	config.LoadEnvFiles()
 
-	nacosOpts, err := infra.NewDefaultNacosOptions()
-	if err != nil {
-		return nil, fmt.Errorf("build nacos options: %w", err)
-	}
-
-	group := os.Getenv("MYSQL_CONFIG_GROUP")
-	if group == "" {
-		group = "DEFAULT_GROUP"
-	}
-
-	mysqlCfg, err := infra.LoadMySQLConfig(ctx, nacosOpts, group)
+	mysqlCfg, err := infra.LoadMySQLConfigFromEnv()
 	if err != nil {
 		return nil, fmt.Errorf("load mysql config: %w", err)
 	}
@@ -64,7 +54,16 @@ func InitResources(ctx context.Context) (*Resources, error) {
 	}
 
 	// 保证核心模型已经同步到数据库，避免后续查询报错。
-	if err := gormDB.AutoMigrate(&domain.User{}, &domain.EmailVerificationToken{}, &domain.UserModelCredential{}, &changelog.Entry{}); err != nil {
+	if err := gormDB.AutoMigrate(
+		&domain.User{},
+		&domain.EmailVerificationToken{},
+		&domain.UserModelCredential{},
+		&changelog.Entry{},
+		&promptdomain.Prompt{},
+		&promptdomain.Keyword{},
+		&promptdomain.PromptKeyword{},
+		&promptdomain.PromptVersion{},
+	); err != nil {
 		return nil, fmt.Errorf("auto migrate: %w", err)
 	}
 
@@ -91,7 +90,6 @@ func InitResources(ctx context.Context) (*Resources, error) {
 
 	return &Resources{
 		Config: AppConfig{
-			Nacos: nacosOpts,
 			MySQL: mysqlCfg,
 			Redis: redisOpts,
 		},
