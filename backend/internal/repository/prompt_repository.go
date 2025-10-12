@@ -95,13 +95,22 @@ func (r *PromptRepository) DeleteOldVersions(ctx context.Context, promptID uint,
 	if keep <= 0 {
 		return nil
 	}
-	subQuery := r.db.WithContext(ctx).
+	var ids []uint
+	if err := r.db.WithContext(ctx).
 		Model(&promptdomain.PromptVersion{}).
-		Select("id").
 		Where("prompt_id = ?", promptID).
 		Order("version_no DESC").
-		Offset(keep)
-	return r.db.WithContext(ctx).Where("id IN (?)", subQuery).Delete(&promptdomain.PromptVersion{}).Error
+		Offset(keep).
+		Pluck("id", &ids).Error; err != nil {
+		return fmt.Errorf("list old prompt versions: %w", err)
+	}
+	if len(ids) == 0 {
+		return nil
+	}
+	if err := r.db.WithContext(ctx).Where("id IN ?", ids).Delete(&promptdomain.PromptVersion{}).Error; err != nil {
+		return fmt.Errorf("delete prompt versions: %w", err)
+	}
+	return nil
 }
 
 // KeywordRepository 负责关键词的增删查改。
