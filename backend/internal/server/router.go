@@ -22,6 +22,7 @@ type RouterOptions struct {
 	AuthMW           *middleware.AuthMiddleware
 }
 
+// NewRouter 构建应用的 Gin Engine，汇总所有 REST 接口与公共中间件配置。
 func NewRouter(opts RouterOptions) *gin.Engine {
 	gin.SetMode(gin.ReleaseMode)
 	r := gin.New()

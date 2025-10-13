@@ -730,6 +730,7 @@ func toKeywordEntity(userID uint, topic string, item KeywordItem) *promptdomain.
 	}
 }
 
+// toWorkspaceKeywords 将关键词列表裁剪并转换为 Redis 工作区使用的结构体，确保不会超过上限。
 func toWorkspaceKeywords(items []KeywordItem, limit int) []promptdomain.WorkspaceKeyword {
 	if limit <= 0 {
 		limit = DefaultKeywordLimit
@@ -750,6 +751,7 @@ func toWorkspaceKeywords(items []KeywordItem, limit int) []promptdomain.Workspac
 	return result
 }
 
+// keywordItemsFromWorkspace 将工作区缓存的关键词还原为业务层结构体。
 func keywordItemsFromWorkspace(items []promptdomain.WorkspaceKeyword, limit int) []KeywordItem {
 	if limit <= 0 {
 		limit = DefaultKeywordLimit
@@ -768,6 +770,7 @@ func keywordItemsFromWorkspace(items []promptdomain.WorkspaceKeyword, limit int)
 	return result
 }
 
+// firstNonEmpty 返回第一个非空字符串，常用于从多个候选值里挑选有效字段。
 func firstNonEmpty(values ...string) string {
 	for _, val := range values {
 		if strings.TrimSpace(val) != "" {
@@ -787,6 +790,7 @@ func normalizePolarity(polarity string) string {
 	}
 }
 
+// relationByPolarity 根据极性决定正/负向关系，落库时用于区分关键词类型。
 func relationByPolarity(polarity string) string {
 	if normalizePolarity(polarity) == promptdomain.KeywordPolarityNegative {
 		return promptdomain.KeywordPolarityNegative
@@ -794,6 +798,7 @@ func relationByPolarity(polarity string) string {
 	return promptdomain.KeywordPolarityPositive
 }
 
+// sourceFallback 在缺失来源时回落到手动标签，保持字段完整性。
 func sourceFallback(source string) string {
 	if source == "" {
 		return promptdomain.KeywordSourceManual
@@ -812,6 +817,7 @@ func enforceKeywordLimit(limit int, positive, negative []KeywordItem) error {
 	return nil
 }
 
+// workspaceKeywordCount 统计工作区内的唯一关键词数量，忽略大小写与前后空格差异。
 func workspaceKeywordCount(items []promptdomain.WorkspaceKeyword) int {
 	if len(items) == 0 {
 		return 0
@@ -827,6 +833,7 @@ func workspaceKeywordCount(items []promptdomain.WorkspaceKeyword) int {
 	return len(seen)
 }
 
+// workspaceHasKeyword 判断指定极性下是否已存在目标关键词，用于拦截重复添加。
 func workspaceHasKeyword(items []promptdomain.WorkspaceKeyword, polarity, word string) bool {
 	target := normalizePolarity(polarity)
 	needle := strings.ToLower(strings.TrimSpace(word))
@@ -1141,6 +1148,7 @@ func parseAugmentPayload(resp modeldomain.ChatCompletionResponse) (augmentPayloa
 	return payload, nil
 }
 
+// normalizeWordSlice 去除关键词前后空白并以忽略大小写的方式去重。
 func normalizeWordSlice(words []string) []string {
 	out := make([]string, 0, len(words))
 	seen := map[string]struct{}{}
@@ -1159,6 +1167,7 @@ func normalizeWordSlice(words []string) []string {
 	return out
 }
 
+// normalizeInstructions 将模型返回的补充要求兼容为统一字符串格式。
 func normalizeInstructions(value interface{}) string {
 	switch v := value.(type) {
 	case string:
@@ -1184,6 +1193,7 @@ func normalizeInstructions(value interface{}) string {
 	}
 }
 
+// joinInstructions 使用中文分号拼接多条补充要求。
 func joinInstructions(items []string) string {
 	var builder strings.Builder
 	for _, item := range items {
@@ -1222,6 +1232,7 @@ func marshalKeywordItems(items []KeywordItem) ([]byte, error) {
 	return data, nil
 }
 
+// normalizeStatus 结合前端状态与 publish 标记推导最终的存储状态。
 func normalizeStatus(status string, publish bool) string {
 	if publish {
 		return promptdomain.PromptStatusPublished
@@ -1258,6 +1269,7 @@ func (s *keywordSet) add(item KeywordItem) bool {
 	return true
 }
 
+// buildInterpretationRequest 拼装解析自然语言描述所需的模型请求。
 func buildInterpretationRequest(description, language string) modeldomain.ChatCompletionRequest {
 	lang := languageOrDefault(language)
 	system := "你是一名 Prompt 主题解析助手，负责从用户的自然语言意图中提炼主题、补充要求以及关键词。请始终返回结构化 JSON。"
@@ -1277,6 +1289,7 @@ func buildInterpretationRequest(description, language string) modeldomain.ChatCo
 	}
 }
 
+// buildAugmentRequest 构建模型补充关键词的提示词上下文。
 func buildAugmentRequest(input AugmentInput) modeldomain.ChatCompletionRequest {
 	lang := languageOrDefault(input.Language)
 	system := "你是一名关键词扩写助手，需要补充与主题相关的关键词，并避免重复已有词汇。"
@@ -1298,6 +1311,7 @@ func buildAugmentRequest(input AugmentInput) modeldomain.ChatCompletionRequest {
 	}
 }
 
+// buildGenerateRequest 依据主题与关键词生成最终 Prompt 的模型请求体。
 func buildGenerateRequest(input GenerateInput) modeldomain.ChatCompletionRequest {
 	lang := languageOrDefault(input.Language)
 	system := "你是一名 Prompt 工程师，需要根据给定主题与关键词生成高质量的提示词，帮助大模型完成任务。"

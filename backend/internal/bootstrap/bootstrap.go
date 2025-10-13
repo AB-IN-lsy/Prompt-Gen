@@ -229,6 +229,7 @@ func initEmailSender(logger *zap.SugaredLogger) (authsvc.EmailSender, error) {
 	return nil, nil
 }
 
+// loadEmailVerificationRateConfig 读取邮箱验证限流配置，支持通过环境变量覆盖默认阈值。
 func loadEmailVerificationRateConfig(logger *zap.SugaredLogger) (int, time.Duration) {
 	// 默认每小时 5 次，可在 .env 中覆盖。
 	limit := 5
@@ -252,6 +253,7 @@ func loadEmailVerificationRateConfig(logger *zap.SugaredLogger) (int, time.Durat
 	return limit, window
 }
 
+// loadPromptRateLimit 读取 Prompt 工作台的限流参数，若参数缺失则回退到系统默认值。
 func loadPromptRateLimit(logger *zap.SugaredLogger) handler.PromptRateLimit {
 	interpretLimit := parseIntEnv("PROMPT_INTERPRET_LIMIT", handler.DefaultInterpretLimit, logger)
 	interpretWindow := parseDurationEnv("PROMPT_INTERPRET_WINDOW", handler.DefaultInterpretWindow, logger)
@@ -265,6 +267,7 @@ func loadPromptRateLimit(logger *zap.SugaredLogger) handler.PromptRateLimit {
 	}
 }
 
+// parseIntEnv 尝试解析整型环境变量，失败时记录警告并返回默认值。
 func parseIntEnv(key string, defaultValue int, logger *zap.SugaredLogger) int {
 	raw := strings.TrimSpace(os.Getenv(key))
 	if raw == "" {
@@ -278,6 +281,7 @@ func parseIntEnv(key string, defaultValue int, logger *zap.SugaredLogger) int {
 	return value
 }
 
+// parseDurationEnv 尝试解析 duration 环境变量，失败时记录警告并返回默认值。
 func parseDurationEnv(key string, defaultValue time.Duration, logger *zap.SugaredLogger) time.Duration {
 	raw := strings.TrimSpace(os.Getenv(key))
 	if raw == "" {
