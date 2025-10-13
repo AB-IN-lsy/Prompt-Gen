@@ -9,7 +9,9 @@
     "settings": "设置",
     "logs": "更新日志",
     "ipGuard": "IP 防护",
-    "help": "帮助中心"
+    "changelogAdmin": "管理更新日志",
+    "help": "帮助中心",
+    "adminSection": "管理后台"
   },
   "helpPage": {
     "eyebrow": "帮助中心",

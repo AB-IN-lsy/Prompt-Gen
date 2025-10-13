@@ -9,7 +9,9 @@
     "settings": "Settings",
     "logs": "Activity Logs",
     "ipGuard": "IP Guard",
-    "help": "Help Center"
+    "changelogAdmin": "Manage changelog",
+    "help": "Help Center",
+    "adminSection": "Admin console"
   },
   "helpPage": {
     "eyebrow": "Help center",

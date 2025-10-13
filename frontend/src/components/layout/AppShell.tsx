@@ -18,7 +18,8 @@ import {
     ListChecks,
     FileClock,
     Rocket,
-    ShieldAlert
+    ShieldAlert,
+    ScrollText
 } from "lucide-react";
 import { Button } from "../ui/button";
 import { useAuth } from "../../hooks/useAuth";
@@ -34,7 +35,10 @@ const baseNavItems = [
 ];
 
 // 仅管理员显示的额外导航项。
-const adminNavItems = [{ labelKey: "nav.ipGuard", icon: ShieldAlert, to: "/ip-guard" }];
+const adminNavItems = [
+    { labelKey: "nav.ipGuard", icon: ShieldAlert, to: "/ip-guard" },
+    { labelKey: "nav.changelogAdmin", icon: ScrollText, to: "/admin/changelog" }
+];
 
 interface AppShellProps {
     children: ReactNode;
@@ -50,13 +54,6 @@ export function AppShell({ children, rightSlot }: AppShellProps) {
     const scrollContainerRef = useRef<HTMLDivElement>(null);
     const [showScrollTop, setShowScrollTop] = useState(false);
     const [fading, setFading] = useState(false);
-
-    const navItems = useMemo(() => {
-        if (profile?.user.is_admin) {
-            return [...baseNavItems, ...adminNavItems];
-        }
-        return baseNavItems;
-    }, [profile?.user.is_admin]);
 
     const handleLogout = useCallback(async () => {
         await logout();
@@ -121,7 +118,7 @@ export function AppShell({ children, rightSlot }: AppShellProps) {
                 </div>
                 {/* 导航列表：动态渲染侧边导航按钮 */}
                 <nav className="flex flex-1 flex-col gap-2">
-                    {navItems.map(({ labelKey, icon: Icon, to }) => (
+                    {baseNavItems.map(({ labelKey, icon: Icon, to }) => (
                         <NavLink
                             key={to}
                             to={to}
@@ -138,6 +135,30 @@ export function AppShell({ children, rightSlot }: AppShellProps) {
                             {t(labelKey)}
                         </NavLink>
                     ))}
+                    {profile?.user.is_admin ? (
+                        <div className="mt-6 flex flex-col gap-2 border-t border-white/60 pt-4 dark:border-slate-800/60">
+                            <span className="px-3 text-xs font-medium uppercase tracking-[0.3em] text-slate-400">
+                                {t("nav.adminSection")}
+                            </span>
+                            {adminNavItems.map(({ labelKey, icon: Icon, to }) => (
+                                <NavLink
+                                    key={to}
+                                    to={to}
+                                    className={({ isActive }) =>
+                                        cn(
+                                            "flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium transition",
+                                            isActive
+                                                ? "bg-primary text-white shadow-glow"
+                                                : "text-slate-600 hover:bg-white/60 hover:text-primary hover:shadow-sm dark:text-slate-300 dark:hover:bg-slate-800/80"
+                                        )
+                                    }
+                                >
+                                    <Icon className="h-4 w-4" />
+                                    {t(labelKey)}
+                                </NavLink>
+                            ))}
+                        </div>
+                    ) : null}
                 </nav>
                 {/* 预留退出登录操作 */}
                 <Button
