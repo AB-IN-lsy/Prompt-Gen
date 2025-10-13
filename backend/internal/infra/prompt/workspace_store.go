@@ -3,6 +3,7 @@ package promptinfra
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -136,6 +137,38 @@ func (s *WorkspaceStore) MergeKeywords(ctx context.Context, userID uint, token s
 	s.applyTTL(ctx, pipe, baseKey)
 	if _, err := pipe.Exec(ctx); err != nil {
 		return fmt.Errorf("merge keywords: %w", err)
+	}
+	return nil
+}
+
+// RemoveKeyword 将指定关键词从工作区移除，保持前端与 Redis 数据同步。
+func (s *WorkspaceStore) RemoveKeyword(ctx context.Context, userID uint, token, polarity, word string) error {
+	if s == nil || s.client == nil {
+		return fmt.Errorf("workspace store not initialised")
+	}
+	token = strings.TrimSpace(token)
+	if token == "" {
+		return errors.New("workspace token is empty")
+	}
+	lowered := strings.ToLower(strings.TrimSpace(word))
+	if lowered == "" {
+		return nil
+	}
+	pol := normalizePolarity(polarity)
+	baseKey := s.baseKey(userID, token)
+	field := fmt.Sprintf("%s|%s", pol, lowered)
+	targetZSet := s.keyPositive(baseKey)
+	if pol == promptdomain.KeywordPolarityNegative {
+		targetZSet = s.keyNegative(baseKey)
+	}
+
+	pipe := s.client.TxPipeline()
+	pipe.HDel(ctx, s.keyKeywords(baseKey), field)
+	pipe.ZRem(ctx, targetZSet, lowered)
+	touchUpdatedAt(ctx, pipe, baseKey)
+	s.applyTTL(ctx, pipe, baseKey)
+	if _, err := pipe.Exec(ctx); err != nil {
+		return fmt.Errorf("remove workspace keyword: %w", err)
 	}
 	return nil
 }

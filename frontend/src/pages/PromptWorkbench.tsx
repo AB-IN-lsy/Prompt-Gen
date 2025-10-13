@@ -17,6 +17,8 @@ import { Button } from "../components/ui/button";
 import { Badge } from "../components/ui/badge";
 import { Textarea } from "../components/ui/textarea";
 import { cn } from "../lib/utils";
+import { MarkdownEditor } from "../components/MarkdownEditor";
+import { PROMPT_KEYWORD_LIMIT } from "../config/prompt";
 import {
   augmentPromptKeywords,
   createManualPromptKeyword,
@@ -24,6 +26,7 @@ import {
   fetchUserModels,
   generatePromptPreview,
   interpretPromptDescription,
+  removePromptKeyword,
   savePrompt,
   updateCurrentUser,
   type AugmentPromptKeywordsResponse,
@@ -99,6 +102,83 @@ export default function PromptWorkbenchPage() {
   const [newKeyword, setNewKeyword] = useState("");
   const [polarity, setPolarity] = useState<"positive" | "negative">("positive");
   const [confidence, setConfidence] = useState<number | null>(null);
+  const keywordLimit = PROMPT_KEYWORD_LIMIT;
+
+  const limitKeywordCollections = useCallback(
+    (keywords: Keyword[]) => {
+      const positives = keywords.filter(
+        (item) => item.polarity === "positive",
+      );
+      const negatives = keywords.filter(
+        (item) => item.polarity === "negative",
+      );
+      const trimmedPositive = positives.length > keywordLimit;
+      const trimmedNegative = negatives.length > keywordLimit;
+      const limited = [
+        ...positives.slice(0, keywordLimit),
+        ...negatives.slice(0, keywordLimit),
+      ];
+      return { limited, trimmedPositive, trimmedNegative };
+    },
+    [keywordLimit],
+  );
+
+  const notifyKeywordTrim = useCallback(
+    (trimmedPositive: boolean, trimmedNegative: boolean) => {
+      if (trimmedPositive) {
+        toast.info(
+          t("promptWorkbench.positiveAutoTrimmed", {
+            limit: keywordLimit,
+            defaultValue: "已自动保留前 {{limit}} 个正向关键词",
+          }),
+        );
+      }
+      if (trimmedNegative) {
+        toast.info(
+          t("promptWorkbench.negativeAutoTrimmed", {
+            limit: keywordLimit,
+            defaultValue: "已自动保留前 {{limit}} 个负向关键词",
+          }),
+        );
+      }
+    },
+    [keywordLimit, t],
+  );
+
+  const extractKeywordError = useCallback(
+    (error: unknown) => {
+      if (!(error instanceof ApiError)) {
+        return null;
+      }
+      const details = error.details as {
+        code?: string;
+        polarity?: string;
+        limit?: number;
+        word?: string;
+      } | null;
+      if (!details || details.code !== "KEYWORD_LIMIT") {
+        if (details && details.code === "KEYWORD_DUPLICATE") {
+          return t("promptWorkbench.keywordDuplicate", {
+            defaultValue: "该关键词已存在",
+          });
+        }
+        return null;
+      }
+      const limitValue =
+        typeof details.limit === "number" ? details.limit : keywordLimit;
+      if (details.polarity === "negative") {
+        return t("promptWorkbench.negativeLimitReached", {
+          limit: limitValue,
+          defaultValue: "负向关键词已达上限 {{limit}} 个",
+        });
+      }
+      return t("promptWorkbench.positiveLimitReached", {
+        limit: limitValue,
+        defaultValue: "正向关键词已达上限 {{limit}} 个",
+      });
+    },
+    [keywordLimit, t],
+  );
 
   const keywordQuery = useQuery<Keyword[]>({
     queryKey: ["keywords", topic],
@@ -108,9 +188,17 @@ export default function PromptWorkbenchPage() {
 
   useEffect(() => {
     if (keywordQuery.data) {
-      setKeywords(keywordQuery.data);
+      const { limited, trimmedPositive, trimmedNegative } =
+        limitKeywordCollections(keywordQuery.data);
+      setKeywords(limited);
+      notifyKeywordTrim(trimmedPositive, trimmedNegative);
     }
-  }, [keywordQuery.data, setKeywords]);
+  }, [
+    keywordQuery.data,
+    limitKeywordCollections,
+    notifyKeywordTrim,
+    setKeywords,
+  ]);
 
   const modelsQuery = useQuery<UserModelCredential[]>({
     queryKey: ["models"],
@@ -218,7 +306,12 @@ export default function PromptWorkbenchPage() {
         ...data.positive_keywords.map(mapKeywordResultToKeyword),
         ...data.negative_keywords.map(mapKeywordResultToKeyword),
       ];
-      setKeywords(dedupeKeywords(mapped));
+      const deduped = dedupeKeywords(mapped);
+      const { limited, trimmedPositive, trimmedNegative } =
+        limitKeywordCollections(deduped);
+      setKeywords(limited);
+      notifyKeywordTrim(trimmedPositive, trimmedNegative);
+      setInstructions(data.instructions ?? "");
       setConfidence(data.confidence ?? null);
       setPrompt("");
       setPromptId(null);
@@ -228,6 +321,11 @@ export default function PromptWorkbenchPage() {
       );
     },
     onError: (error: unknown) => {
+      const limitMessage = extractKeywordError(error);
+      if (limitMessage) {
+        toast.warning(limitMessage);
+        return;
+      }
       const message =
         error instanceof ApiError
           ? (error.message ?? t("errors.generic"))
@@ -260,12 +358,21 @@ export default function PromptWorkbenchPage() {
         ...data.positive.map(mapKeywordResultToKeyword),
         ...data.negative.map(mapKeywordResultToKeyword),
       ];
-      setKeywords(dedupeKeywords(nextKeywords));
+      const deduped = dedupeKeywords(nextKeywords);
+      const { limited, trimmedPositive, trimmedNegative } =
+        limitKeywordCollections(deduped);
+      setKeywords(limited);
+      notifyKeywordTrim(trimmedPositive, trimmedNegative);
       toast.success(
         t("promptWorkbench.augmentSuccess", { defaultValue: "已补充关键词" }),
       );
     },
     onError: (error: unknown) => {
+    const limitMessage = extractKeywordError(error);
+      if (limitMessage) {
+        toast.warning(limitMessage);
+        return;
+      }
       const message =
         error instanceof ApiError
           ? (error.message ?? t("errors.generic"))
@@ -301,10 +408,42 @@ export default function PromptWorkbenchPage() {
       );
     },
     onError: (error: unknown) => {
+    const limitMessage = extractKeywordError(error);
+      if (limitMessage) {
+        toast.warning(limitMessage);
+        return;
+      }
       const message =
         error instanceof ApiError
           ? (error.message ?? t("errors.generic"))
           : t("errors.generic");
+      toast.error(message);
+    },
+  });
+
+  const removeKeywordMutation = useMutation({
+    mutationFn: async (keyword: Keyword) => {
+      if (!workspaceToken) {
+        return;
+      }
+      await removePromptKeyword({
+        word: keyword.word,
+        polarity: keyword.polarity,
+        workspace_token: workspaceToken,
+      });
+    },
+    onSuccess: (_, keyword) => {
+      removeKeyword(keyword.id);
+    },
+    onError: (error: unknown) => {
+      const message =
+        error instanceof ApiError
+          ? error.message ?? t("promptWorkbench.keywordRemoveFailed", {
+              defaultValue: "移除关键词失败，请稍后再试。",
+            })
+          : t("promptWorkbench.keywordRemoveFailed", {
+              defaultValue: "移除关键词失败，请稍后再试。",
+            });
       toast.error(message);
     },
   });
@@ -340,13 +479,22 @@ export default function PromptWorkbenchPage() {
           ...(response.positive_keywords ?? []).map(mapKeywordResultToKeyword),
           ...(response.negative_keywords ?? []).map(mapKeywordResultToKeyword),
         ];
-        setKeywords(dedupeKeywords(nextKeywords));
+        const deduped = dedupeKeywords(nextKeywords);
+        const { limited, trimmedPositive, trimmedNegative } =
+          limitKeywordCollections(deduped);
+        setKeywords(limited);
+        notifyKeywordTrim(trimmedPositive, trimmedNegative);
       }
       toast.success(
         t("promptWorkbench.generateSuccess", { defaultValue: "生成完成" }),
       );
     },
     onError: (error: unknown) => {
+    const limitMessage = extractKeywordError(error);
+      if (limitMessage) {
+        toast.warning(limitMessage);
+        return;
+      }
       const message =
         error instanceof ApiError
           ? (error.message ?? t("errors.generic"))
@@ -444,6 +592,38 @@ export default function PromptWorkbenchPage() {
   const handleAddKeyword = () => {
     const word = newKeyword.trim();
     if (!word) return;
+    const normalized = word.toLowerCase();
+    const collection =
+      polarity === "positive" ? positiveKeywords : negativeKeywords;
+    const duplicated = collection.some(
+      (item) => item.word.trim().toLowerCase() === normalized,
+    );
+    if (duplicated) {
+      toast.warning(
+        t("promptWorkbench.keywordDuplicate", {
+          defaultValue: "该关键词已存在",
+        }),
+      );
+      return;
+    }
+    if (polarity === "positive" && positiveKeywords.length >= keywordLimit) {
+      toast.warning(
+        t("promptWorkbench.positiveLimitReached", {
+          limit: keywordLimit,
+          defaultValue: "正向关键词已达上限 {{limit}} 个",
+        }),
+      );
+      return;
+    }
+    if (polarity === "negative" && negativeKeywords.length >= keywordLimit) {
+      toast.warning(
+        t("promptWorkbench.negativeLimitReached", {
+          limit: keywordLimit,
+          defaultValue: "负向关键词已达上限 {{limit}} 个",
+        }),
+      );
+      return;
+    }
     manualKeywordMutation.mutate(word);
   };
 
@@ -452,6 +632,28 @@ export default function PromptWorkbenchPage() {
   const handleGenerate = () => generateMutation.mutate();
   const handleSaveDraft = () => savePromptMutation.mutate(false);
   const handlePublish = () => savePromptMutation.mutate(true);
+
+  const handleRemoveKeyword = (keyword: Keyword) => {
+    if (
+      keyword.polarity === "positive" &&
+      positiveKeywords.length <= 1
+    ) {
+      toast.warning(
+        t("promptWorkbench.keywordPositiveHint", {
+          count: positiveKeywords.length,
+          limit: keywordLimit,
+          defaultValue:
+            "已选 {{count}} / {{limit}} 个，点击标签可移除，至少保留 1 个关键词",
+        }),
+      );
+      return;
+    }
+    if (!workspaceToken) {
+      removeKeyword(keyword.id);
+      return;
+    }
+    removeKeywordMutation.mutate(keyword);
+  };
 
   const handleCancel = () => {
     reset();
@@ -470,6 +672,18 @@ export default function PromptWorkbenchPage() {
     () => [...negativeKeywords].sort((a, b) => b.weight - a.weight),
     [negativeKeywords],
   );
+
+  const totalKeywords = positiveKeywords.length + negativeKeywords.length;
+  const promptEditorMinHeight = useMemo(() => {
+    const base = 360;
+    const startGrowth = 6;
+    const extra = Math.max(0, totalKeywords - startGrowth) * 32;
+    return Math.min(1040, base + extra);
+  }, [totalKeywords]);
+  const promptCardMinHeight = useMemo(() => {
+    const base = 720;
+    return Math.max(base, promptEditorMinHeight + 240);
+  }, [promptEditorMinHeight]);
 
   const isGenerating = generateMutation.isPending;
   const isAugmenting = augmentMutation.isPending;
@@ -648,6 +862,12 @@ export default function PromptWorkbenchPage() {
               {t("promptWorkbench.addKeyword", { defaultValue: "添加" })}
             </Button>
           </div>
+          <p className="mt-2 text-xs text-slate-400 dark:text-slate-500">
+            {t("promptWorkbench.keywordLimitNote", {
+              limit: keywordLimit,
+              defaultValue: "提示：正向与负向各最多 {{limit}} 个关键词",
+            })}
+          </p>
           <div className="mt-3 flex gap-2 text-xs">
             <Badge
               className={cn(
@@ -678,26 +898,34 @@ export default function PromptWorkbenchPage() {
           title={t("promptWorkbench.positiveSectionTitle", {
             defaultValue: "正向关键词",
           })}
-          hint={t("promptWorkbench.keywordRemoveHint", {
-            defaultValue: "点击标签可移除，至少保留 1 个关键词",
+          hint={t("promptWorkbench.keywordPositiveHint", {
+            count: sortedPositive.length,
+            limit: keywordLimit,
+            defaultValue:
+              "已选 {{count}} / {{limit}} 个，点击标签可移除，至少保留 1 个关键词",
           })}
           keywords={sortedPositive}
-          onRemove={removeKeyword}
+          onRemove={handleRemoveKeyword}
         />
         <KeywordSection
           title={t("promptWorkbench.negativeSectionTitle", {
             defaultValue: "负向关键词",
           })}
-          hint={t("promptWorkbench.keywordRemoveHint", {
-            defaultValue: "点击标签可移除",
+          hint={t("promptWorkbench.keywordNegativeHint", {
+            count: sortedNegative.length,
+            limit: keywordLimit,
+            defaultValue: "已选 {{count}} / {{limit}} 个，点击标签可移除",
           })}
           keywords={sortedNegative}
           tint="negative"
-          onRemove={removeKeyword}
+          onRemove={handleRemoveKeyword}
         />
       </GlassCard>
 
-      <GlassCard className="flex flex-col gap-6 xl:min-h-[720px]">
+      <GlassCard
+        className="flex h-full flex-col gap-6"
+        style={{ minHeight: promptCardMinHeight }}
+      >
         <header className="flex items-center justify-between">
           <div>
             <p className="text-xs uppercase tracking-[0.28em] text-slate-400 dark:text-slate-500">
@@ -720,7 +948,9 @@ export default function PromptWorkbenchPage() {
           <Input
             className="mt-3"
             value={topic}
-            onChange={(event) => setTopic(event.target.value)}
+            onChange={(event: ChangeEvent<HTMLInputElement>) =>
+              setTopic(event.target.value)
+            }
             placeholder={t("promptWorkbench.topicPlaceholder", {
               defaultValue: "例如：前端面试技术提示词",
             })}
@@ -736,30 +966,39 @@ export default function PromptWorkbenchPage() {
           <Textarea
             className="mt-3"
             value={instructions}
-            onChange={(event) => setInstructions(event.target.value)}
+            onChange={(event: ChangeEvent<HTMLTextAreaElement>) =>
+              setInstructions(event.target.value)
+            }
             placeholder={t("promptWorkbench.instructionsPlaceholder", {
               defaultValue: "可选：语气、结构、输出格式等",
             })}
           />
         </div>
 
-        <div className="rounded-3xl border border-white/60 bg-white/80 p-5 shadow-inner transition-colors dark:border-slate-800 dark:bg-slate-900/70">
+        <div className="flex flex-1 flex-col rounded-3xl border border-white/60 bg-white/80 p-5 shadow-inner transition-colors dark:border-slate-800 dark:bg-slate-900/70">
           <label className="text-sm font-medium text-slate-600 dark:text-slate-300">
             {t("promptWorkbench.draftLabel", { defaultValue: "Prompt 草稿" })}
           </label>
-          <Textarea
-            className="mt-3 min-h-[360px]"
-            value={prompt}
-            onChange={(event) => setPrompt(event.target.value)}
-            placeholder={t("promptWorkbench.draftPlaceholder", {
-              defaultValue: "在此粘贴或编辑生成的 Prompt",
-            })}
-          />
-          <div className="mt-3 text-xs text-slate-400 dark:text-slate-500">
-            {t("promptWorkbench.autosave", { defaultValue: "自动保存" })}:{" "}
-            {isSaving
-              ? t("promptWorkbench.autosaveSaving", { defaultValue: "保存中" })
-              : t("promptWorkbench.autosaveSaved", { defaultValue: "已保存" })}
+          <div className="mt-3 flex-1">
+            <MarkdownEditor
+              value={prompt}
+              onChange={setPrompt}
+              minHeight={promptEditorMinHeight}
+              placeholder={t("promptWorkbench.draftPlaceholder", {
+                defaultValue: "在此粘贴或编辑生成的 Prompt",
+              })}
+              hint={`${t("promptWorkbench.autosave", {
+                defaultValue: "自动保存",
+              })}: ${
+                isSaving
+                  ? t("promptWorkbench.autosaveSaving", {
+                      defaultValue: "保存中",
+                    })
+                  : t("promptWorkbench.autosaveSaved", {
+                      defaultValue: "已保存",
+                    })
+              }`}
+            />
           </div>
         </div>
 
@@ -813,7 +1052,7 @@ interface KeywordSectionProps {
   hint?: string;
   keywords: Keyword[];
   tint?: "positive" | "negative";
-  onRemove: (id: string) => void;
+  onRemove: (keyword: Keyword) => void;
 }
 
 function KeywordSection({
@@ -855,7 +1094,7 @@ function KeywordSection({
         {keywords.map((keyword) => (
           <button
             key={keyword.id}
-            onClick={() => onRemove(keyword.id)}
+            onClick={() => onRemove(keyword)}
             type="button"
             title={removeHint}
             aria-label={t("promptWorkbench.removeKeywordAria", {

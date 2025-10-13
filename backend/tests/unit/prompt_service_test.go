@@ -3,6 +3,7 @@ package unit
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"testing"
 	"time"
 
@@ -32,6 +33,46 @@ func (f *fakeModelInvoker) InvokeChatCompletion(_ context.Context, _ uint, _ str
 	return resp, nil
 }
 
+type fakeWorkspaceStore struct {
+	snapshot promptdomain.WorkspaceSnapshot
+}
+
+func (f *fakeWorkspaceStore) CreateOrReplace(context.Context, uint, promptdomain.WorkspaceSnapshot) (string, error) {
+	return "", nil
+}
+
+func (f *fakeWorkspaceStore) MergeKeywords(context.Context, uint, string, []promptdomain.WorkspaceKeyword) error {
+	return nil
+}
+
+func (f *fakeWorkspaceStore) UpdateDraftBody(context.Context, uint, string, string) error {
+	return nil
+}
+
+func (f *fakeWorkspaceStore) Touch(context.Context, uint, string) error {
+	return nil
+}
+
+func (f *fakeWorkspaceStore) Snapshot(context.Context, uint, string) (promptdomain.WorkspaceSnapshot, error) {
+	return f.snapshot, nil
+}
+
+func (f *fakeWorkspaceStore) Delete(context.Context, uint, string) error {
+	return nil
+}
+
+func (f *fakeWorkspaceStore) SetPromptMeta(context.Context, uint, string, uint, string) error {
+	return nil
+}
+
+func (f *fakeWorkspaceStore) GetPromptMeta(context.Context, uint, string) (uint, string, error) {
+	return 0, "", nil
+}
+
+func (f *fakeWorkspaceStore) RemoveKeyword(context.Context, uint, string, string, string) error {
+	return nil
+}
+
 func setupPromptService(t *testing.T) (*promptsvc.Service, *repository.PromptRepository, *repository.KeywordRepository, *gorm.DB, *fakeModelInvoker) {
 	t.Helper()
 
@@ -55,7 +96,7 @@ func setupPromptService(t *testing.T) (*promptsvc.Service, *repository.PromptRep
 	promptRepo := repository.NewPromptRepository(db)
 	keywordRepo := repository.NewKeywordRepository(db)
 	modelStub := &fakeModelInvoker{}
-	service := promptsvc.NewService(promptRepo, keywordRepo, modelStub, nil, nil, nil)
+	service := promptsvc.NewService(promptRepo, keywordRepo, modelStub, nil, nil, nil, promptsvc.DefaultKeywordLimit)
 	return service, promptRepo, keywordRepo, db, modelStub
 }
 
@@ -72,6 +113,7 @@ func TestPromptServiceInterpret(t *testing.T) {
 		"positive_keywords": []string{"React", "Hooks", "状态管理", "React"},
 		"negative_keywords": []string{"过时框架", "重复"},
 		"confidence":        0.92,
+		"instructions":      "强调输出结构化问答",
 	}
 	content, _ := json.Marshal(payload)
 	modelStub.responses = []deepseek.ChatCompletionResponse{
@@ -101,6 +143,9 @@ func TestPromptServiceInterpret(t *testing.T) {
 	if len(result.NegativeKeywords) != 2 {
 		t.Fatalf("expected 2 negative keywords, got %d", len(result.NegativeKeywords))
 	}
+	if result.Instructions != "强调输出结构化问答" {
+		t.Fatalf("unexpected instructions: %s", result.Instructions)
+	}
 
 	// 关键词应已写入数据库，方便后续补全。
 	stored, err := keywordRepo.ListByTopic(context.Background(), 1, "React 前端面试")
@@ -109,6 +154,87 @@ func TestPromptServiceInterpret(t *testing.T) {
 	}
 	if len(stored) != 5 {
 		t.Fatalf("expected 5 stored keywords, got %d", len(stored))
+	}
+}
+
+// TestPromptServiceInterpretInstructionsArray 捕捉到线上解析失败后新增：
+// DeepSeek 偶尔会把 instructions 输出成字符串数组而非纯字符串，这里确保解析器能容错。
+func TestPromptServiceInterpretInstructionsArray(t *testing.T) {
+	service, _, _, db, modelStub := setupPromptService(t)
+	defer func() {
+		sqlDB, _ := db.DB()
+		sqlDB.Close()
+	}()
+
+	payload := map[string]any{
+		"topic":             "Node.js 面试",
+		"positive_keywords": []string{"并发", "事件循环"},
+		"negative_keywords": []string{},
+		"confidence":        0.8,
+		"instructions":      []string{"回答时附带示例代码", "重点解释事件循环机制"},
+	}
+	content, _ := json.Marshal(payload)
+	modelStub.responses = []deepseek.ChatCompletionResponse{
+		{
+			Model: "deepseek-chat",
+			Choices: []deepseek.ChatCompletionChoice{
+				{Message: deepseek.ChatMessage{Role: "assistant", Content: string(content)}},
+			},
+		},
+	}
+
+	result, err := service.Interpret(context.Background(), promptsvc.InterpretInput{
+		UserID:      2,
+		Description: "如何准备 Node.js 面试？",
+		ModelKey:    "deepseek-chat",
+		Language:    "中文",
+	})
+	if err != nil {
+		t.Fatalf("Interpret returned error: %v", err)
+	}
+	if result.Topic != "Node.js 面试" {
+		t.Fatalf("unexpected topic: %s", result.Topic)
+	}
+	if got := result.Instructions; got != "回答时附带示例代码；重点解释事件循环机制" {
+		t.Fatalf("unexpected instructions: %q", got)
+	}
+}
+
+// TestPromptServiceManualKeywordDuplicate 验证重复关键词的工作区去重逻辑，保证前端不再出现“删了仍提示上限”的问题。
+func TestPromptServiceManualKeywordDuplicate(t *testing.T) {
+	_, promptRepo, keywordRepo, db, modelStub := setupPromptService(t)
+	defer func() {
+		sqlDB, _ := db.DB()
+		sqlDB.Close()
+	}()
+	_ = modelStub
+
+	store := &fakeWorkspaceStore{
+		snapshot: promptdomain.WorkspaceSnapshot{
+			Positive: []promptdomain.WorkspaceKeyword{
+				{Word: "React", Polarity: promptdomain.KeywordPolarityPositive},
+			},
+		},
+	}
+	serviceWithWorkspace := promptsvc.NewService(
+		promptRepo,
+		keywordRepo,
+		modelStub,
+		store,
+		nil,
+		nil,
+		promptsvc.DefaultKeywordLimit,
+	)
+
+	_, err := serviceWithWorkspace.AddManualKeyword(context.Background(), promptsvc.ManualKeywordInput{
+		UserID:         1,
+		Topic:          "React",
+		Word:           "React",
+		Polarity:       "positive",
+		WorkspaceToken: "token",
+	})
+	if !errors.Is(err, promptsvc.ErrDuplicateKeyword) {
+		t.Fatalf("expected duplicate keyword error, got %v", err)
 	}
 }
 

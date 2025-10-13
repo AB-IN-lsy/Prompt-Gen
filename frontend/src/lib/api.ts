@@ -219,6 +219,7 @@ export interface InterpretPromptResponse {
   positive_keywords: PromptKeywordResult[];
   negative_keywords: PromptKeywordResult[];
   workspace_token?: string;
+  instructions?: string;
 }
 
 export interface AugmentPromptKeywordsRequest {
@@ -244,6 +245,12 @@ export interface ManualPromptKeywordRequest {
   workspace_token?: string;
   prompt_id?: number;
   language?: string;
+}
+
+export interface RemovePromptKeywordRequest {
+  word: string;
+  polarity: KeywordPolarity;
+  workspace_token?: string | null;
 }
 
 export interface GeneratePromptRequest {
@@ -507,6 +514,20 @@ export async function createManualPromptKeyword(
       },
     );
     return response.data;
+  } catch (error) {
+    throw normaliseError(error);
+  }
+}
+
+export async function removePromptKeyword(
+  payload: RemovePromptKeywordRequest,
+): Promise<void> {
+  try {
+    await http.post("/prompts/keywords/remove", {
+      word: payload.word,
+      polarity: payload.polarity,
+      workspace_token: payload.workspace_token ?? undefined,
+    });
   } catch (error) {
     throw normaliseError(error);
   }

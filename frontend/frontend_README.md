@@ -44,6 +44,8 @@ npm run preview
 
 前端的 API 客户端（`src/lib/http.ts`）默认直接指向 `http://localhost:9090/api`（Go 后端监听端口）。若需要接入远程环境，可以在 `frontend/.env.local` 中设置 `VITE_API_BASE_URL` 覆盖默认地址，构建与运行都会读取该变量。上传成功的头像会返回 `/static/avatars/<文件名>` 路径，由后端静态资源路由托管。
 
+关键词数量上限同样支持通过环境变量调节：在 `frontend/.env.local` 中新增 `VITE_PROMPT_KEYWORD_LIMIT=10`（与后端 `PROMPT_KEYWORD_LIMIT` 保持一致），即可同步控制正向与负向关键词的最大数量，避免前后端配置漂移。
+
 ## 接口请求流程一图梳理
 
 ```text

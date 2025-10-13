@@ -1,11 +1,13 @@
 package handler
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
 	"time"
 
+	promptdomain "electron-go-app/backend/internal/domain/prompt"
 	response "electron-go-app/backend/internal/infra/common"
 	appLogger "electron-go-app/backend/internal/infra/logger"
 	"electron-go-app/backend/internal/infra/ratelimit"
@@ -108,6 +110,13 @@ type manualKeywordRequest struct {
 	WorkspaceToken string `json:"workspace_token"`
 }
 
+// removeKeywordRequest 用于同步移除工作区中的关键词。
+type removeKeywordRequest struct {
+	Word           string `json:"word" binding:"required"`
+	Polarity       string `json:"polarity"`
+	WorkspaceToken string `json:"workspace_token"`
+}
+
 // generateRequest 描述生成 Prompt 的输入。
 type generateRequest struct {
 	Topic             string           `json:"topic" binding:"required"`
@@ -176,6 +185,7 @@ func (h *PromptHandler) Interpret(c *gin.Context) {
 		"negative_keywords": toKeywordResponse(result.NegativeKeywords),
 		"confidence":        result.Confidence,
 		"workspace_token":   result.WorkspaceToken,
+		"instructions":      result.Instructions,
 	}, nil)
 }
 
@@ -192,6 +202,16 @@ func (h *PromptHandler) AugmentKeywords(c *gin.Context) {
 	var req augmentRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.Fail(c, http.StatusBadRequest, response.ErrBadRequest, err.Error(), nil)
+		return
+	}
+
+	limit := h.service.KeywordLimit()
+	if len(req.ExistingPositive) > limit {
+		h.keywordLimitError(c, promptdomain.KeywordPolarityPositive, len(req.ExistingPositive))
+		return
+	}
+	if len(req.ExistingNegative) > limit {
+		h.keywordLimitError(c, promptdomain.KeywordPolarityNegative, len(req.ExistingNegative))
 		return
 	}
 
@@ -244,12 +264,54 @@ func (h *PromptHandler) AddManualKeyword(c *gin.Context) {
 		WorkspaceToken: strings.TrimSpace(req.WorkspaceToken),
 	})
 	if err != nil {
+		if errors.Is(err, promptsvc.ErrPositiveKeywordLimit) {
+			h.keywordLimitError(c, promptdomain.KeywordPolarityPositive, -1)
+			return
+		}
+		if errors.Is(err, promptsvc.ErrNegativeKeywordLimit) {
+			h.keywordLimitError(c, promptdomain.KeywordPolarityNegative, -1)
+			return
+		}
+		if errors.Is(err, promptsvc.ErrDuplicateKeyword) {
+			h.keywordDuplicateError(c, req.Polarity, req.Word)
+			return
+		}
 		log.Warnw("add manual keyword failed", "error", err, "user_id", userID)
 		response.Fail(c, http.StatusBadRequest, response.ErrBadRequest, err.Error(), nil)
 		return
 	}
 
 	response.Success(c, http.StatusCreated, item, nil)
+}
+
+// RemoveKeyword 同步删除临时工作区的关键词，保持后端缓存与前端一致。
+func (h *PromptHandler) RemoveKeyword(c *gin.Context) {
+	log := h.scope("remove_keyword")
+
+	userID, ok := extractUserID(c)
+	if !ok {
+		response.Fail(c, http.StatusUnauthorized, response.ErrUnauthorized, "missing user id", nil)
+		return
+	}
+
+	var req removeKeywordRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Fail(c, http.StatusBadRequest, response.ErrBadRequest, err.Error(), nil)
+		return
+	}
+
+	if err := h.service.RemoveWorkspaceKeyword(c.Request.Context(), promptsvc.RemoveKeywordInput{
+		UserID:         userID,
+		Word:           req.Word,
+		Polarity:       req.Polarity,
+		WorkspaceToken: strings.TrimSpace(req.WorkspaceToken),
+	}); err != nil {
+		log.Warnw("remove keyword failed", "error", err, "user_id", userID)
+		response.Fail(c, http.StatusBadRequest, response.ErrBadRequest, err.Error(), nil)
+		return
+	}
+
+	response.NoContent(c)
 }
 
 // GeneratePrompt 调用大模型生成 Prompt，带限流保护。
@@ -272,6 +334,10 @@ func (h *PromptHandler) GeneratePrompt(c *gin.Context) {
 		return
 	}
 
+	if !h.validateKeywordLimit(c, req.PositiveKeywords, req.NegativeKeywords) {
+		return
+	}
+
 	out, err := h.service.GeneratePrompt(c.Request.Context(), promptsvc.GenerateInput{
 		UserID:            userID,
 		Topic:             req.Topic,
@@ -288,6 +354,14 @@ func (h *PromptHandler) GeneratePrompt(c *gin.Context) {
 		WorkspaceToken:    strings.TrimSpace(req.WorkspaceToken),
 	})
 	if err != nil {
+		if errors.Is(err, promptsvc.ErrPositiveKeywordLimit) {
+			h.keywordLimitError(c, promptdomain.KeywordPolarityPositive, len(req.PositiveKeywords))
+			return
+		}
+		if errors.Is(err, promptsvc.ErrNegativeKeywordLimit) {
+			h.keywordLimitError(c, promptdomain.KeywordPolarityNegative, len(req.NegativeKeywords))
+			return
+		}
 		log.Errorw("generate prompt failed", "error", err, "user_id", userID)
 		response.Fail(c, http.StatusBadRequest, response.ErrBadRequest, err.Error(), nil)
 		return
@@ -325,6 +399,10 @@ func (h *PromptHandler) SavePrompt(c *gin.Context) {
 		return
 	}
 
+	if !h.validateKeywordLimit(c, req.PositiveKeywords, req.NegativeKeywords) {
+		return
+	}
+
 	result, err := h.service.Save(c.Request.Context(), promptsvc.SaveInput{
 		UserID:           userID,
 		PromptID:         req.PromptID,
@@ -339,6 +417,14 @@ func (h *PromptHandler) SavePrompt(c *gin.Context) {
 		WorkspaceToken:   strings.TrimSpace(req.WorkspaceToken),
 	})
 	if err != nil {
+		if errors.Is(err, promptsvc.ErrPositiveKeywordLimit) {
+			h.keywordLimitError(c, promptdomain.KeywordPolarityPositive, len(req.PositiveKeywords))
+			return
+		}
+		if errors.Is(err, promptsvc.ErrNegativeKeywordLimit) {
+			h.keywordLimitError(c, promptdomain.KeywordPolarityNegative, len(req.NegativeKeywords))
+			return
+		}
 		log.Errorw("save prompt failed", "error", err, "user_id", userID, "prompt_id", req.PromptID)
 		response.Fail(c, http.StatusBadRequest, response.ErrBadRequest, err.Error(), nil)
 		return
@@ -366,6 +452,58 @@ func (h *PromptHandler) allow(c *gin.Context, key string, limit int, window time
 
 func (h *PromptHandler) scope(action string) *zap.SugaredLogger {
 	return h.logger.With("action", action)
+}
+
+// keywordLimitDetailCode 用于在 details 中标记关键词数量超限的错误，前端可据此显示对应 i18n 文案。
+const keywordLimitDetailCode = "KEYWORD_LIMIT"
+
+// keywordDuplicateDetailCode 用于标记关键词重复的错误。
+const keywordDuplicateDetailCode = "KEYWORD_DUPLICATE"
+
+// validateKeywordLimit 在进入业务逻辑前做守卫，避免传入超出限制的关键词集合。
+func (h *PromptHandler) validateKeywordLimit(c *gin.Context, positive, negative []KeywordPayload) bool {
+	limit := h.service.KeywordLimit()
+	if len(positive) > limit {
+		h.keywordLimitError(c, promptdomain.KeywordPolarityPositive, len(positive))
+		return false
+	}
+	if len(negative) > limit {
+		h.keywordLimitError(c, promptdomain.KeywordPolarityNegative, len(negative))
+		return false
+	}
+	return true
+}
+
+// keywordLimitError 将关键词超限的错误统一输出。
+func (h *PromptHandler) keywordLimitError(c *gin.Context, polarity string, count int) {
+	limit := h.service.KeywordLimit()
+	message := fmt.Sprintf("正向关键词最多 %d 个", limit)
+	if polarity == promptdomain.KeywordPolarityNegative {
+		message = fmt.Sprintf("负向关键词最多 %d 个", limit)
+	}
+	details := gin.H{
+		"code":     keywordLimitDetailCode,
+		"polarity": polarity,
+		"limit":    limit,
+	}
+	if count >= 0 {
+		details["count"] = count
+	}
+	response.Fail(c, http.StatusBadRequest, response.ErrBadRequest, message, details)
+}
+
+func (h *PromptHandler) keywordDuplicateError(c *gin.Context, polarity, word string) {
+	pol := promptdomain.KeywordPolarityPositive
+	message := "该关键词已存在"
+	if strings.ToLower(strings.TrimSpace(polarity)) == promptdomain.KeywordPolarityNegative {
+		pol = promptdomain.KeywordPolarityNegative
+	}
+	details := gin.H{
+		"code":     keywordDuplicateDetailCode,
+		"polarity": pol,
+		"word":     word,
+	}
+	response.Fail(c, http.StatusBadRequest, response.ErrBadRequest, message, details)
 }
 
 func toServiceKeywords(items []KeywordPayload) []promptsvc.KeywordItem {

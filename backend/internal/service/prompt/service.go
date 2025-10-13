@@ -26,6 +26,7 @@ type ModelInvoker interface {
 type WorkspaceStore interface {
 	CreateOrReplace(ctx context.Context, userID uint, snapshot promptdomain.WorkspaceSnapshot) (string, error)
 	MergeKeywords(ctx context.Context, userID uint, token string, keywords []promptdomain.WorkspaceKeyword) error
+	RemoveKeyword(ctx context.Context, userID uint, token, polarity, word string) error
 	UpdateDraftBody(ctx context.Context, userID uint, token, body string) error
 	Touch(ctx context.Context, userID uint, token string) error
 	Snapshot(ctx context.Context, userID uint, token string) (promptdomain.WorkspaceSnapshot, error)
@@ -46,12 +47,13 @@ type PersistenceQueue interface {
 // 3. 生成 Prompt 正文并保存历史版本；
 // 4. 维护关键词字典，支持手动新增。
 type Service struct {
-	prompts   *repository.PromptRepository
-	keywords  *repository.KeywordRepository
-	model     ModelInvoker
-	workspace WorkspaceStore
-	queue     PersistenceQueue
-	logger    *zap.SugaredLogger
+	prompts      *repository.PromptRepository
+	keywords     *repository.KeywordRepository
+	model        ModelInvoker
+	workspace    WorkspaceStore
+	queue        PersistenceQueue
+	logger       *zap.SugaredLogger
+	keywordLimit int
 }
 
 const (
@@ -60,19 +62,40 @@ const (
 	defaultWorkspaceWriteTimeout = 5 * time.Second
 )
 
+// DefaultKeywordLimit 限制正/负向关键词数量的默认值。
+const DefaultKeywordLimit = 10
+
+var (
+	// ErrPositiveKeywordLimit 表示正向关键词数量超出上限。
+	ErrPositiveKeywordLimit = errors.New("positive keywords exceed limit")
+	// ErrNegativeKeywordLimit 表示负向关键词数量超出上限。
+	ErrNegativeKeywordLimit = errors.New("negative keywords exceed limit")
+	// ErrDuplicateKeyword 表示同极性的关键词已存在。
+	ErrDuplicateKeyword = errors.New("keyword already exists")
+)
+
 // NewService 构建 Service。
-func NewService(prompts *repository.PromptRepository, keywords *repository.KeywordRepository, model ModelInvoker, workspace WorkspaceStore, queue PersistenceQueue, logger *zap.SugaredLogger) *Service {
+func NewService(prompts *repository.PromptRepository, keywords *repository.KeywordRepository, model ModelInvoker, workspace WorkspaceStore, queue PersistenceQueue, logger *zap.SugaredLogger, keywordLimit int) *Service {
 	if logger == nil {
 		logger = zap.NewNop().Sugar()
 	}
-	return &Service{
-		prompts:   prompts,
-		keywords:  keywords,
-		model:     model,
-		workspace: workspace,
-		queue:     queue,
-		logger:    logger,
+	if keywordLimit <= 0 {
+		keywordLimit = DefaultKeywordLimit
 	}
+	return &Service{
+		prompts:      prompts,
+		keywords:     keywords,
+		model:        model,
+		workspace:    workspace,
+		queue:        queue,
+		logger:       logger,
+		keywordLimit: keywordLimit,
+	}
+}
+
+// KeywordLimit 暴露当前生效的关键词数量上限，供上层 Handler 使用。
+func (s *Service) KeywordLimit() int {
+	return s.keywordLimit
 }
 
 // StartPersistenceWorker 启动后台协程消费 Redis 队列并写入 MySQL。
@@ -160,6 +183,7 @@ type InterpretOutput struct {
 	NegativeKeywords []KeywordItem
 	Confidence       float64
 	WorkspaceToken   string
+	Instructions     string
 }
 
 // AugmentInput 描述补充关键词的请求参数。
@@ -191,6 +215,14 @@ type ManualKeywordInput struct {
 	Language       string
 	PromptID       uint
 	WorkspaceToken string // interpret 返回的 Redis 工作区 token，用于把手动关键词写入缓存。
+}
+
+// RemoveKeywordInput 描述移除临时工作区关键词所需的参数。
+type RemoveKeywordInput struct {
+	UserID         uint
+	Word           string
+	Polarity       string
+	WorkspaceToken string
 }
 
 // GenerateInput 描述生成 Prompt 正文所需的上下文。
@@ -273,8 +305,9 @@ func (s *Service) Interpret(ctx context.Context, input InterpretInput) (Interpre
 	}
 
 	result := InterpretOutput{
-		Topic:      payload.Topic,
-		Confidence: payload.Confidence,
+		Topic:        payload.Topic,
+		Confidence:   payload.Confidence,
+		Instructions: payload.Instructions,
 	}
 	if result.Topic == "" {
 		return InterpretOutput{}, errors.New("model did not return topic")
@@ -311,9 +344,12 @@ func (s *Service) Interpret(ctx context.Context, input InterpretInput) (Interpre
 			Language:  input.Language,
 			ModelKey:  modelKey,
 			DraftBody: "",
-			Positive:  toWorkspaceKeywords(result.PositiveKeywords),
-			Negative:  toWorkspaceKeywords(result.NegativeKeywords),
+			Positive:  toWorkspaceKeywords(result.PositiveKeywords, s.keywordLimit),
+			Negative:  toWorkspaceKeywords(result.NegativeKeywords, s.keywordLimit),
 			Version:   1,
+		}
+		if strings.TrimSpace(result.Instructions) != "" {
+			workspaceSnapshot.Attributes = map[string]string{"instructions": result.Instructions}
 		}
 		if token, err := s.workspace.CreateOrReplace(storeCtx, input.UserID, workspaceSnapshot); err != nil {
 			s.logger.Warnw("store workspace snapshot failed", "user_id", input.UserID, "topic", payload.Topic, "error", err)
@@ -328,6 +364,12 @@ func (s *Service) Interpret(ctx context.Context, input InterpretInput) (Interpre
 	if len(result.PositiveKeywords) == 0 {
 		return InterpretOutput{}, errors.New("model did not return positive keywords")
 	}
+	if len(result.PositiveKeywords) > s.keywordLimit {
+		result.PositiveKeywords = result.PositiveKeywords[:s.keywordLimit]
+	}
+	if len(result.NegativeKeywords) > s.keywordLimit {
+		result.NegativeKeywords = result.NegativeKeywords[:s.keywordLimit]
+	}
 
 	return result, nil
 }
@@ -339,6 +381,17 @@ func (s *Service) AugmentKeywords(ctx context.Context, input AugmentInput) (Augm
 	}
 	if strings.TrimSpace(input.ModelKey) == "" {
 		return AugmentOutput{}, errors.New("model key is empty")
+	}
+	positiveCapacity := s.keywordLimit - len(input.ExistingPositive)
+	if positiveCapacity < 0 {
+		positiveCapacity = 0
+	}
+	negativeCapacity := s.keywordLimit - len(input.ExistingNegative)
+	if negativeCapacity < 0 {
+		negativeCapacity = 0
+	}
+	if positiveCapacity == 0 && negativeCapacity == 0 {
+		return AugmentOutput{}, nil
 	}
 
 	req := buildAugmentRequest(input)
@@ -365,6 +418,9 @@ func (s *Service) AugmentKeywords(ctx context.Context, input AugmentInput) (Augm
 		workspaceEnabled = s.workspace != nil && strings.TrimSpace(input.WorkspaceToken) != ""
 	)
 	for _, word := range payload.Positive {
+		if positiveCapacity <= 0 {
+			break
+		}
 		item := KeywordItem{
 			Word:     word,
 			Source:   promptdomain.KeywordSourceModel,
@@ -372,6 +428,7 @@ func (s *Service) AugmentKeywords(ctx context.Context, input AugmentInput) (Augm
 		}
 		if existing.add(item) {
 			output.Positive = append(output.Positive, item)
+			positiveCapacity--
 			if workspaceEnabled {
 				workspaceNew = append(workspaceNew, promptdomain.WorkspaceKeyword{
 					Word:     strings.TrimSpace(item.Word),
@@ -386,6 +443,9 @@ func (s *Service) AugmentKeywords(ctx context.Context, input AugmentInput) (Augm
 		}
 	}
 	for _, word := range payload.Negative {
+		if negativeCapacity <= 0 {
+			break
+		}
 		item := KeywordItem{
 			Word:     word,
 			Source:   promptdomain.KeywordSourceModel,
@@ -393,6 +453,7 @@ func (s *Service) AugmentKeywords(ctx context.Context, input AugmentInput) (Augm
 		}
 		if existing.add(item) {
 			output.Negative = append(output.Negative, item)
+			negativeCapacity--
 			if workspaceEnabled {
 				workspaceNew = append(workspaceNew, promptdomain.WorkspaceKeyword{
 					Word:     strings.TrimSpace(item.Word),
@@ -436,17 +497,39 @@ func (s *Service) AddManualKeyword(ctx context.Context, input ManualKeywordInput
 		source = promptdomain.KeywordSourceManual
 	}
 	if s.workspace != nil && strings.TrimSpace(input.WorkspaceToken) != "" {
+		token := strings.TrimSpace(input.WorkspaceToken)
+		storeCtx, cancel := s.workspaceContext(ctx)
+		defer cancel()
+		positiveCount := 0
+		negativeCount := 0
+		snapshot, snapErr := s.workspace.Snapshot(storeCtx, input.UserID, token)
+		if snapErr == nil {
+			positiveCount = workspaceKeywordCount(snapshot.Positive)
+			negativeCount = workspaceKeywordCount(snapshot.Negative)
+			if workspaceHasKeyword(snapshot.Positive, promptdomain.KeywordPolarityPositive, word) && polarity == promptdomain.KeywordPolarityPositive {
+				return KeywordItem{}, ErrDuplicateKeyword
+			}
+			if workspaceHasKeyword(snapshot.Negative, promptdomain.KeywordPolarityNegative, word) && polarity == promptdomain.KeywordPolarityNegative {
+				return KeywordItem{}, ErrDuplicateKeyword
+			}
+		} else if !errors.Is(snapErr, redis.Nil) {
+			s.logger.Warnw("load workspace snapshot for manual keyword failed", "user_id", input.UserID, "token", token, "error", snapErr)
+		}
+		if polarity == promptdomain.KeywordPolarityPositive && positiveCount >= s.keywordLimit {
+			return KeywordItem{}, ErrPositiveKeywordLimit
+		}
+		if polarity == promptdomain.KeywordPolarityNegative && negativeCount >= s.keywordLimit {
+			return KeywordItem{}, ErrNegativeKeywordLimit
+		}
 		workspaceKeyword := promptdomain.WorkspaceKeyword{
 			Word:     word,
 			Source:   source,
 			Polarity: polarity,
 		}
-		storeCtx, cancel := s.workspaceContext(ctx)
-		defer cancel()
-		if err := s.workspace.MergeKeywords(storeCtx, input.UserID, strings.TrimSpace(input.WorkspaceToken), []promptdomain.WorkspaceKeyword{workspaceKeyword}); err != nil {
-			s.logger.Warnw("merge manual keyword to workspace failed", "user_id", input.UserID, "token", input.WorkspaceToken, "word", word, "error", err)
-		} else if err := s.workspace.Touch(storeCtx, input.UserID, strings.TrimSpace(input.WorkspaceToken)); err != nil {
-			s.logger.Warnw("touch workspace failed", "user_id", input.UserID, "token", input.WorkspaceToken, "error", err)
+		if err := s.workspace.MergeKeywords(storeCtx, input.UserID, token, []promptdomain.WorkspaceKeyword{workspaceKeyword}); err != nil {
+			s.logger.Warnw("merge manual keyword to workspace failed", "user_id", input.UserID, "token", token, "word", word, "error", err)
+		} else if err := s.workspace.Touch(storeCtx, input.UserID, token); err != nil {
+			s.logger.Warnw("touch workspace failed", "user_id", input.UserID, "token", token, "error", err)
 		}
 		return KeywordItem{
 			KeywordID: 0,
@@ -483,6 +566,27 @@ func (s *Service) AddManualKeyword(ctx context.Context, input ManualKeywordInput
 	return item, nil
 }
 
+// RemoveWorkspaceKeyword 从临时工作区中移除单个关键词，保持 Redis 与前端状态同步。
+func (s *Service) RemoveWorkspaceKeyword(ctx context.Context, input RemoveKeywordInput) error {
+	if s.workspace == nil {
+		return nil
+	}
+	token := strings.TrimSpace(input.WorkspaceToken)
+	if token == "" {
+		return nil
+	}
+	word := strings.TrimSpace(input.Word)
+	if word == "" {
+		return errors.New("keyword is empty")
+	}
+	storeCtx, cancel := s.workspaceContext(ctx)
+	defer cancel()
+	if err := s.workspace.RemoveKeyword(storeCtx, input.UserID, token, normalizePolarity(input.Polarity), word); err != nil {
+		return err
+	}
+	return nil
+}
+
 // GeneratePrompt 调用模型生成 Prompt，并返回正文与耗时。
 func (s *Service) GeneratePrompt(ctx context.Context, input GenerateInput) (GenerateOutput, error) {
 	if strings.TrimSpace(input.Topic) == "" {
@@ -493,6 +597,9 @@ func (s *Service) GeneratePrompt(ctx context.Context, input GenerateInput) (Gene
 	}
 	if len(input.PositiveKeywords) == 0 {
 		return GenerateOutput{}, errors.New("positive keywords required")
+	}
+	if err := enforceKeywordLimit(s.keywordLimit, input.PositiveKeywords, input.NegativeKeywords); err != nil {
+		return GenerateOutput{}, err
 	}
 	req := buildGenerateRequest(input)
 	req.Model = strings.TrimSpace(input.ModelKey)
@@ -562,10 +669,10 @@ func (s *Service) Save(ctx context.Context, input SaveInput) (SaveOutput, error)
 				input.Body = snapshot.DraftBody
 			}
 			if len(input.PositiveKeywords) == 0 {
-				input.PositiveKeywords = keywordItemsFromWorkspace(snapshot.Positive)
+				input.PositiveKeywords = keywordItemsFromWorkspace(snapshot.Positive, s.keywordLimit)
 			}
 			if len(input.NegativeKeywords) == 0 {
-				input.NegativeKeywords = keywordItemsFromWorkspace(snapshot.Negative)
+				input.NegativeKeywords = keywordItemsFromWorkspace(snapshot.Negative, s.keywordLimit)
 			}
 			if snapshot.PromptID != 0 && input.PromptID == 0 {
 				input.PromptID = snapshot.PromptID
@@ -580,6 +687,10 @@ func (s *Service) Save(ctx context.Context, input SaveInput) (SaveOutput, error)
 		if existing, err := s.prompts.FindByUserAndTopic(ctx, input.UserID, strings.TrimSpace(input.Topic)); err == nil {
 			input.PromptID = existing.ID
 		}
+	}
+
+	if err := enforceKeywordLimit(s.keywordLimit, input.PositiveKeywords, input.NegativeKeywords); err != nil {
+		return SaveOutput{}, err
 	}
 
 	action := promptdomain.TaskActionCreate
@@ -619,9 +730,16 @@ func toKeywordEntity(userID uint, topic string, item KeywordItem) *promptdomain.
 	}
 }
 
-func toWorkspaceKeywords(items []KeywordItem) []promptdomain.WorkspaceKeyword {
-	result := make([]promptdomain.WorkspaceKeyword, 0, len(items))
-	for _, item := range items {
+func toWorkspaceKeywords(items []KeywordItem, limit int) []promptdomain.WorkspaceKeyword {
+	if limit <= 0 {
+		limit = DefaultKeywordLimit
+	}
+	if len(items) < limit {
+		limit = len(items)
+	}
+	result := make([]promptdomain.WorkspaceKeyword, 0, limit)
+	for idx := 0; idx < limit; idx++ {
+		item := items[idx]
 		result = append(result, promptdomain.WorkspaceKeyword{
 			Word:     strings.TrimSpace(item.Word),
 			Source:   sourceFallback(item.Source),
@@ -632,7 +750,10 @@ func toWorkspaceKeywords(items []KeywordItem) []promptdomain.WorkspaceKeyword {
 	return result
 }
 
-func keywordItemsFromWorkspace(items []promptdomain.WorkspaceKeyword) []KeywordItem {
+func keywordItemsFromWorkspace(items []promptdomain.WorkspaceKeyword, limit int) []KeywordItem {
+	if limit <= 0 {
+		limit = DefaultKeywordLimit
+	}
 	result := make([]KeywordItem, 0, len(items))
 	for _, item := range items {
 		result = append(result, KeywordItem{
@@ -640,6 +761,9 @@ func keywordItemsFromWorkspace(items []promptdomain.WorkspaceKeyword) []KeywordI
 			Source:   sourceFallback(item.Source),
 			Polarity: normalizePolarity(item.Polarity),
 		})
+		if len(result) >= limit {
+			break
+		}
 	}
 	return result
 }
@@ -677,6 +801,49 @@ func sourceFallback(source string) string {
 	return source
 }
 
+// enforceKeywordLimit 统一校验关键词数量是否超过上限，避免后续流程写入异常数据。
+func enforceKeywordLimit(limit int, positive, negative []KeywordItem) error {
+	if len(positive) > limit {
+		return ErrPositiveKeywordLimit
+	}
+	if len(negative) > limit {
+		return ErrNegativeKeywordLimit
+	}
+	return nil
+}
+
+func workspaceKeywordCount(items []promptdomain.WorkspaceKeyword) int {
+	if len(items) == 0 {
+		return 0
+	}
+	seen := make(map[string]struct{})
+	for _, item := range items {
+		key := strings.ToLower(strings.TrimSpace(item.Word))
+		if key == "" {
+			continue
+		}
+		seen[key] = struct{}{}
+	}
+	return len(seen)
+}
+
+func workspaceHasKeyword(items []promptdomain.WorkspaceKeyword, polarity, word string) bool {
+	target := normalizePolarity(polarity)
+	needle := strings.ToLower(strings.TrimSpace(word))
+	if needle == "" {
+		return false
+	}
+	for _, item := range items {
+		if normalizePolarity(item.Polarity) != target {
+			continue
+		}
+		if strings.ToLower(strings.TrimSpace(item.Word)) == needle {
+			return true
+		}
+	}
+	return false
+}
+
 func (s *Service) persistKeywords(ctx context.Context, userID uint, topic string, items []KeywordItem) {
 	for _, item := range items {
 		if _, err := s.keywords.Upsert(ctx, toKeywordEntity(userID, topic, item)); err != nil {
@@ -705,8 +872,8 @@ func (s *Service) processPersistenceTask(ctx context.Context, task promptdomain.
 		Body:             firstNonEmpty(task.Body, snapshot.DraftBody),
 		Model:            firstNonEmpty(task.Model, snapshot.ModelKey),
 		Status:           task.Status,
-		PositiveKeywords: keywordItemsFromWorkspace(snapshot.Positive),
-		NegativeKeywords: keywordItemsFromWorkspace(snapshot.Negative),
+		PositiveKeywords: keywordItemsFromWorkspace(snapshot.Positive, s.keywordLimit),
+		NegativeKeywords: keywordItemsFromWorkspace(snapshot.Negative, s.keywordLimit),
 		Tags:             task.Tags,
 		Publish:          task.Publish,
 	}
@@ -722,6 +889,9 @@ func (s *Service) processPersistenceTask(ctx context.Context, task promptdomain.
 		}
 	}
 	status := normalizeStatus(task.Status, task.Publish)
+	if err := enforceKeywordLimit(s.keywordLimit, input.PositiveKeywords, input.NegativeKeywords); err != nil {
+		return fmt.Errorf("keyword limit: %w", err)
+	}
 	result, err := s.persistPrompt(ctx, input, status, action)
 	if err != nil {
 		return fmt.Errorf("persist prompt: %w", err)
@@ -741,6 +911,9 @@ func (s *Service) persistPrompt(ctx context.Context, input SaveInput, status, ac
 	}
 	if strings.TrimSpace(input.Body) == "" {
 		return SaveOutput{}, errors.New("body required")
+	}
+	if err := enforceKeywordLimit(s.keywordLimit, input.PositiveKeywords, input.NegativeKeywords); err != nil {
+		return SaveOutput{}, err
 	}
 	action = strings.TrimSpace(action)
 	if action == "" {
@@ -908,10 +1081,20 @@ func (s *Service) recordPromptVersion(ctx context.Context, prompt *promptdomain.
 }
 
 type interpretationPayload struct {
-	Topic      string   `json:"topic"`
-	Positive   []string `json:"positive_keywords"`
-	Negative   []string `json:"negative_keywords"`
-	Confidence float64  `json:"confidence"`
+	Topic        string
+	Positive     []string
+	Negative     []string
+	Confidence   float64
+	Instructions string
+}
+
+// rawInterpretationPayload 用于兼容模型返回的多种 instructions 表达形式（字符串或数组）。
+type rawInterpretationPayload struct {
+	Topic        string      `json:"topic"`
+	Positive     []string    `json:"positive_keywords"`
+	Negative     []string    `json:"negative_keywords"`
+	Confidence   float64     `json:"confidence"`
+	Instructions interface{} `json:"instructions"`
 }
 
 func parseInterpretationPayload(resp modeldomain.ChatCompletionResponse) (interpretationPayload, error) {
@@ -922,14 +1105,18 @@ func parseInterpretationPayload(resp modeldomain.ChatCompletionResponse) (interp
 	if content == "" {
 		return interpretationPayload{}, errors.New("model returned empty content")
 	}
-	var payload interpretationPayload
-	if err := json.Unmarshal([]byte(content), &payload); err != nil {
-		return interpretationPayload{}, fmt.Errorf("decode model response: %w", err)
+	var raw rawInterpretationPayload
+	if err := json.Unmarshal([]byte(content), &raw); err != nil {
+		return interpretationPayload{}, fmt.Errorf("decode interpretation response: %w", err)
 	}
-	payload.Topic = strings.TrimSpace(payload.Topic)
-	payload.Positive = normalizeWordSlice(payload.Positive)
-	payload.Negative = normalizeWordSlice(payload.Negative)
-	return payload, nil
+	result := interpretationPayload{
+		Topic:        strings.TrimSpace(raw.Topic),
+		Positive:     normalizeWordSlice(raw.Positive),
+		Negative:     normalizeWordSlice(raw.Negative),
+		Confidence:   raw.Confidence,
+		Instructions: normalizeInstructions(raw.Instructions),
+	}
+	return result, nil
 }
 
 type augmentPayload struct {
@@ -947,7 +1134,7 @@ func parseAugmentPayload(resp modeldomain.ChatCompletionResponse) (augmentPayloa
 	}
 	var payload augmentPayload
 	if err := json.Unmarshal([]byte(content), &payload); err != nil {
-		return augmentPayload{}, fmt.Errorf("decode model response: %w", err)
+		return augmentPayload{}, fmt.Errorf("decode augment response: %w", err)
 	}
 	payload.Positive = normalizeWordSlice(payload.Positive)
 	payload.Negative = normalizeWordSlice(payload.Negative)
@@ -970,6 +1157,46 @@ func normalizeWordSlice(words []string) []string {
 		out = append(out, trimmed)
 	}
 	return out
+}
+
+func normalizeInstructions(value interface{}) string {
+	switch v := value.(type) {
+	case string:
+		return strings.TrimSpace(v)
+	case []string:
+		// 部分模型会以字符串数组返回补充要求，这里拼接成单个字符串写回状态。
+		return joinInstructions(v)
+	case []interface{}:
+		items := make([]string, 0, len(v))
+		for _, item := range v {
+			switch elem := item.(type) {
+			case string:
+				items = append(items, elem)
+			case fmt.Stringer:
+				items = append(items, elem.String())
+			default:
+				items = append(items, fmt.Sprintf("%v", elem))
+			}
+		}
+		return joinInstructions(items)
+	default:
+		return ""
+	}
+}
+
+func joinInstructions(items []string) string {
+	var builder strings.Builder
+	for _, item := range items {
+		text := strings.TrimSpace(item)
+		if text == "" {
+			continue
+		}
+		if builder.Len() > 0 {
+			builder.WriteString("；")
+		}
+		builder.WriteString(text)
+	}
+	return builder.String()
 }
 
 func extractPromptText(resp modeldomain.ChatCompletionResponse) string {
@@ -1033,10 +1260,10 @@ func (s *keywordSet) add(item KeywordItem) bool {
 
 func buildInterpretationRequest(description, language string) modeldomain.ChatCompletionRequest {
 	lang := languageOrDefault(language)
-	system := "你是一名 Prompt 主题解析助手，负责从用户的自然语言意图中提炼主题与关键词。请始终返回结构化 JSON。"
+	system := "你是一名 Prompt 主题解析助手，负责从用户的自然语言意图中提炼主题、补充要求以及关键词。请始终返回结构化 JSON。"
 	user := fmt.Sprintf(
-		"目标语言：%s\n请从以下描述中提炼一个主题，拆分 3~6 个正向关键词与 1~4 个负向关键词，输出 JSON：\n"+
-			"{\"topic\":\"主题名称\",\"positive_keywords\":[\"关键词\"],\"negative_keywords\":[\"关键词\"],\"confidence\":0.0~1.0}\n"+
+		"目标语言：%s\n请从以下描述中提炼一个主题，拆分 3~6 个正向关键词与 1~4 个负向关键词，并总结 1~2 条补充要求，输出 JSON：\n"+
+			"{\"topic\":\"主题名称\",\"instructions\":\"补充要求\",\"positive_keywords\":[\"关键词\"],\"negative_keywords\":[\"关键词\"],\"confidence\":0.0~1.0}\n"+
 			"描述：%s",
 		lang, description,
 	)

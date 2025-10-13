@@ -28,3 +28,51 @@ body {
     background-color: rgba(59, 91, 219, 0.35);
     border-radius: 9999px;
 }
+
+/* Markdown 预览区的基础排版，确保标题、列表和代码块具备良好可读性。 */
+.markdown-preview {
+    line-height: 1.75;
+}
+
+.markdown-preview h1,
+.markdown-preview h2,
+.markdown-preview h3 {
+    font-weight: 600;
+    color: inherit;
+    margin-top: 1.25em;
+    margin-bottom: 0.5em;
+}
+
+.markdown-preview p {
+    margin-bottom: 0.75em;
+}
+
+.markdown-preview ul,
+.markdown-preview ol {
+    padding-left: 1.5rem;
+    margin-bottom: 0.75em;
+}
+
+.markdown-preview code {
+    background-color: rgba(15, 23, 42, 0.08);
+    padding: 0.1em 0.3em;
+    border-radius: 4px;
+    font-size: 0.95em;
+}
+
+.dark .markdown-preview code {
+    background-color: rgba(226, 232, 240, 0.16);
+}
+
+.markdown-preview pre {
+    background-color: rgba(15, 23, 42, 0.08);
+    border-radius: 12px;
+    padding: 1rem;
+    overflow-x: auto;
+    font-size: 0.95em;
+    margin-bottom: 1rem;
+}
+
+.dark .markdown-preview pre {
+    background-color: rgba(226, 232, 240, 0.12);
+}

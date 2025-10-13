@@ -2,7 +2,7 @@
  * @Author: NEFU AB-IN
  * @Date: 2025-10-09 20:51:28
  * @FilePath: \electron-go-app\backend\internal\bootstrap\bootstrap.go
- * @LastEditTime: 2025-10-09 20:51:34
+ * @LastEditTime: 2025-10-13 15:31:10
  */
 package bootstrap
 
@@ -120,9 +120,12 @@ func BuildApplication(ctx context.Context, logger *zap.SugaredLogger, resources 
 
 	modelService := modelsvc.NewService(modelRepo, userRepo)
 	modelHandler := handler.NewModelHandler(modelService)
-	promptService := promptsvc.NewService(promptRepo, keywordRepo, modelService, workspaceStore, persistenceQueue, logger)
+
+	keywordLimit := parseIntEnv("PROMPT_KEYWORD_LIMIT", promptsvc.DefaultKeywordLimit, logger)
+	promptService := promptsvc.NewService(promptRepo, keywordRepo, modelService, workspaceStore, persistenceQueue, logger, keywordLimit)
 	promptRateLimit := loadPromptRateLimit(logger)
 	promptHandler := handler.NewPromptHandler(promptService, promptLimiter, promptRateLimit)
+
 	if workspaceStore != nil && persistenceQueue != nil {
 		promptService.StartPersistenceWorker(ctx, 0)
 	}

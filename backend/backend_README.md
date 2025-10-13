@@ -79,6 +79,10 @@
 | `PROMPT_INTERPRET_WINDOW` | 自然语言解析限流窗口，如 `60s`，默认 `1m` |
 | `PROMPT_GENERATE_LIMIT` | Prompt 生成接口限流次数，默认 `5` |
 | `PROMPT_GENERATE_WINDOW` | Prompt 生成限流窗口，默认 `1m` |
+| `PROMPT_KEYWORD_LIMIT` | 正向/负向关键词的数量上限，默认 `10`，需与前端 `VITE_PROMPT_KEYWORD_LIMIT` 保持一致 |
+
+> ❗ **排障提示**：如果日志中出现  
+> `decode interpretation response: json: cannot unmarshal array into Go struct`，说明模型把 `instructions` 字段生成为数组。现有实现已兼容数组与字符串两种格式；若自定义提示词，请确保仍返回 JSON 对象，并将补充要求放在 `instructions` 字段（字符串或字符串数组均可）。
 
 #### SMTP 发信（可选）
 
