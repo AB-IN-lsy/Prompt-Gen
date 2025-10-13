@@ -31,6 +31,7 @@ func NewUserHandler(service *usersvc.Service) *UserHandler {
 }
 
 // GetMe 返回当前登录用户资料。
+// GetMe 返回当前登录用户的基本信息及模型配置。
 func (h *UserHandler) GetMe(c *gin.Context) {
 	log := h.scope("get_me")
 
@@ -73,6 +74,7 @@ type UpdateMeRequest struct {
 }
 
 // UpdateMe 更新当前登录用户的设置与基础信息。
+// UpdateMe 更新当前用户的资料、偏好模型及同步开关。
 func (h *UserHandler) UpdateMe(c *gin.Context) {
 	log := h.scope("update_me")
 
@@ -215,6 +217,7 @@ func (h *UserHandler) UpdateMe(c *gin.Context) {
 	response.Success(c, http.StatusOK, current, nil)
 }
 
+// ensureLogger 确保 handler 侧有可用的日志实例。
 func (h *UserHandler) ensureLogger() *zap.SugaredLogger {
 	if h.logger == nil {
 		h.logger = appLogger.S().With("component", "user.handler")
@@ -222,6 +225,7 @@ func (h *UserHandler) ensureLogger() *zap.SugaredLogger {
 	return h.logger
 }
 
+// scope 派生带操作标签的日志实例，便于排查问题。
 func (h *UserHandler) scope(operation string) *zap.SugaredLogger {
 	return h.ensureLogger().With("operation", operation)
 }

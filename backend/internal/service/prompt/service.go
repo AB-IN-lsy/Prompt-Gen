@@ -149,7 +149,7 @@ func (s *Service) modelInvocationContext(parent context.Context) (context.Contex
 	return ctx, cancel
 }
 
-// 给 Redis 写入操作准备一个不受请求取消影响、并且有 5 秒兜底超时的上下文。原理跟 modelInvocationContext 类似
+// workspaceContext 给 Redis 写入操作准备一个不受请求取消影响的上下文，并附带 5 秒兜底超时。
 func (s *Service) workspaceContext(parent context.Context) (context.Context, context.CancelFunc) {
 	if parent == nil {
 		return context.WithTimeout(context.Background(), defaultWorkspaceWriteTimeout)
@@ -374,7 +374,7 @@ func (s *Service) Interpret(ctx context.Context, input InterpretInput) (Interpre
 	return result, nil
 }
 
-// AugmentKeywords 调用模型补充关键词，并返回真正新增的词条。
+// AugmentKeywords 调用模型补充关键词，并返回真正新增的词条，同时维持去重与上限控制。
 func (s *Service) AugmentKeywords(ctx context.Context, input AugmentInput) (AugmentOutput, error) {
 	if strings.TrimSpace(input.Topic) == "" {
 		return AugmentOutput{}, errors.New("topic is empty")
@@ -851,6 +851,7 @@ func workspaceHasKeyword(items []promptdomain.WorkspaceKeyword, polarity, word s
 	return false
 }
 
+// persistKeywords 将临时关键词落入数据库，便于后续复用。
 func (s *Service) persistKeywords(ctx context.Context, userID uint, topic string, items []KeywordItem) {
 	for _, item := range items {
 		if _, err := s.keywords.Upsert(ctx, toKeywordEntity(userID, topic, item)); err != nil {
@@ -859,6 +860,7 @@ func (s *Service) persistKeywords(ctx context.Context, userID uint, topic string
 	}
 }
 
+// processPersistenceTask 消费异步队列任务，将工作区内容持久化回数据库。
 func (s *Service) processPersistenceTask(ctx context.Context, task promptdomain.PersistenceTask) error {
 	if s.workspace == nil {
 		return errors.New("workspace store not configured")
@@ -912,6 +914,7 @@ func (s *Service) processPersistenceTask(ctx context.Context, task promptdomain.
 	return nil
 }
 
+// persistPrompt 根据动作类型创建或更新 Prompt 主记录，同时保持关键词与版本一致。
 func (s *Service) persistPrompt(ctx context.Context, input SaveInput, status, action string) (SaveOutput, error) {
 	if strings.TrimSpace(input.Topic) == "" {
 		return SaveOutput{}, errors.New("topic required")
@@ -938,6 +941,7 @@ func (s *Service) persistPrompt(ctx context.Context, input SaveInput, status, ac
 	}
 }
 
+// createPromptRecord 写入新的 Prompt，并在必要时记录首个版本。
 func (s *Service) createPromptRecord(ctx context.Context, input SaveInput, status string) (SaveOutput, error) {
 	encodedPos, err := marshalKeywordItems(input.PositiveKeywords)
 	if err != nil {
@@ -985,6 +989,7 @@ func (s *Service) createPromptRecord(ctx context.Context, input SaveInput, statu
 	return SaveOutput{PromptID: entity.ID, Status: entity.Status, Version: entity.LatestVersionNo}, nil
 }
 
+// updatePromptRecord 更新已有 Prompt，并在发布时生成新的版本快照。
 func (s *Service) updatePromptRecord(ctx context.Context, input SaveInput, status string) (SaveOutput, error) {
 	entity, err := s.prompts.FindByID(ctx, input.UserID, input.PromptID)
 	if err != nil {
@@ -1048,6 +1053,7 @@ func (s *Service) updatePromptRecord(ctx context.Context, input SaveInput, statu
 	return SaveOutput{PromptID: entity.ID, Status: entity.Status, Version: entity.LatestVersionNo}, nil
 }
 
+// upsertPromptKeywords 确保关键词字典与 Prompt 关联表保持同步。
 func (s *Service) upsertPromptKeywords(ctx context.Context, userID uint, topic string, promptID uint, positive, negative []KeywordItem) ([]promptdomain.PromptKeyword, error) {
 	relations := make([]promptdomain.PromptKeyword, 0, len(positive)+len(negative))
 	for _, item := range positive {
@@ -1075,6 +1081,7 @@ func (s *Service) upsertPromptKeywords(ctx context.Context, userID uint, topic s
 	return relations, nil
 }
 
+// recordPromptVersion 写入 Prompt 的历史版本，便于后续回滚。
 func (s *Service) recordPromptVersion(ctx context.Context, prompt *promptdomain.Prompt) error {
 	version := &promptdomain.PromptVersion{
 		PromptID:         prompt.ID,

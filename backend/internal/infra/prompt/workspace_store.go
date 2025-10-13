@@ -335,6 +335,7 @@ func (s *WorkspaceStore) GetPromptMeta(ctx context.Context, userID uint, token s
 	return promptID, status, nil
 }
 
+// replaceKeywords 使用提供的关键词集合重建指定极性的 ZSET。
 func (s *WorkspaceStore) replaceKeywords(ctx context.Context, pipe redis.Pipeliner, baseKey string, keywords []promptdomain.WorkspaceKeyword, positive bool) error {
 	zsetKey := s.keyPositive(baseKey)
 	if !positive {
@@ -349,6 +350,7 @@ func (s *WorkspaceStore) replaceKeywords(ctx context.Context, pipe redis.Pipelin
 	return nil
 }
 
+// mergeKeywords 将关键词追加到现有集合中，存在则覆盖原有属性。
 func (s *WorkspaceStore) mergeKeywords(ctx context.Context, pipe redis.Pipeliner, baseKey string, keywords []promptdomain.WorkspaceKeyword) error {
 	for _, kw := range keywords {
 		if err := s.enqueueKeyword(ctx, pipe, baseKey, kw); err != nil {
@@ -358,6 +360,7 @@ func (s *WorkspaceStore) mergeKeywords(ctx context.Context, pipe redis.Pipeliner
 	return nil
 }
 
+// enqueueKeyword 将单个关键词写入 Hash 与 ZSET，维持排序信息。
 func (s *WorkspaceStore) enqueueKeyword(ctx context.Context, pipe redis.Pipeliner, baseKey string, keyword promptdomain.WorkspaceKeyword) error {
 	if keyword.Word == "" {
 		return nil
@@ -384,6 +387,7 @@ func (s *WorkspaceStore) enqueueKeyword(ctx context.Context, pipe redis.Pipeline
 	return nil
 }
 
+// readKeywords 读取指定极性的关键词集合，并恢复 payload 信息。
 func (s *WorkspaceStore) readKeywords(ctx context.Context, baseKey string, positive bool) ([]promptdomain.WorkspaceKeyword, error) {
 	zsetKey := s.keyPositive(baseKey)
 	if !positive {
@@ -428,6 +432,7 @@ func (s *WorkspaceStore) readKeywords(ctx context.Context, baseKey string, posit
 	return result, nil
 }
 
+// touch 刷新工作区所有相关 key 的 TTL。
 func (s *WorkspaceStore) touch(ctx context.Context, baseKey string) error {
 	pipe := s.client.TxPipeline()
 	s.applyTTL(ctx, pipe, baseKey)
@@ -437,6 +442,7 @@ func (s *WorkspaceStore) touch(ctx context.Context, baseKey string) error {
 	return nil
 }
 
+// applyTTL 批量更新工作区核心 key 的过期时间。
 func (s *WorkspaceStore) applyTTL(ctx context.Context, pipe redis.Pipeliner, baseKey string) {
 	keys := []string{
 		baseKey,
@@ -449,22 +455,27 @@ func (s *WorkspaceStore) applyTTL(ctx context.Context, pipe redis.Pipeliner, bas
 	}
 }
 
+// baseKey 生成工作区主 Hash 的 Redis key。
 func (s *WorkspaceStore) baseKey(userID uint, token string) string {
 	return fmt.Sprintf("%s:%d:%s", s.prefix, userID, token)
 }
 
+// keyPositive 返回正向关键词 ZSET 的 key。
 func (s *WorkspaceStore) keyPositive(baseKey string) string {
 	return baseKey + ":positive"
 }
 
+// keyNegative 返回负向关键词 ZSET 的 key。
 func (s *WorkspaceStore) keyNegative(baseKey string) string {
 	return baseKey + ":negative"
 }
 
+// keyKeywords 返回关键词明细 Hash 的 key。
 func (s *WorkspaceStore) keyKeywords(baseKey string) string {
 	return baseKey + ":keywords"
 }
 
+// normalizePolarity 规范化极性字段，缺省时视为正向。
 func normalizePolarity(p string) string {
 	if strings.EqualFold(strings.TrimSpace(p), promptdomain.KeywordPolarityNegative) {
 		return promptdomain.KeywordPolarityNegative
@@ -472,10 +483,12 @@ func normalizePolarity(p string) string {
 	return promptdomain.KeywordPolarityPositive
 }
 
+// parseInt64 辅助解析字符串为 int64。
 func parseInt64(val string) (int64, error) {
 	return strconv.ParseInt(val, 10, 64)
 }
 
+// parseUint 辅助解析字符串为 uint。
 func parseUint(val string) (uint, error) {
 	parsed, err := strconv.ParseUint(val, 10, 64)
 	if err != nil {
@@ -484,6 +497,7 @@ func parseUint(val string) (uint, error) {
 	return uint(parsed), nil
 }
 
+// touchUpdatedAt 更新工作区 Hash 的最近修改时间。
 func touchUpdatedAt(ctx context.Context, pipe redis.Pipeliner, baseKey string) {
 	pipe.HSet(ctx, baseKey, workspaceFieldUpdatedAt, time.Now().Unix())
 }
