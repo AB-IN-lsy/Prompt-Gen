@@ -361,6 +361,13 @@ export interface ChangelogCreateResult {
   translations: ChangelogEntry[];
 }
 
+/** 描述 IP Guard 黑名单中一条记录的结构。 */
+export interface IpGuardEntry {
+  ip: string;
+  ttl_seconds: number;
+  expires_at?: string | null;
+}
+
 /**
  * Fetches keywords from the backend. The backend supports optional topic/polarity filters.
  * Errors are normalised to {@link ApiError} before being rethrown.
@@ -919,6 +926,32 @@ export async function updateChangelogEntry(
 export async function deleteChangelogEntry(id: number): Promise<void> {
   try {
     await http.delete(`/changelog/${id}`);
+  } catch (error) {
+    throw normaliseError(error);
+  }
+}
+
+/** 拉取 IP Guard 黑名单列表，仅管理员可用。 */
+export async function fetchIpGuardBans(): Promise<IpGuardEntry[]> {
+  try {
+    const response: AxiosResponse<{ items: IpGuardEntry[] }> = await http.get(
+      "/ip-guard/bans",
+    );
+    return response.data.items ?? [];
+  } catch (error) {
+    throw normaliseError(error);
+  }
+}
+
+/** 解除指定 IP 的封禁记录。 */
+export async function removeIpGuardBan(ip: string): Promise<void> {
+  const trimmed = ip.trim();
+  if (!trimmed) {
+    throw new ApiError({ message: "IP address is required" });
+  }
+  try {
+    const encoded = encodeURIComponent(trimmed);
+    await http.delete(`/ip-guard/bans/${encoded}`);
   } catch (error) {
     throw normaliseError(error);
   }

@@ -141,6 +141,10 @@ func BuildApplication(ctx context.Context, logger *zap.SugaredLogger, resources 
 			logger.Warnw("ip guard enabled but redis unavailable, feature disabled")
 		}
 	}
+	var ipGuardHandler *handler.IPGuardHandler
+	if ipGuard != nil {
+		ipGuardHandler = handler.NewIPGuardHandler(ipGuard)
+	}
 
 	// 启动后台持久化任务（若 Redis 可用）。
 	if workspaceStore != nil && persistenceQueue != nil {
@@ -167,6 +171,7 @@ func BuildApplication(ctx context.Context, logger *zap.SugaredLogger, resources 
 		PromptHandler:    promptHandler,
 		AuthMW:           authMiddleware,
 		IPGuard:          ipGuard,
+		IPGuardHandler:   ipGuardHandler,
 	})
 
 	return &Application{
@@ -304,14 +309,16 @@ func loadPromptConfig(logger *zap.SugaredLogger) promptConfig {
 // loadIPGuardConfig 读取 IP 黑名单/限流相关的配置。
 func loadIPGuardConfig(logger *zap.SugaredLogger) middleware.IPGuardConfig {
 	return middleware.IPGuardConfig{
-		Enabled:      parseBoolEnv("IP_GUARD_ENABLED", false),
-		Prefix:       strings.TrimSpace(os.Getenv("IP_GUARD_PREFIX")),
-		Window:       parseDurationEnv("IP_GUARD_WINDOW", 30*time.Second, logger),
-		MaxRequests:  parseIntEnv("IP_GUARD_MAX_REQUESTS", 120, logger),
-		StrikeWindow: parseDurationEnv("IP_GUARD_STRIKE_WINDOW", 10*time.Minute, logger),
-		StrikeLimit:  parseIntEnv("IP_GUARD_STRIKE_LIMIT", 5, logger),
-		BanTTL:       parseDurationEnv("IP_GUARD_BAN_TTL", 30*time.Minute, logger),
-		HoneypotPath: strings.TrimSpace(os.Getenv("IP_GUARD_HONEYPOT_PATH")),
+		Enabled:         parseBoolEnv("IP_GUARD_ENABLED", false),
+		Prefix:          strings.TrimSpace(os.Getenv("IP_GUARD_PREFIX")),
+		Window:          parseDurationEnv("IP_GUARD_WINDOW", 30*time.Second, logger),
+		MaxRequests:     parseIntEnv("IP_GUARD_MAX_REQUESTS", 120, logger),
+		StrikeWindow:    parseDurationEnv("IP_GUARD_STRIKE_WINDOW", 10*time.Minute, logger),
+		StrikeLimit:     parseIntEnv("IP_GUARD_STRIKE_LIMIT", 5, logger),
+		BanTTL:          parseDurationEnv("IP_GUARD_BAN_TTL", 30*time.Minute, logger),
+		HoneypotPath:    strings.TrimSpace(os.Getenv("IP_GUARD_HONEYPOT_PATH")),
+		AdminScanCount:  parseIntEnv("IP_GUARD_ADMIN_SCAN_COUNT", 100, logger),
+		AdminMaxEntries: parseIntEnv("IP_GUARD_ADMIN_MAX_ENTRIES", 200, logger),
 	}
 }
 

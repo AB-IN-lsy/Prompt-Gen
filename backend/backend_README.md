@@ -24,6 +24,7 @@
 - 新增 `infra/model/deepseek` 模块与 `Service.InvokeChatCompletion`，可使用存量凭据直接向接入的大模型发起调用（当前支持 DeepSeek / 火山引擎）。
 - 新增 `changelog_entries` 表和 `/api/changelog` 接口，允许管理员在线维护更新日志；普通用户可直接读取最新发布的条目。
 - JWT 访问令牌新增 `is_admin` 字段，后端会在鉴权中间件里解析并注入上下文，前端可据此展示后台管理能力。
+- 新增 `/api/ip-guard/bans` 黑名单管理接口，管理员可查询限流封禁的 IP 并调用 `DELETE /api/ip-guard/bans/:ip` 解除；默认从环境变量 `IP_GUARD_ADMIN_SCAN_COUNT`、`IP_GUARD_ADMIN_MAX_ENTRIES` 读取扫描批量与返回上限，避免硬编码“神秘数字”。
 
 ## 环境变量
 

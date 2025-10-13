@@ -24,14 +24,16 @@ import (
 
 // IPGuardConfig 描述 IP 限流与黑名单的核心参数。
 type IPGuardConfig struct {
-	Enabled      bool
-	Prefix       string
-	Window       time.Duration
-	MaxRequests  int
-	StrikeWindow time.Duration
-	StrikeLimit  int
-	BanTTL       time.Duration
-	HoneypotPath string
+	Enabled         bool
+	Prefix          string
+	Window          time.Duration
+	MaxRequests     int
+	StrikeWindow    time.Duration
+	StrikeLimit     int
+	BanTTL          time.Duration
+	HoneypotPath    string
+	AdminScanCount  int
+	AdminMaxEntries int
 }
 
 // IPGuardMiddleware 基于 Redis 实现 IP 限流与黑名单机制。
@@ -43,9 +45,9 @@ type IPGuardMiddleware struct {
 
 // BlacklistEntry 描述黑名单中的一条记录。
 type BlacklistEntry struct {
-    IP        string
-    TTL       time.Duration
-    CreatedAt time.Time
+	IP         string     `json:"ip"`
+	TTLSeconds int64      `json:"ttl_seconds"`
+	ExpiresAt  *time.Time `json:"expires_at,omitempty"`
 }
 
 // NewIPGuardMiddleware 构建 IPGuardMiddleware。
@@ -70,6 +72,12 @@ func NewIPGuardMiddleware(client *redis.Client, cfg IPGuardConfig) *IPGuardMiddl
 	}
 	if cfg.HoneypotPath == "" {
 		cfg.HoneypotPath = "__internal__/trace"
+	}
+	if cfg.AdminScanCount <= 0 {
+		cfg.AdminScanCount = 100
+	}
+	if cfg.AdminMaxEntries <= 0 {
+		cfg.AdminMaxEntries = 200
 	}
 	baseLogger := appLogger.S().With("component", "middleware.ipguard")
 	return &IPGuardMiddleware{
@@ -205,4 +213,82 @@ func (m *IPGuardMiddleware) isBlacklisted(ctx context.Context, ip string) (bool,
 		return false, 0, nil
 	}
 	return true, ttl, nil
+}
+
+// ListBlacklistEntries 汇总 Redis 中仍处于封禁态的 IP，供后台可视化展示。
+func (m *IPGuardMiddleware) ListBlacklistEntries(ctx context.Context) ([]BlacklistEntry, error) {
+	if m == nil || m.client == nil {
+		return nil, fmt.Errorf("ip guard not initialised")
+	}
+
+	results := make([]BlacklistEntry, 0)
+	keyPattern := fmt.Sprintf("%s:ban:*", m.cfg.Prefix)
+	keyPrefix := fmt.Sprintf("%s:ban:", m.cfg.Prefix)
+	cursor := uint64(0)
+	maxEntries := m.cfg.AdminMaxEntries
+	scanCount := m.cfg.AdminScanCount
+
+	for {
+		keys, nextCursor, err := m.client.Scan(ctx, cursor, keyPattern, int64(scanCount)).Result()
+		if err != nil {
+			return nil, err
+		}
+		for _, key := range keys {
+			ttl, err := m.client.TTL(ctx, key).Result()
+			if err != nil {
+				if errors.Is(err, redis.Nil) {
+					continue
+				}
+				return nil, err
+			}
+			if ttl <= 0 {
+				continue
+			}
+
+			ip := strings.TrimPrefix(key, keyPrefix)
+			ttlSeconds := ttl / time.Second
+			if ttl%time.Second != 0 {
+				ttlSeconds++
+			}
+			entry := BlacklistEntry{
+				IP:         ip,
+				TTLSeconds: int64(ttlSeconds),
+			}
+			expiresAt := time.Now().Add(ttl).UTC()
+			entry.ExpiresAt = &expiresAt
+
+			results = append(results, entry)
+			if maxEntries > 0 && len(results) >= maxEntries {
+				return results, nil
+			}
+		}
+
+		cursor = nextCursor
+		if cursor == 0 {
+			break
+		}
+		if maxEntries > 0 && len(results) >= maxEntries {
+			break
+		}
+	}
+
+	return results, nil
+}
+
+// RemoveFromBlacklist 允许管理员手动解除某个 IP 的封禁。
+func (m *IPGuardMiddleware) RemoveFromBlacklist(ctx context.Context, ip string) error {
+	if m == nil || m.client == nil {
+		return fmt.Errorf("ip guard not initialised")
+	}
+
+	cleanIP := strings.TrimSpace(ip)
+	if cleanIP == "" {
+		return fmt.Errorf("ip required")
+	}
+
+	key := fmt.Sprintf("%s:ban:%s", m.cfg.Prefix, cleanIP)
+	if err := m.client.Del(ctx, key).Err(); err != nil {
+		return err
+	}
+	return nil
 }

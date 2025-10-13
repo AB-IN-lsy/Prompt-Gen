@@ -8,6 +8,7 @@
     "workbench": "Prompt 工作台",
     "settings": "设置",
     "logs": "更新日志",
+    "ipGuard": "IP 防护",
     "help": "帮助中心"
   },
   "helpPage": {
@@ -125,6 +126,40 @@
       }
     },
     "empty": "还没有任何更新日志，点击“新增日志”即可发布第一条。"
+  },
+  "ipGuardPage": {
+    "eyebrow": "安全审计",
+    "title": "IP 黑名单总览",
+    "subtitle": "查看并解除 IP Guard 自动封禁的地址。",
+    "table": {
+      "title": "封禁中的 IP",
+      "caption": "TTL 归零后会自动解除，无需手动干预。"
+    },
+    "columns": {
+      "ip": "IP 地址",
+      "ttl": "剩余 TTL",
+      "expiresAt": "过期时间",
+      "actions": "操作"
+    },
+    "actions": {
+      "refresh": "刷新",
+      "unblock": "解除封禁"
+    },
+    "states": {
+      "loading": "正在加载黑名单…",
+      "empty": "当前没有被封禁的 IP。"
+    },
+    "row": {
+      "ttlSeconds": "剩余 {{value}} 秒",
+      "permanent": "永久封禁"
+    },
+    "toast": {
+      "unblockSuccess": "已解除 {{ip}} 的封禁。"
+    },
+    "noPermission": {
+      "title": "需要管理员权限",
+      "subtitle": "仅管理员可以查看或调整 IP Guard 黑名单。"
+    }
   },
   "appShell": {
     "searchPlaceholder": "搜索主题或关键词...",

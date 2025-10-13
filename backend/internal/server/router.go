@@ -21,6 +21,7 @@ type RouterOptions struct {
 	PromptHandler    *handler.PromptHandler
 	AuthMW           *middleware.AuthMiddleware
 	IPGuard          *middleware.IPGuardMiddleware
+	IPGuardHandler   *handler.IPGuardHandler
 }
 
 // NewRouter 构建应用的 Gin Engine，汇总所有 REST 接口与公共中间件配置。
@@ -130,6 +131,16 @@ func NewRouter(opts RouterOptions) *gin.Engine {
 			prompts.POST("/keywords/remove", opts.PromptHandler.RemoveKeyword)
 			prompts.POST("/generate", opts.PromptHandler.GeneratePrompt)
 			prompts.POST("", opts.PromptHandler.SavePrompt)
+		}
+
+		if opts.IPGuardHandler != nil {
+			ipguard := api.Group("/ip-guard")
+			if opts.AuthMW != nil {
+				ipguard.Use(opts.AuthMW.Handle())
+			}
+			// 管理员可在此查看并解除封禁的 IP 黑名单。
+			ipguard.GET("/bans", opts.IPGuardHandler.ListBans)
+			ipguard.DELETE("/bans/:ip", opts.IPGuardHandler.RemoveBan)
 		}
 
 		if opts.UploadHandler != nil {

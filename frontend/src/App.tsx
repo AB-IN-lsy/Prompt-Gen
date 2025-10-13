@@ -18,6 +18,7 @@ import VerifyEmailPage from "./pages/VerifyEmail";
 import EmailVerificationCallbackPage from "./pages/EmailVerificationCallback";
 import HelpPage from "./pages/Help";
 import LogsPage from "./pages/Logs";
+import IpGuardPage from "./pages/IpGuard";
 import { useAuth, useIsAuthenticated } from "./hooks/useAuth";
 
 // 占位页面组件：在对应功能尚未实现时保持路由完整。
@@ -80,6 +81,7 @@ export default function App() {
                 <Route path="/prompt-workbench" element={<PromptWorkbenchPage />} />
                 <Route path="/settings" element={<SettingsPage />} />
                 <Route path="/logs" element={<LogsPage />} />
+                <Route path="/ip-guard" element={<IpGuardPage />} />
                 <Route path="/help" element={<HelpPage />} />
                 <Route path="*" element={<Navigate to="/prompt-workbench" replace />} />
             </Routes>

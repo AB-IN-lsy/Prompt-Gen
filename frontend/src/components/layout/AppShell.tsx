@@ -17,13 +17,14 @@ import {
     LogOut,
     ListChecks,
     FileClock,
-    Rocket
+    Rocket,
+    ShieldAlert
 } from "lucide-react";
 import { Button } from "../ui/button";
 import { useAuth } from "../../hooks/useAuth";
 
-// 侧边导航配置：labelKey 与翻译 key 对应，icon 控制导航图标。
-const navItems = [
+// 侧边导航基础配置：labelKey 与翻译 key 对应，icon 控制导航图标。
+const baseNavItems = [
     { labelKey: "nav.dashboard", icon: LayoutDashboard, to: "/" },
     { labelKey: "nav.myPrompts", icon: ListChecks, to: "/prompts" },
     { labelKey: "nav.workbench", icon: Sparkles, to: "/prompt-workbench" },
@@ -31,6 +32,9 @@ const navItems = [
     { labelKey: "nav.help", icon: HelpCircle, to: "/help" },
     { labelKey: "nav.settings", icon: Settings, to: "/settings" }
 ];
+
+// 仅管理员显示的额外导航项。
+const adminNavItems = [{ labelKey: "nav.ipGuard", icon: ShieldAlert, to: "/ip-guard" }];
 
 interface AppShellProps {
     children: ReactNode;
@@ -46,6 +50,13 @@ export function AppShell({ children, rightSlot }: AppShellProps) {
     const scrollContainerRef = useRef<HTMLDivElement>(null);
     const [showScrollTop, setShowScrollTop] = useState(false);
     const [fading, setFading] = useState(false);
+
+    const navItems = useMemo(() => {
+        if (profile?.user.is_admin) {
+            return [...baseNavItems, ...adminNavItems];
+        }
+        return baseNavItems;
+    }, [profile?.user.is_admin]);
 
     const handleLogout = useCallback(async () => {
         await logout();

@@ -8,6 +8,7 @@
     "workbench": "Prompt Workbench",
     "settings": "Settings",
     "logs": "Activity Logs",
+    "ipGuard": "IP Guard",
     "help": "Help Center"
   },
   "helpPage": {
@@ -125,6 +126,40 @@
       }
     },
     "empty": "No changelog entries yet. Use “Create entry” to publish the first update."
+  },
+  "ipGuardPage": {
+    "eyebrow": "Security",
+    "title": "IP blacklist overview",
+    "subtitle": "Review and unblock addresses throttled by the IP Guard middleware.",
+    "table": {
+      "title": "Blocked IP addresses",
+      "caption": "Entries expire automatically once the TTL reaches zero."
+    },
+    "columns": {
+      "ip": "IP address",
+      "ttl": "Remaining TTL",
+      "expiresAt": "Expires at",
+      "actions": "Actions"
+    },
+    "actions": {
+      "refresh": "Refresh",
+      "unblock": "Remove ban"
+    },
+    "states": {
+      "loading": "Loading blacklist…",
+      "empty": "No IP addresses are currently blocked."
+    },
+    "row": {
+      "ttlSeconds": "{{value}} seconds",
+      "permanent": "Permanent"
+    },
+    "toast": {
+      "unblockSuccess": "Removed {{ip}} from the blacklist."
+    },
+    "noPermission": {
+      "title": "Administrator required",
+      "subtitle": "Only administrators can inspect or modify IP Guard bans."
+    }
   },
   "appShell": {
     "searchPlaceholder": "Search topics or keywords...",
