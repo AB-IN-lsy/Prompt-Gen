@@ -155,6 +155,7 @@ var ErrPreferredModelNotFound = errors.New("preferred model not found")
 // ErrPreferredModelDisabled 表示偏好模型处于禁用状态。
 var ErrPreferredModelDisabled = errors.New("preferred model disabled")
 
+// ensurePreferredModel 校验并解析用户提交的偏好模型，保证其存在且处于启用状态。
 func (s *Service) ensurePreferredModel(ctx context.Context, userID uint, modelKey string) error {
 	if s.models == nil {
 		return nil

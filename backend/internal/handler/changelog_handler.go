@@ -286,6 +286,7 @@ type translationOutput struct {
 	Items   []string `json:"items"`
 }
 
+// sanitizeItems 对翻译后的条目进行清洗，若为空则回退到原文条目。
 func sanitizeItems(items []string, fallback []string) []string {
 	clean := make([]string, 0, len(items))
 	for _, item := range items {
@@ -303,6 +304,7 @@ func sanitizeItems(items []string, fallback []string) []string {
 	return clean
 }
 
+// normalizeTranslateTargets 过滤并标准化翻译目标列表，去除重复或与原文相同的语言。
 func normalizeTranslateTargets(base string, targets []string) []string {
 	baseLocale := canonicalLocale(base)
 	seen := map[string]struct{}{}
@@ -321,6 +323,7 @@ func normalizeTranslateTargets(base string, targets []string) []string {
 	return result
 }
 
+// canonicalLocale 将语言标识转换为统一格式，便于比较。
 func canonicalLocale(raw string) string {
 	trimmed := strings.TrimSpace(raw)
 	if trimmed == "" {
@@ -337,6 +340,7 @@ func canonicalLocale(raw string) string {
 	}
 }
 
+// localeDisplayName 返回语言的可读名称，方便提示模型上下文。
 func localeDisplayName(locale string) string {
 	switch canonicalLocale(locale) {
 	case "zh-CN":
@@ -348,6 +352,7 @@ func localeDisplayName(locale string) string {
 	}
 }
 
+// min 返回两个整数中的较小值。
 func min(a, b int) int {
 	if a < b {
 		return a

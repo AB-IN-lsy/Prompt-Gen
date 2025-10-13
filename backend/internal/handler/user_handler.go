@@ -30,7 +30,6 @@ func NewUserHandler(service *usersvc.Service) *UserHandler {
 	return &UserHandler{service: service, logger: baseLogger}
 }
 
-// GetMe 返回当前登录用户资料。
 // GetMe 返回当前登录用户的基本信息及模型配置。
 func (h *UserHandler) GetMe(c *gin.Context) {
 	log := h.scope("get_me")
@@ -73,7 +72,6 @@ type UpdateMeRequest struct {
 	SyncEnabled    *bool   `json:"sync_enabled"`
 }
 
-// UpdateMe 更新当前登录用户的设置与基础信息。
 // UpdateMe 更新当前用户的资料、偏好模型及同步开关。
 func (h *UserHandler) UpdateMe(c *gin.Context) {
 	log := h.scope("update_me")
@@ -230,6 +228,7 @@ func (h *UserHandler) scope(operation string) *zap.SugaredLogger {
 	return h.ensureLogger().With("operation", operation)
 }
 
+// extractUserID 从 Gin 上下文中读取用户 ID。
 func extractUserID(c *gin.Context) (uint, bool) {
 	val, ok := c.Get("userID")
 	if !ok {
@@ -260,6 +259,7 @@ func extractUserID(c *gin.Context) (uint, bool) {
 	}
 }
 
+// isAdmin 判断当前请求上下文是否携带管理员标记。
 func isAdmin(c *gin.Context) bool {
 	val, ok := c.Get("isAdmin")
 	if !ok {

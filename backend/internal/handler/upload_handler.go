@@ -90,6 +90,7 @@ func (h *UploadHandler) UploadAvatar(c *gin.Context) {
 	}, nil)
 }
 
+// ensureStorageDir 确保存储目录存在且具备读写权限。
 func (h *UploadHandler) ensureStorageDir() error {
 	return os.MkdirAll(h.storageRoot, 0o755)
 }
@@ -123,6 +124,7 @@ func isSupportedImage(fileHeader *multipart.FileHeader) bool {
 	}
 }
 
+// ensureLogger 懒加载日志实例，避免空指针。
 func (h *UploadHandler) ensureLogger() *zap.SugaredLogger {
 	if h.logger == nil {
 		h.logger = appLogger.S().With("component", "upload.handler")
@@ -130,6 +132,7 @@ func (h *UploadHandler) ensureLogger() *zap.SugaredLogger {
 	return h.logger
 }
 
+// scope 派生带操作名称的日志上下文，附带时间戳方便排查。
 func (h *UploadHandler) scope(operation string) *zap.SugaredLogger {
 	return h.ensureLogger().With("operation", operation, "timestamp", time.Now().Format(time.RFC3339Nano))
 }

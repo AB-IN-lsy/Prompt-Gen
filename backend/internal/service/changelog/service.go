@@ -116,6 +116,7 @@ func (s *Service) DeleteEntry(ctx context.Context, id uint) error {
 	return nil
 }
 
+// persist 负责创建或更新单条日志记录，内部被 CreateEntry/UpdateEntry 复用。
 func (s *Service) persist(ctx context.Context, id uint, params CreateEntryParams) (Entry, error) {
 	if len(params.Items) == 0 {
 		return Entry{}, fmt.Errorf("items cannot be empty")
@@ -171,6 +172,7 @@ func (s *Service) persist(ctx context.Context, id uint, params CreateEntryParams
 	return toEntry(*model)
 }
 
+// parseDate 支持多种日期格式解析 published_at 字段。
 func parseDate(raw string) (time.Time, error) {
 	trimmed := strings.TrimSpace(raw)
 	if trimmed == "" {
@@ -185,6 +187,7 @@ func parseDate(raw string) (time.Time, error) {
 	return time.Time{}, fmt.Errorf("invalid published_at format: %s", raw)
 }
 
+// toEntry 将数据库实体转换为对外展示结构体。
 func toEntry(item domain.Entry) (Entry, error) {
 	var items []string
 	if len(item.Items) > 0 {
@@ -206,6 +209,7 @@ func toEntry(item domain.Entry) (Entry, error) {
 	}, nil
 }
 
+// normaliseLocale 统一 locale 字段，处理常见别名。
 func normaliseLocale(raw string) string {
 	trimmed := strings.TrimSpace(raw)
 	if trimmed == "" {

@@ -207,6 +207,7 @@ func cloneMap(src map[string]any) map[string]any {
 	return dst
 }
 
+// asInt 尝试将任意类型转换为 int。
 func asInt(value any) (int, bool) {
 	switch v := value.(type) {
 	case float64:
@@ -226,6 +227,7 @@ func asInt(value any) (int, bool) {
 	return 0, false
 }
 
+// asFloat 尝试将任意类型转换为 float64。
 func asFloat(value any) (float64, bool) {
 	switch v := value.(type) {
 	case float64:
@@ -245,6 +247,7 @@ func asFloat(value any) (float64, bool) {
 	return 0, false
 }
 
+// asBool 尝试将任意类型转换为 bool。
 func asBool(value any) (bool, bool) {
 	switch v := value.(type) {
 	case bool:

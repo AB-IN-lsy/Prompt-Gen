@@ -84,6 +84,21 @@
 > ❗ **排障提示**：如果日志中出现  
 > `decode interpretation response: json: cannot unmarshal array into Go struct`，说明模型把 `instructions` 字段生成为数组。现有实现已兼容数组与字符串两种格式；若自定义提示词，请确保仍返回 JSON 对象，并将补充要求放在 `instructions` 字段（字符串或字符串数组均可）。
 
+### IP 防护（可选）
+
+| 变量 | 作用 |
+| --- | --- |
+| `IP_GUARD_ENABLED` | 是否启用 IP 限流与黑名单（`1/true` 开启，`0/false` 关闭） |
+| `IP_GUARD_MAX_REQUESTS` | 单个 IP 在同一个窗口内允许的最大请求数，超过即计一次“违规”，默认 `120` |
+| `IP_GUARD_WINDOW` | 请求计数的窗口时长，默认 `30s` |
+| `IP_GUARD_STRIKE_LIMIT` | 在 `IP_GUARD_STRIKE_WINDOW` 内累计多少次违规会触发封禁，默认 `5` |
+| `IP_GUARD_STRIKE_WINDOW` | 统计违规次数的窗口时长，默认 `10m` |
+| `IP_GUARD_BAN_TTL` | 被封禁后黑名单的持续时间，默认 `30m` |
+| `IP_GUARD_HONEYPOT_PATH` | 蜜罐接口的相对路径（挂载在 `/api` 下，无需带前导 `/`），默认 `__internal__/trace` |
+
+> 蜜罐接口会在前端以隐藏链接形式暴露，一旦被访问会立刻拉黑触发方；若需要解除封禁，可在 Redis 中删除 `ipguard:ban:<ip>`。
+> 默认配置会注册 `/api/__internal__/trace`，如需调整只需改写 `IP_GUARD_HONEYPOT_PATH`（无需带前导 `/`）。
+
 #### SMTP 发信（可选）
 
 | 变量 | 作用 |

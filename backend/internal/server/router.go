@@ -20,12 +20,18 @@ type RouterOptions struct {
 	ChangelogHandler *handler.ChangelogHandler
 	PromptHandler    *handler.PromptHandler
 	AuthMW           *middleware.AuthMiddleware
+	IPGuard          *middleware.IPGuardMiddleware
 }
 
 // NewRouter 构建应用的 Gin Engine，汇总所有 REST 接口与公共中间件配置。
 func NewRouter(opts RouterOptions) *gin.Engine {
 	gin.SetMode(gin.ReleaseMode)
 	r := gin.New()
+
+	// IP Guard 中间件会在最前层按照 IP 做限流与黑名单处理。
+	if opts.IPGuard != nil {
+		r.Use(opts.IPGuard.Handle())
+	}
 
 	// gin 中间件配置
 	r.Use(gin.Recovery())
@@ -69,6 +75,16 @@ func NewRouter(opts RouterOptions) *gin.Engine {
 
 	api := r.Group("/api")
 	{
+		if opts.IPGuard != nil && opts.IPGuard.HoneypotPath() != "" {
+			// 注册蜜罐接口：正常用户不会请求该路径，如果被访问即视为恶意爬虫。
+			// 会把实际的 Gin 路由注册为 /api/<HoneypotPath>，也就是 /api/__internal__/trace。一旦有客户端命中这个接口，中间件就会立刻把该 IP 写入黑名单，后续所有
+			// 请求都会直接被 403 拦下，这正是“蜜罐”的作用。
+			honeypotPath := strings.TrimLeft(opts.IPGuard.HoneypotPath(), "/")
+			if honeypotPath != "" {
+				api.Any("/"+honeypotPath, opts.IPGuard.HoneypotHandler())
+			}
+		}
+
 		authGroup := api.Group("/auth")
 		if opts.AuthHandler != nil {
 			authGroup.GET("/captcha", opts.AuthHandler.Captcha)

@@ -2,7 +2,7 @@
  * @Author: NEFU AB-IN
  * @Date: 2025-10-09 20:51:28
  * @FilePath: \electron-go-app\backend\internal\bootstrap\bootstrap.go
- * @LastEditTime: 2025-10-13 15:31:10
+ * @LastEditTime: 2025-10-13 20:39:18
  */
 package bootstrap
 
@@ -52,8 +52,8 @@ type Application struct {
 	Router    http.Handler
 }
 
-// BuildApplication 将底层资源 (DB、Redis) 与基础配置装配成完整的 HTTP 应用：
-// 1. 构建仓储、服务、Handler；2. 注入限流、邮件、验证码等外围依赖；3. 返回可直接用于启动的路由与服务指针。
+// BuildApplication 将底层资源 (数据库、Redis 等) 与业务配置装配成完整的 HTTP 应用：
+// 1. 初始化仓储与领域服务；2. 注入限流、邮件、验证码等外围依赖；3. 构造路由与中间件，返回可直接启动的应用实体。
 func BuildApplication(ctx context.Context, logger *zap.SugaredLogger, resources *app.Resources, cfg RuntimeConfig) (*Application, error) {
 	// 创建核心仓储：用户信息与邮箱验证令牌都依赖 MySQL/Gorm.
 	userRepo := repository.NewUserRepository(resources.DBConn())
@@ -112,29 +112,50 @@ func BuildApplication(ctx context.Context, logger *zap.SugaredLogger, resources 
 	verificationLimit, verificationWindow := loadEmailVerificationRateConfig(logger)
 
 	// 汇总依赖，构建鉴权服务与 Handler。
+	// 鉴权服务依赖较多，需协调验证码、邮件、令牌、用户等多个模块。
 	authService := authsvc.NewService(userRepo, verificationRepo, tokens, refreshStore, captchaManager, emailSender)
 	authHandler := handler.NewAuthHandler(authService, limiter, verificationLimit, verificationWindow)
 
+	// 用户服务与 Handler 相对简单，主要负责用户信息的 CRUD。
 	userService := usersvc.NewService(userRepo, modelRepo)
 	userHandler := handler.NewUserHandler(userService)
 
+	// 模型服务与 Handler 负责模型凭据的管理与测试连接。
 	modelService := modelsvc.NewService(modelRepo, userRepo)
 	modelHandler := handler.NewModelHandler(modelService)
 
-	keywordLimit := parseIntEnv("PROMPT_KEYWORD_LIMIT", promptsvc.DefaultKeywordLimit, logger)
-	promptService := promptsvc.NewService(promptRepo, keywordRepo, modelService, workspaceStore, persistenceQueue, logger, keywordLimit)
+	// Prompt 服务与 Handler 较为复杂，涉及关键词管理、工作空间、持久化队列等。
+	promptCfg := loadPromptConfig(logger)
+	// 构建 Prompt 工作台服务，并注入关键词上限、限流配置等依赖。
+	promptService := promptsvc.NewService(promptRepo, keywordRepo, modelService, workspaceStore, persistenceQueue, logger, promptCfg.KeywordLimit)
 	promptRateLimit := loadPromptRateLimit(logger)
 	promptHandler := handler.NewPromptHandler(promptService, promptLimiter, promptRateLimit)
 
+	// IP 防护中间件也是可选的，且强依赖 Redis。
+	ipGuardCfg := loadIPGuardConfig(logger)
+	var ipGuard *middleware.IPGuardMiddleware
+	if ipGuardCfg.Enabled {
+		if resources.Redis != nil {
+			ipGuard = middleware.NewIPGuardMiddleware(resources.Redis, ipGuardCfg)
+		} else {
+			logger.Warnw("ip guard enabled but redis unavailable, feature disabled")
+		}
+	}
+
+	// 启动后台持久化任务（若 Redis 可用）。
 	if workspaceStore != nil && persistenceQueue != nil {
 		promptService.StartPersistenceWorker(ctx, 0)
 	}
+	// 更新日志服务与 Handler 相对简单，主要负责变更条目的查询。
 	changelogService := changelogsrv.NewService(changelogRepo)
 	changelogHandler := handler.NewChangelogHandler(changelogService, modelService)
 
+	// 上传服务目前仅用于头像上传，且不依赖任何持久化存储。
+	// 文件直接存储在本地的 public 目录下，后续可扩展至云存储。
 	uploadStorage := filepath.Join("public", "avatars")
 	uploadHandler := handler.NewUploadHandler(uploadStorage)
 
+	// 构建路由与中间件。
 	authMiddleware := middleware.NewAuthMiddleware(cfg.JWTSecret)
 
 	router := server.NewRouter(server.RouterOptions{
@@ -145,6 +166,7 @@ func BuildApplication(ctx context.Context, logger *zap.SugaredLogger, resources 
 		ChangelogHandler: changelogHandler,
 		PromptHandler:    promptHandler,
 		AuthMW:           authMiddleware,
+		IPGuard:          ipGuard,
 	})
 
 	return &Application{
@@ -267,6 +289,32 @@ func loadPromptRateLimit(logger *zap.SugaredLogger) handler.PromptRateLimit {
 	}
 }
 
+// promptConfig 汇总 Prompt 相关的可配置参数。
+type promptConfig struct {
+	KeywordLimit int
+}
+
+// loadPromptConfig 汇总 Prompt 工作台涉及的所有配置项。
+func loadPromptConfig(logger *zap.SugaredLogger) promptConfig {
+	return promptConfig{
+		KeywordLimit: parseIntEnv("PROMPT_KEYWORD_LIMIT", promptsvc.DefaultKeywordLimit, logger),
+	}
+}
+
+// loadIPGuardConfig 读取 IP 黑名单/限流相关的配置。
+func loadIPGuardConfig(logger *zap.SugaredLogger) middleware.IPGuardConfig {
+	return middleware.IPGuardConfig{
+		Enabled:      parseBoolEnv("IP_GUARD_ENABLED", false),
+		Prefix:       strings.TrimSpace(os.Getenv("IP_GUARD_PREFIX")),
+		Window:       parseDurationEnv("IP_GUARD_WINDOW", 30*time.Second, logger),
+		MaxRequests:  parseIntEnv("IP_GUARD_MAX_REQUESTS", 120, logger),
+		StrikeWindow: parseDurationEnv("IP_GUARD_STRIKE_WINDOW", 10*time.Minute, logger),
+		StrikeLimit:  parseIntEnv("IP_GUARD_STRIKE_LIMIT", 5, logger),
+		BanTTL:       parseDurationEnv("IP_GUARD_BAN_TTL", 30*time.Minute, logger),
+		HoneypotPath: strings.TrimSpace(os.Getenv("IP_GUARD_HONEYPOT_PATH")),
+	}
+}
+
 // parseIntEnv 尝试解析整型环境变量，失败时记录警告并返回默认值。
 func parseIntEnv(key string, defaultValue int, logger *zap.SugaredLogger) int {
 	raw := strings.TrimSpace(os.Getenv(key))
@@ -293,4 +341,19 @@ func parseDurationEnv(key string, defaultValue time.Duration, logger *zap.Sugare
 		return defaultValue
 	}
 	return value
+}
+
+func parseBoolEnv(key string, defaultValue bool) bool {
+	raw := strings.TrimSpace(os.Getenv(key))
+	if raw == "" {
+		return defaultValue
+	}
+	switch strings.ToLower(raw) {
+	case "1", "true", "yes", "on":
+		return true
+	case "0", "false", "no", "off":
+		return false
+	default:
+		return defaultValue
+	}
 }

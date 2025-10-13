@@ -29,6 +29,7 @@ type ModelHandler struct {
 	logger  *zap.SugaredLogger
 }
 
+// NewModelHandler 构造模型凭据相关的 Handler。
 func NewModelHandler(service *modelsvc.Service) *ModelHandler {
 	base := appLogger.S().With("component", "model.handler")
 	return &ModelHandler{service: service, logger: base}
@@ -223,7 +224,7 @@ func (h *ModelHandler) TestConnection(c *gin.Context) {
 	response.Success(c, http.StatusOK, resp, nil)
 }
 
-// Delete 移除模型凭据。
+// Delete 移除指定的模型凭据。
 func (h *ModelHandler) Delete(c *gin.Context) {
 	log := h.scope("delete")
 	userID, ok := extractUserID(c)
@@ -250,6 +251,7 @@ func (h *ModelHandler) Delete(c *gin.Context) {
 	response.NoContent(c)
 }
 
+// scope 派生带操作标签的日志实例，方便排查请求行为。
 func (h *ModelHandler) scope(operation string) *zap.SugaredLogger {
 	if h.logger == nil {
 		h.logger = appLogger.S().With("component", "model.handler")
@@ -257,6 +259,7 @@ func (h *ModelHandler) scope(operation string) *zap.SugaredLogger {
 	return h.logger.With("operation", operation)
 }
 
+// parseUintParam 从路径参数解析无符号整数。
 func parseUintParam(c *gin.Context, name string) (uint, error) {
 	val := c.Param(name)
 	if val == "" {

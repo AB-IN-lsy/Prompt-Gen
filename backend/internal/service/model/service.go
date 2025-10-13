@@ -2,7 +2,7 @@
  * @Author: NEFU AB-IN
  * @Date: 2025-10-11 00:49:56
  * @FilePath: \electron-go-app\backend\internal\service\model\service.go
- * @LastEditTime: 2025-10-11 00:50:01
+ * @LastEditTime: 2025-10-13 20:37:52
  */
 package model
 
@@ -81,13 +81,13 @@ func (s *Service) ResolveProviderByModelKey(ctx context.Context, userID uint, mo
 	return normalizeProvider(credential.Provider), nil
 }
 
-// Service 提供模型凭据管理能力。
 // Service 聚合模型凭据仓储与用户仓储，用于跨层更新偏好设置。
 type Service struct {
 	repo  *repository.ModelCredentialRepository
 	users *repository.UserRepository
 }
 
+// NewService 构造模型凭据服务。
 func NewService(repo *repository.ModelCredentialRepository, users *repository.UserRepository) *Service {
 	return &Service{repo: repo, users: users}
 }
@@ -218,6 +218,7 @@ func (s *Service) Delete(ctx context.Context, userID, id uint) error {
 	return nil
 }
 
+// validateCreateInput 校验新增模型凭据所需字段是否完整且合法。
 func (s *Service) validateCreateInput(ctx context.Context, userID uint, input CreateInput) error {
 	provider := normalizeProvider(input.Provider)
 	if provider == "" {
@@ -246,6 +247,7 @@ func (s *Service) validateCreateInput(ctx context.Context, userID uint, input Cr
 	return nil
 }
 
+// encryptAPIKey 对模型 API Key 进行加密存储。
 func encryptAPIKey(key string) ([]byte, error) {
 	sealed, err := security.Encrypt([]byte(strings.TrimSpace(key)))
 	if err != nil {
@@ -254,6 +256,7 @@ func encryptAPIKey(key string) ([]byte, error) {
 	return sealed, nil
 }
 
+// encodeExtraConfig 将扩展配置序列化为 JSON 字符串。
 func encodeExtraConfig(extra map[string]any) (string, error) {
 	if extra == nil {
 		return "{}", nil
@@ -265,6 +268,7 @@ func encodeExtraConfig(extra map[string]any) (string, error) {
 	return string(data), nil
 }
 
+// toCredential 将数据库实体转换为对外返回的脱敏结构。
 func toCredential(entity domain.UserModelCredential) (Credential, error) {
 	extra := map[string]any{}
 	if entity.ExtraConfig != "" {
@@ -297,6 +301,7 @@ func isSupportedProvider(provider string) bool {
 	return ok
 }
 
+// normalizeStatus 校验并规范凭据的状态字段。
 func normalizeStatus(status string) (string, error) {
 	trimmed := strings.TrimSpace(strings.ToLower(status))
 	if trimmed == "" {
@@ -310,6 +315,7 @@ func normalizeStatus(status string) (string, error) {
 	}
 }
 
+// clearPreferredModelIfMatched 在凭据被禁用/删除时重置用户偏好。
 func (s *Service) clearPreferredModelIfMatched(ctx context.Context, userID uint, modelKey string) error {
 	if s.users == nil {
 		return nil
