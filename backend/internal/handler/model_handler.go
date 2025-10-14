@@ -2,7 +2,7 @@
  * @Author: NEFU AB-IN
  * @Date: 2025-10-11 00:50:55
  * @FilePath: \electron-go-app\backend\internal\handler\model_handler.go
- * @LastEditTime: 2025-10-11 00:51:01
+ * @LastEditTime: 2025-10-14 23:51:30
  */
 package handler
 
@@ -34,6 +34,25 @@ func NewModelHandler(service *modelsvc.Service) *ModelHandler {
 	base := appLogger.S().With("component", "model.handler")
 	return &ModelHandler{service: service, logger: base}
 }
+
+/**
+[ appLogger (全局 zap) ]
+        │
+        ▼
+appLogger.S().With("component","model.handler")
+        │
+        ▼
+ModelHandler.logger   ←—— 初始化时设置
+        │
+        ▼
+h.scope("list")       ←—— 每个操作调用时派生子日志器
+        │
+        ▼
+logger.With("operation","list")
+        │
+        ▼
+log.Errorw("list credentials failed", "error", err, "user_id", userID)
+**/
 
 // List 返回当前用户的模型凭据列表。
 func (h *ModelHandler) List(c *gin.Context) {

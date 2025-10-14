@@ -949,6 +949,15 @@ backend/
 └─ design/                       # PRD、流程图等文档
 ```
 
+在此结构下，核心分层职责如下，保持“请求适配 → 业务编排 → 数据访问 → 基础设施”单向依赖：
+
+- `internal/handler` 聚焦 HTTP 适配：绑定/校验请求参数、统一记录访问日志并捕获所有错误，借助 `infra/common/response` 生成一致的响应体。Handler 负责补充 request 上下文（用户信息、限流窗口等）并把业务调用透传到 Service，仅在这里做日志落盘。
+- `internal/service` 承担业务规则，尽量保持无状态（stateless），从上下文中读取信息，只依赖接口型组件（仓储、限流器、邮件发送器等）。Service 返回领域对象和语义化错误，不直接写日志，方便被 handler、任务或测试复用。
+- `internal/repository` 屏蔽 GORM 细节，专注读写实体；Service 通过这些仓储组合持久化与查询。与之配套的 `internal/domain` 定义业务实体与值对象，保障类型内聚。
+- `internal/infra` 提供外围能力（数据库/Redis 客户端、加密、令牌、验证码、日志、限流等），供 bootstrap 注入到 Service 与 Repository。
+- `internal/middleware`、`internal/server`、`internal/bootstrap` 分别负责 Gin 中间件、路由/静态资源以及依赖装配；`internal/app` 则统一管理资源生命周期，保障启动与关闭过程的对称。
+- `tests/` 保持与业务层对应的单元/集成/E2E 覆盖，优先针对 Service 层编写用例，结合模拟仓储或真实依赖验证边界条件。
+
 需要新增模块时，推荐按照上述分层模式扩展，保持 Handler、Service、Repository 等职责清晰，并优先在 `tests/` 中补充对应的单元/集成测试。
 
 ## Prompt 工作台流程
