@@ -17,6 +17,10 @@ import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import {
+  PROMPT_KEYWORD_MAX_LENGTH,
+  PROMPT_TAG_MAX_LENGTH,
+} from "../config/prompt";
+import {
   deletePrompt,
   fetchMyPrompts,
   fetchPromptDetail,
@@ -28,6 +32,7 @@ import {
 } from "../lib/api";
 import { usePromptWorkbench } from "../hooks/usePromptWorkbench";
 import type { Keyword, KeywordSource } from "../lib/api";
+import { clampTextWithOverflow, formatOverflowLabel } from "../lib/utils";
 
 type StatusFilter = "all" | "draft" | "published" | "archived";
 
@@ -75,6 +80,7 @@ export default function MyPromptsPage(): JSX.Element {
   const setPromptId = usePromptWorkbench((state) => state.setPromptId);
   const setWorkspaceToken = usePromptWorkbench((state) => state.setWorkspaceToken);
   const setCollections = usePromptWorkbench((state) => state.setCollections);
+  const setTags = usePromptWorkbench((state) => state.setTags);
 
   const [status, setStatus] = useState<StatusFilter>("all");
   const [page, setPage] = useState(1);
@@ -147,22 +153,30 @@ export default function MyPromptsPage(): JSX.Element {
     const positive = mapKeywords(detail.positive_keywords, "positive");
     const negative = mapKeywords(detail.negative_keywords, "negative");
     setCollections(positive, negative);
+    setTags(detail.tags ?? []);
   }
 
   function mapKeywords(
     keywords: PromptListKeyword[],
     polarity: "positive" | "negative",
   ): Keyword[] {
-    return keywords.map((item, index) => ({
-      id:
-        item.keyword_id !== undefined && item.keyword_id !== null
-          ? String(item.keyword_id)
-          : `${polarity}-${item.word}-${index}`,
-      word: item.word,
-      polarity,
-      source: fallbackSource(item.source),
-      weight: clampWeight(item.weight),
-    }));
+    return keywords.map((item, index) => {
+      const { value, overflow } = clampTextWithOverflow(
+        item.word ?? "",
+        PROMPT_KEYWORD_MAX_LENGTH,
+      );
+      return {
+        id:
+          item.keyword_id !== undefined && item.keyword_id !== null
+            ? String(item.keyword_id)
+            : `${polarity}-${item.word}-${index}`,
+        word: value,
+        polarity,
+        source: fallbackSource(item.source),
+        weight: clampWeight(item.weight),
+        overflow,
+      };
+    });
   }
 
   const handleSearchSubmit = (event?: FormEvent<HTMLFormElement>) => {
@@ -432,21 +446,28 @@ function PromptRow({
       </td>
       <td className="px-4 py-4 align-top">
         <div className="flex flex-wrap gap-1">
-          {item.tags.length === 0
-            ? (
-              <span className="text-xs text-slate-400 dark:text-slate-600">
-                —
-              </span>
-            )
-            : item.tags.map((tag) => (
-              <Badge
-                key={tag}
-                variant="outline"
-                className="border-slate-200 text-slate-500 dark:border-slate-700 dark:text-slate-300"
-              >
-                {tag}
-              </Badge>
-            ))}
+          {item.tags.length === 0 ? (
+            <span className="text-xs text-slate-400 dark:text-slate-600">
+              —
+            </span>
+          ) : (
+            item.tags.map((tag) => {
+              const { value, overflow } = clampTextWithOverflow(
+                tag,
+                PROMPT_TAG_MAX_LENGTH,
+              );
+              return (
+                <Badge
+                  key={tag}
+                  variant="outline"
+                  className="border-slate-200 text-slate-500 dark:border-slate-700 dark:text-slate-300"
+                  title={value}
+                >
+                  {formatOverflowLabel(value, overflow)}
+                </Badge>
+              );
+            })
+          )}
         </div>
       </td>
       <td className="px-4 py-4 align-top text-sm text-slate-500 dark:text-slate-400">
@@ -498,19 +519,26 @@ function renderKeywordPreview(
   const remaining = keywords.length - samples.length;
   return (
     <>
-      {samples.map((keyword, index) => (
-        <Badge
-          key={`${polarity}-${keyword.word}-${index}`}
-          variant="outline"
-          className={
-            polarity === "positive"
-              ? "border-blue-200 text-blue-600 dark:border-blue-500/60 dark:text-blue-300"
-              : "border-rose-200 text-rose-600 dark:border-rose-500/60 dark:text-rose-300"
-          }
-        >
-          {keyword.word}
-        </Badge>
-      ))}
+      {samples.map((keyword, index) => {
+        const { value, overflow } = clampTextWithOverflow(
+          keyword.word ?? "",
+          PROMPT_KEYWORD_MAX_LENGTH,
+        );
+        return (
+          <Badge
+            key={`${polarity}-${keyword.word}-${index}`}
+            variant="outline"
+            className={
+              polarity === "positive"
+                ? "border-blue-200 text-blue-600 dark:border-blue-500/60 dark:text-blue-300"
+                : "border-rose-200 text-rose-600 dark:border-rose-500/60 dark:text-rose-300"
+            }
+            title={value}
+          >
+            {formatOverflowLabel(value, overflow)}
+          </Badge>
+        );
+      })}
       {remaining > 0 ? (
         <Badge
           variant="outline"

@@ -298,6 +298,9 @@ func loadPromptRateLimit(logger *zap.SugaredLogger) handler.PromptRateLimit {
 func loadPromptConfig(logger *zap.SugaredLogger) promptsvc.Config {
 	return promptsvc.Config{
 		KeywordLimit:        parseIntEnv("PROMPT_KEYWORD_LIMIT", promptsvc.DefaultKeywordLimit, logger),
+		KeywordMaxLength:    parseIntEnv("PROMPT_KEYWORD_MAX_LENGTH", 64, logger),
+		TagLimit:            parseIntEnv("PROMPT_TAG_LIMIT", promptsvc.DefaultTagLimit, logger),
+		TagMaxLength:        parseIntEnv("PROMPT_TAG_MAX_LENGTH", 5, logger),
 		DefaultListPageSize: parseIntEnv("PROMPT_LIST_PAGE_SIZE", 20, logger),
 		MaxListPageSize:     parseIntEnv("PROMPT_LIST_MAX_PAGE_SIZE", 100, logger),
 		UseFullTextSearch:   parseBoolEnv("PROMPT_USE_FULLTEXT", false),

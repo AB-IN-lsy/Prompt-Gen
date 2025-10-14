@@ -7,7 +7,20 @@
 import { create } from "zustand";
 import { nanoid } from "nanoid";
 import { Keyword } from "../lib/api";
-import { PROMPT_KEYWORD_LIMIT } from "../config/prompt";
+import {
+  PROMPT_KEYWORD_LIMIT,
+  PROMPT_KEYWORD_MAX_LENGTH,
+  PROMPT_TAG_LIMIT,
+  PROMPT_TAG_MAX_LENGTH,
+} from "../config/prompt";
+import {
+  clampTextWithOverflow,
+} from "../lib/utils";
+
+interface TagEntry {
+  value: string;
+  overflow: number;
+}
 
 interface WorkbenchState {
   topic: string;
@@ -17,6 +30,7 @@ interface WorkbenchState {
   workspaceToken: string | null;
   positiveKeywords: Keyword[];
   negativeKeywords: Keyword[];
+  tags: TagEntry[];
   isSaving: boolean;
   setTopic: (topic: string) => void;
   setModel: (model: string) => void;
@@ -29,11 +43,17 @@ interface WorkbenchState {
   upsertKeyword: (keyword: Keyword) => void;
   updateKeyword: (id: string, updater: (keyword: Keyword) => Keyword) => void;
   removeKeyword: (id: string) => void;
+  setTags: (tags: string[]) => void;
+  addTag: (tag: string) => void;
+  removeTag: (tag: string) => void;
   setSaving: (saving: boolean) => void;
   reset: () => void;
 }
 
 const KEYWORD_LIMIT = PROMPT_KEYWORD_LIMIT;
+const KEYWORD_MAX_LENGTH = PROMPT_KEYWORD_MAX_LENGTH;
+const TAG_LIMIT = PROMPT_TAG_LIMIT;
+const TAG_MAX_LENGTH = PROMPT_TAG_MAX_LENGTH;
 const DEFAULT_KEYWORD_WEIGHT = 5;
 
 const normalizeWord = (word: string) => word.trim().toLowerCase();
@@ -63,14 +83,18 @@ const dedupeByPolarity = (keywords: Keyword[]) => {
 };
 
 const normaliseKeyword = (keyword: Keyword): Keyword => {
-  if (!keyword.id || keyword.id.length === 0) {
-    return {
-      ...keyword,
-      id: nanoid(),
-      weight: clampWeight(keyword.weight),
-    };
-  }
-  return { ...keyword, weight: clampWeight(keyword.weight) };
+  const { value, overflow } = clampTextWithOverflow(
+    keyword.word ?? "",
+    KEYWORD_MAX_LENGTH,
+  );
+  const base: Keyword = {
+    ...keyword,
+    id: keyword.id && keyword.id.length > 0 ? keyword.id : nanoid(),
+    word: value,
+    weight: clampWeight(keyword.weight),
+    overflow,
+  };
+  return base;
 };
 
 export const usePromptWorkbench = create<WorkbenchState>((set, get) => ({
@@ -81,6 +105,7 @@ export const usePromptWorkbench = create<WorkbenchState>((set, get) => ({
   workspaceToken: null,
   positiveKeywords: [],
   negativeKeywords: [],
+  tags: [],
   isSaving: false,
   setTopic: (topic) => set({ topic }),
   setModel: (model) => set({ model }),
@@ -195,6 +220,22 @@ export const usePromptWorkbench = create<WorkbenchState>((set, get) => ({
       negativeKeywords: negativeKeywords.filter((item) => item.id !== id),
     }));
   },
+  setTags: (tags) => {
+    set(() => ({ tags: normaliseTags(tags) }));
+  },
+  addTag: (tag) => {
+    const incoming = tag.trim();
+    if (!incoming) return;
+    set(({ tags }) => ({
+      tags: normaliseTags([...tags.map((item) => item.value), incoming]),
+    }));
+  },
+  removeTag: (tag) => {
+    const key = tag.trim().toLowerCase();
+    set(({ tags }) => ({
+      tags: tags.filter((item) => item.value.trim().toLowerCase() !== key),
+    }));
+  },
   setSaving: (saving) => set({ isSaving: saving }),
   reset: () =>
     set({
@@ -205,5 +246,25 @@ export const usePromptWorkbench = create<WorkbenchState>((set, get) => ({
       workspaceToken: null,
       positiveKeywords: [],
       negativeKeywords: [],
+      tags: [],
     }),
 }));
+
+const normaliseTags = (values: string[]): TagEntry[] => {
+  const result: TagEntry[] = [];
+  const seen = new Set<string>();
+  for (const raw of values) {
+    const { value, overflow } = clampTextWithOverflow(raw, TAG_MAX_LENGTH);
+    if (!value) continue;
+    const key = value.toLowerCase();
+    if (seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    result.push({ value, overflow });
+    if (TAG_LIMIT > 0 && result.length >= TAG_LIMIT) {
+      break;
+    }
+  }
+  return result;
+};

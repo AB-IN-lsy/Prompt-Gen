@@ -49,9 +49,14 @@ import { Input } from "../components/ui/input";
 import { Button } from "../components/ui/button";
 import { Badge } from "../components/ui/badge";
 import { Textarea } from "../components/ui/textarea";
-import { cn } from "../lib/utils";
+import { cn, clampTextWithOverflow, formatOverflowLabel } from "../lib/utils";
 import { MarkdownEditor } from "../components/MarkdownEditor";
-import { PROMPT_KEYWORD_LIMIT } from "../config/prompt";
+import {
+  PROMPT_KEYWORD_LIMIT,
+  PROMPT_KEYWORD_MAX_LENGTH,
+  PROMPT_TAG_LIMIT,
+  PROMPT_TAG_MAX_LENGTH,
+} from "../config/prompt";
 import {
   augmentPromptKeywords,
   createManualPromptKeyword,
@@ -95,22 +100,33 @@ const clampWeight = (value?: number): number => {
 const mapKeywordResultToKeyword = (item: PromptKeywordResult): Keyword => {
   const source = (item.source as KeywordSource) ?? "api";
   const weight = clampWeight(item.weight);
+  const { value, overflow } = clampTextWithOverflow(
+    item.word ?? "",
+    PROMPT_KEYWORD_MAX_LENGTH,
+  );
   return {
     id: item.keyword_id ? String(item.keyword_id) : nanoid(),
-    word: item.word,
+    word: value,
     polarity: item.polarity as Keyword["polarity"],
     source,
     weight,
+    overflow,
   };
 };
 
-const keywordToInput = (keyword: Keyword): PromptKeywordInput => ({
-  keyword_id: keyword.id,
-  word: keyword.word,
-  polarity: keyword.polarity,
-  source: keyword.source,
-  weight: clampWeight(keyword.weight),
-});
+const keywordToInput = (keyword: Keyword): PromptKeywordInput => {
+  const { value } = clampTextWithOverflow(
+    keyword.word,
+    PROMPT_KEYWORD_MAX_LENGTH,
+  );
+  return {
+    keyword_id: keyword.id,
+    word: value,
+    polarity: keyword.polarity,
+    source: keyword.source,
+    weight: clampWeight(keyword.weight),
+  };
+};
 
 const POSITIVE_CONTAINER_ID = "positive-keyword-container";
 const NEGATIVE_CONTAINER_ID = "negative-keyword-container";
@@ -140,6 +156,9 @@ export default function PromptWorkbenchPage() {
     upsertKeyword,
     updateKeyword,
     removeKeyword,
+    tags,
+    addTag,
+    removeTag,
     prompt,
     setPrompt,
     promptId,
@@ -156,6 +175,7 @@ export default function PromptWorkbenchPage() {
   const [description, setDescription] = useState("");
   const [instructions, setInstructions] = useState("");
   const [newKeyword, setNewKeyword] = useState("");
+  const [tagInput, setTagInput] = useState("");
   const [polarity, setPolarity] = useState<"positive" | "negative">("positive");
   const [confidence, setConfidence] = useState<number | null>(null);
   const [keywordsDirty, setKeywordsDirty] = useState(false);
@@ -182,6 +202,9 @@ export default function PromptWorkbenchPage() {
     }
   }, []);
   const keywordLimit = PROMPT_KEYWORD_LIMIT;
+  const keywordMaxLength = PROMPT_KEYWORD_MAX_LENGTH;
+  const tagLimit = PROMPT_TAG_LIMIT;
+  const tagMaxLength = PROMPT_TAG_MAX_LENGTH;
 
   const limitKeywordCollections = useCallback(
     (keywords: Keyword[]) => {
@@ -1038,6 +1061,7 @@ export default function PromptWorkbenchPage() {
         model,
         publish,
         status: publish ? "published" : "draft",
+        tags: tags.map((tag) => tag.value),
         positive_keywords: positiveKeywords.map(keywordToInput),
         negative_keywords: negativeKeywords.map(keywordToInput),
         workspace_token: workspaceToken ?? undefined,
@@ -1102,7 +1126,11 @@ export default function PromptWorkbenchPage() {
   const handleAddKeyword = () => {
     const word = newKeyword.trim();
     if (!word) return;
-    const normalized = word.toLowerCase();
+    const { value: clampedWord, overflow } = clampTextWithOverflow(
+      word,
+      keywordMaxLength,
+    );
+    const normalized = clampedWord.toLowerCase();
     const collection =
       polarity === "positive" ? positiveKeywords : negativeKeywords;
     const duplicated = collection.some(
@@ -1134,7 +1162,17 @@ export default function PromptWorkbenchPage() {
       );
       return;
     }
-    manualKeywordMutation.mutate(word);
+    if (overflow > 0) {
+      toast.info(
+        t("promptWorkbench.keywordTooLong", {
+          limit: keywordMaxLength,
+          overflow,
+          defaultValue:
+            "Keyword exceeded {{overflow}} characters and was truncated",
+        }),
+      );
+    }
+    manualKeywordMutation.mutate(clampedWord);
   };
 
   const handleInterpret = () => interpretMutation.mutate();
@@ -1142,6 +1180,53 @@ export default function PromptWorkbenchPage() {
   const handleGenerate = () => generateMutation.mutate();
   const handleSaveDraft = () => savePromptMutation.mutate(false);
   const handlePublish = () => savePromptMutation.mutate(true);
+
+  const handleAddTag = () => {
+    const value = tagInput.trim();
+    if (!value) return;
+    const { value: clamped, overflow } = clampTextWithOverflow(
+      value,
+      tagMaxLength,
+    );
+    if (!clamped) return;
+    const normalized = clamped.toLowerCase();
+    const exists = tags.some(
+      (tag) => tag.value.trim().toLowerCase() === normalized,
+    );
+    if (exists) {
+      toast.warning(
+        t("promptWorkbench.tagDuplicate", {
+          defaultValue: "该标签已存在",
+        }),
+      );
+      return;
+    }
+    if (tagLimit > 0 && tags.length >= tagLimit) {
+      toast.warning(
+        t("promptWorkbench.tagLimitReached", {
+          limit: tagLimit,
+          defaultValue: "标签最多 {{limit}} 个",
+        }),
+      );
+      return;
+    }
+    if (overflow > 0) {
+      toast.info(
+        t("promptWorkbench.tagTooLong", {
+          limit: tagMaxLength,
+          overflow,
+          defaultValue:
+            "Tag exceeded {{overflow}} characters and was truncated",
+        }),
+      );
+    }
+    addTag(clamped);
+    setTagInput("");
+  };
+
+  const handleRemoveTag = (tag: string) => {
+    removeTag(tag);
+  };
 
   const handleRemoveKeyword = (keyword: Keyword) => {
     if (keyword.polarity === "positive" && positiveKeywords.length <= 1) {
@@ -1167,6 +1252,7 @@ export default function PromptWorkbenchPage() {
     reset();
     setDescription("");
     setInstructions("");
+    setTagInput("");
     setConfidence(null);
   };
 
@@ -1327,6 +1413,7 @@ export default function PromptWorkbenchPage() {
               placeholder={t("promptWorkbench.inputPlaceholder", {
                 defaultValue: "输入关键词",
               })}
+              maxLength={keywordMaxLength * 2}
             />
             <Button
               variant="secondary"
@@ -1347,6 +1434,13 @@ export default function PromptWorkbenchPage() {
             {t("promptWorkbench.keywordLimitNote", {
               limit: keywordLimit,
               defaultValue: "提示：正向与负向各最多 {{limit}} 个关键词",
+            })}
+          </p>
+          <p className="text-xs text-slate-400 dark:text-slate-500">
+            {t("promptWorkbench.keywordLengthHint", {
+              limit: keywordMaxLength,
+              defaultValue:
+                "Each keyword can contain at most {{limit}} characters",
             })}
           </p>
           <div className="mt-3 flex gap-2 text-xs">
@@ -1486,21 +1580,106 @@ export default function PromptWorkbenchPage() {
         </div>
 
         <div className="rounded-3xl border border-white/60 bg-white/80 p-5 shadow-inner transition-colors dark:border-slate-800 dark:bg-slate-900/70">
-          <label className="text-sm font-medium text-slate-600 dark:text-slate-300">
-            {t("promptWorkbench.instructionsLabel", {
-              defaultValue: "补充要求",
-            })}
-          </label>
-          <Textarea
-            className="mt-3"
-            value={instructions}
-            onChange={(event: ChangeEvent<HTMLTextAreaElement>) =>
-              setInstructions(event.target.value)
-            }
-            placeholder={t("promptWorkbench.instructionsPlaceholder", {
-              defaultValue: "可选：语气、结构、输出格式等",
-            })}
-          />
+          <div className="flex flex-col gap-5 lg:grid lg:grid-cols-2 lg:gap-6">
+            <div className="flex flex-col">
+              <label className="text-sm font-medium text-slate-600 dark:text-slate-300">
+                {t("promptWorkbench.instructionsLabel", {
+                  defaultValue: "补充要求",
+                })}
+              </label>
+              <Textarea
+                className="mt-3 min-h-[160px]"
+                value={instructions}
+                onChange={(event: ChangeEvent<HTMLTextAreaElement>) =>
+                  setInstructions(event.target.value)
+                }
+                placeholder={t("promptWorkbench.instructionsPlaceholder", {
+                  defaultValue: "可选：语气、结构、输出格式等",
+                })}
+              />
+            </div>
+            <div className="flex flex-col">
+              <div className="flex items-center justify-between gap-2">
+                <label className="text-sm font-medium text-slate-600 dark:text-slate-300">
+                  {t("promptWorkbench.tagsLabel", { defaultValue: "标签" })}
+                </label>
+                <span className="text-xs text-slate-400 dark:text-slate-500">
+                  {t("promptWorkbench.tagLimitHint", {
+                    limit: tagLimit,
+                    defaultValue: "最多 {{limit}} 个标签",
+                  })}
+                </span>
+              </div>
+              <div className="mt-3 flex gap-2">
+                <Input
+                  value={tagInput}
+                  onChange={(event: ChangeEvent<HTMLInputElement>) =>
+                    setTagInput(event.target.value)
+                  }
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                      event.preventDefault();
+                      handleAddTag();
+                    }
+                  }}
+                  placeholder={t("promptWorkbench.tagsPlaceholder", {
+                    defaultValue: "输入标签后按 Enter",
+                  })}
+                  maxLength={tagMaxLength * 2}
+                />
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  className="min-w-[104px] justify-center whitespace-nowrap px-4"
+                  onClick={handleAddTag}
+                  disabled={tagLimit > 0 && tags.length >= tagLimit}
+                >
+                  <Plus className="mr-2 h-4 w-4" />
+                  {t("promptWorkbench.addTag", { defaultValue: "添加标签" })}
+                </Button>
+              </div>
+              <p className="mt-2 text-xs text-slate-400 dark:text-slate-500">
+                {t("promptWorkbench.tagsHelper", {
+                  maxLength: tagMaxLength,
+                  defaultValue:
+                    "Use tags to organise prompts. Press Enter to add, each tag can contain at most {{maxLength}} characters",
+                })}
+              </p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {tags.length === 0 ? (
+                  <span className="text-xs text-slate-400 dark:text-slate-500">
+                    {t("promptWorkbench.tagsEmptyHint", {
+                      defaultValue: "暂无标签，可在上方输入添加",
+                    })}
+                  </span>
+                ) : (
+                  tags.map((tag) => (
+                    <Badge
+                      key={tag.value}
+                      variant="outline"
+                      className="flex items-center gap-1 rounded-xl border border-white/70 bg-white/80 px-3 py-1 text-xs font-medium text-slate-600 shadow-sm transition-colors dark:border-slate-700 dark:bg-slate-800/70 dark:text-slate-200"
+                    >
+                      <span title={tag.value}>
+                        {formatOverflowLabel(tag.value, tag.overflow)}
+                      </span>
+                      <button
+                        type="button"
+                        className="rounded-full bg-white/80 p-0.5 text-slate-400 transition hover:bg-white hover:text-slate-600 focus:outline-none dark:bg-slate-900/60 dark:hover:bg-slate-800/70"
+                        onClick={() => handleRemoveTag(tag.value)}
+                        aria-label={t("promptWorkbench.tagRemoveAria", {
+                          tag: tag.value,
+                          defaultValue: "移除标签",
+                        })}
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </Badge>
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
         </div>
 
         <div className="flex flex-1 flex-col rounded-3xl border border-white/60 bg-white/80 p-5 shadow-inner transition-colors dark:border-slate-800 dark:bg-slate-900/70">
@@ -1698,6 +1877,7 @@ function SortableKeywordChip({
     zIndex: isDragging ? 30 : undefined,
   };
   const isPositive = polarity === "positive";
+  const displayWord = formatOverflowLabel(keyword.word, keyword.overflow ?? 0);
   return (
     <div
       ref={setNodeRef}
@@ -1722,8 +1902,11 @@ function SortableKeywordChip({
         <GripVertical className="h-3.5 w-3.5" />
       </button>
       <div className="flex flex-1 flex-col gap-1 text-left">
-        <span className="text-sm font-medium text-slate-700 dark:text-slate-100">
-          {keyword.word}
+        <span
+          className="text-sm font-medium text-slate-700 dark:text-slate-100"
+          title={keyword.word}
+        >
+          {displayWord}
         </span>
         <div className="flex flex-wrap items-center gap-2 text-xs text-slate-600 dark:text-slate-300">
           <div className="flex items-center gap-1">

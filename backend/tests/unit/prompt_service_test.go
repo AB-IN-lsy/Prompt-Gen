@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"reflect"
 	"testing"
 	"time"
 
@@ -73,7 +74,24 @@ func (f *fakeWorkspaceStore) RemoveKeyword(context.Context, uint, string, string
 	return nil
 }
 
+func (f *fakeWorkspaceStore) SetAttributes(context.Context, uint, string, map[string]string) error {
+	return nil
+}
+
 func setupPromptService(t *testing.T) (*promptsvc.Service, *repository.PromptRepository, *repository.KeywordRepository, *gorm.DB, *fakeModelInvoker) {
+	t.Helper()
+	defaultCfg := promptsvc.Config{
+		KeywordLimit:        promptsvc.DefaultKeywordLimit,
+		KeywordMaxLength:    promptsvc.DefaultKeywordMaxLength,
+		TagLimit:            promptsvc.DefaultTagLimit,
+		TagMaxLength:        promptsvc.DefaultTagMaxLength,
+		DefaultListPageSize: 20,
+		MaxListPageSize:     100,
+	}
+	return setupPromptServiceWithConfig(t, defaultCfg)
+}
+
+func setupPromptServiceWithConfig(t *testing.T, cfg promptsvc.Config) (*promptsvc.Service, *repository.PromptRepository, *repository.KeywordRepository, *gorm.DB, *fakeModelInvoker) {
 	t.Helper()
 
 	dsn := "file:" + t.Name() + "?mode=memory&cache=shared"
@@ -103,11 +121,7 @@ func setupPromptService(t *testing.T) (*promptsvc.Service, *repository.PromptRep
 		nil,
 		nil,
 		nil,
-		promptsvc.Config{
-			KeywordLimit:        promptsvc.DefaultKeywordLimit,
-			DefaultListPageSize: 20,
-			MaxListPageSize:     100,
-		},
+		cfg,
 	)
 	return service, promptRepo, keywordRepo, db, modelStub
 }
@@ -246,7 +260,14 @@ func TestPromptServiceManualKeywordDuplicate(t *testing.T) {
 		store,
 		nil,
 		nil,
-		promptsvc.Config{KeywordLimit: promptsvc.DefaultKeywordLimit, DefaultListPageSize: 20, MaxListPageSize: 100},
+		promptsvc.Config{
+			KeywordLimit:        promptsvc.DefaultKeywordLimit,
+			KeywordMaxLength:    promptsvc.DefaultKeywordMaxLength,
+			TagLimit:            promptsvc.DefaultTagLimit,
+			TagMaxLength:        promptsvc.DefaultTagMaxLength,
+			DefaultListPageSize: 20,
+			MaxListPageSize:     100,
+		},
 	)
 
 	_, err := serviceWithWorkspace.AddManualKeyword(context.Background(), promptsvc.ManualKeywordInput{
@@ -412,5 +433,86 @@ func TestPromptServiceSave(t *testing.T) {
 	}
 	if versions[0].Body != "Published Prompt Body" {
 		t.Fatalf("unexpected version body: %s", versions[0].Body)
+	}
+}
+
+func TestPromptServiceSaveTagLimitExceeded(t *testing.T) {
+	cfg := promptsvc.Config{
+		KeywordLimit:        promptsvc.DefaultKeywordLimit,
+		KeywordMaxLength:    promptsvc.DefaultKeywordMaxLength,
+		TagLimit:            2,
+		TagMaxLength:        promptsvc.DefaultTagMaxLength,
+		DefaultListPageSize: 20,
+		MaxListPageSize:     100,
+	}
+	service, _, _, db, _ := setupPromptServiceWithConfig(t, cfg)
+	defer func() {
+		sqlDB, _ := db.DB()
+		sqlDB.Close()
+	}()
+
+	_, err := service.Save(context.Background(), promptsvc.SaveInput{
+		UserID:  1,
+		Topic:   "标签上限校验",
+		Body:    "Prompt 内容",
+		Model:   "deepseek-chat",
+		Status:  promptdomain.PromptStatusDraft,
+		Tags:    []string{"alpha", "beta", "gamma"},
+		Publish: false,
+		PositiveKeywords: []promptsvc.KeywordItem{
+			{Word: "React", Polarity: promptdomain.KeywordPolarityPositive},
+		},
+		NegativeKeywords: []promptsvc.KeywordItem{},
+	})
+	if !errors.Is(err, promptsvc.ErrTagLimitExceeded) {
+		t.Fatalf("expected tag limit exceeded error, got %v", err)
+	}
+}
+
+func TestPromptServiceSaveTagNormalization(t *testing.T) {
+	cfg := promptsvc.Config{
+		KeywordLimit:        promptsvc.DefaultKeywordLimit,
+		KeywordMaxLength:    promptsvc.DefaultKeywordMaxLength,
+		TagLimit:            3,
+		TagMaxLength:        promptsvc.DefaultTagMaxLength,
+		DefaultListPageSize: 20,
+		MaxListPageSize:     100,
+	}
+	service, promptRepo, _, db, _ := setupPromptServiceWithConfig(t, cfg)
+	defer func() {
+		sqlDB, _ := db.DB()
+		sqlDB.Close()
+	}()
+
+	output, err := service.Save(context.Background(), promptsvc.SaveInput{
+		UserID:  1,
+		Topic:   "标签清洗",
+		Body:    "Prompt 正文",
+		Model:   "deepseek-chat",
+		Status:  promptdomain.PromptStatusDraft,
+		Tags:    []string{" AI ", "ai", "增长", "Growth"},
+		Publish: false,
+		PositiveKeywords: []promptsvc.KeywordItem{
+			{Word: "Prompt", Polarity: promptdomain.KeywordPolarityPositive},
+		},
+		NegativeKeywords: []promptsvc.KeywordItem{},
+	})
+	if err != nil {
+		t.Fatalf("save prompt failed: %v", err)
+	}
+
+	record, err := promptRepo.FindByID(context.Background(), 1, output.PromptID)
+	if err != nil {
+		t.Fatalf("load prompt: %v", err)
+	}
+
+	var stored []string
+	if err := json.Unmarshal([]byte(record.Tags), &stored); err != nil {
+		t.Fatalf("decode stored tags: %v", err)
+	}
+
+	expected := []string{"AI", "增长", "Growt"}
+	if !reflect.DeepEqual(stored, expected) {
+		t.Fatalf("unexpected tags: %#v, expected %#v", stored, expected)
 	}
 }

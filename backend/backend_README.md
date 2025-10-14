@@ -82,6 +82,9 @@
 | `PROMPT_GENERATE_LIMIT` | Prompt 生成接口限流次数，默认 `5` |
 | `PROMPT_GENERATE_WINDOW` | Prompt 生成限流窗口，默认 `1m` |
 | `PROMPT_KEYWORD_LIMIT` | 正向/负向关键词的数量上限，默认 `10`，需与前端 `VITE_PROMPT_KEYWORD_LIMIT` 保持一致 |
+| `PROMPT_KEYWORD_MAX_LENGTH` | 单个关键词允许的最大字符数（按 Unicode 码点计），默认 `32` |
+| `PROMPT_TAG_LIMIT` | 标签数量上限，默认 `5`，需与前端 `VITE_PROMPT_TAG_LIMIT` 保持一致 |
+| `PROMPT_TAG_MAX_LENGTH` | 单个标签允许的最大字符数，默认 `5` |
 | `PROMPT_LIST_PAGE_SIZE` | “我的 Prompt”列表默认每页数量，默认 `20` |
 | `PROMPT_LIST_MAX_PAGE_SIZE` | “我的 Prompt”列表单页最大数量，默认 `100` |
 | `PROMPT_USE_FULLTEXT` | 设置为 `1` 时使用 FULLTEXT 检索（需提前创建 `ft_prompts_topic_tags` 索引） |
@@ -973,6 +976,12 @@ backend/
 5. **关键词回收与回放**：后台 worker 在 MySQL 完成入库后，同步更新 Redis 补全缓存（若仍在有效期内），确保后续 interpret/augment 可以复用历史词条；用户重新打开工作台时，优先用 Redis 中的工作区数据，若不存在再回源查询 MySQL。
 
 > **说明**：仍保留 `PersistenceTask` 队列能力，用于后续扩展批量或重型任务；任务幂等关键字段为 `(user_id, prompt_id, workspace_token)`。
+
+### 标签管理
+
+- `SavePrompt` 接口新增 `tags` 字段，Handler 会统一捕获错误并按模块日志输出，Service 负责去重、裁剪空白并校验数量，只返回语义化错误对象。
+- 标签上限由 `PROMPT_TAG_LIMIT` 控制（默认 5 个），同时暴露给 Handler 以便生成统一错误提示；持久化时始终写入去重后的 JSON 数组，返回给前端时亦会自动裁剪历史超限数据。
+- 单元测试覆盖超限报错与去重行为，避免回归；若需放宽上限，只需修改环境变量并重启服务即可生效。
 
 ### Redis 工作区模型
 

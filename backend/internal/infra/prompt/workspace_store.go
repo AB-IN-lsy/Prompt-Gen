@@ -191,6 +191,54 @@ func (s *WorkspaceStore) UpdateDraftBody(ctx context.Context, userID uint, token
 	return nil
 }
 
+// SetAttributes 合并写入工作区的 attributes 字段，并刷新更新时间与 TTL。
+// 会先读出旧配置，把新改动“打补丁”合进去，
+func (s *WorkspaceStore) SetAttributes(ctx context.Context, userID uint, token string, attrs map[string]string) error {
+	if s == nil || s.client == nil {
+		return fmt.Errorf("workspace store not initialised")
+	}
+	if len(attrs) == 0 {
+		return nil
+	}
+	baseKey := s.baseKey(userID, token)
+	existingRaw, err := s.client.HGet(ctx, baseKey, workspaceFieldAttributesJSON).Result()
+	if err != nil && err != redis.Nil {
+		return fmt.Errorf("load workspace attributes: %w", err)
+	}
+	merged := make(map[string]string)
+	if strings.TrimSpace(existingRaw) != "" {
+		if decodeErr := json.Unmarshal([]byte(existingRaw), &merged); decodeErr != nil {
+			merged = make(map[string]string)
+		}
+	}
+	for key, value := range attrs {
+		if strings.TrimSpace(value) == "" {
+			delete(merged, key)
+			continue
+		}
+		merged[key] = value
+	}
+	encoded := ""
+	if len(merged) > 0 {
+		raw, err := json.Marshal(merged)
+		if err != nil {
+			return fmt.Errorf("encode workspace attributes: %w", err)
+		}
+		encoded = string(raw)
+	}
+	payload := map[string]any{
+		workspaceFieldAttributesJSON: encoded,
+		workspaceFieldUpdatedAt:      time.Now().Unix(),
+	}
+	pipe := s.client.TxPipeline()
+	pipe.HSet(ctx, baseKey, payload)
+	s.applyTTL(ctx, pipe, baseKey)
+	if _, err := pipe.Exec(ctx); err != nil {
+		return fmt.Errorf("set workspace attributes: %w", err)
+	}
+	return nil
+}
+
 // Touch 刷新工作区的 TTL。
 // 每次有新操作都刷新 TTL，确保整段编辑流程都能在缓存里完成
 func (s *WorkspaceStore) Touch(ctx context.Context, userID uint, token string) error {

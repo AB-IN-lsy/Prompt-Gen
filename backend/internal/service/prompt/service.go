@@ -28,6 +28,7 @@ type WorkspaceStore interface {
 	MergeKeywords(ctx context.Context, userID uint, token string, keywords []promptdomain.WorkspaceKeyword) error
 	RemoveKeyword(ctx context.Context, userID uint, token, polarity, word string) error
 	UpdateDraftBody(ctx context.Context, userID uint, token, body string) error
+	SetAttributes(ctx context.Context, userID uint, token string, attrs map[string]string) error
 	Touch(ctx context.Context, userID uint, token string) error
 	Snapshot(ctx context.Context, userID uint, token string) (promptdomain.WorkspaceSnapshot, error)
 	Delete(ctx context.Context, userID uint, token string) error
@@ -54,6 +55,9 @@ type Service struct {
 	queue               PersistenceQueue
 	logger              *zap.SugaredLogger
 	keywordLimit        int
+	keywordMaxLength    int
+	tagLimit            int
+	tagMaxLength        int
 	listDefaultPageSize int
 	listMaxPageSize     int
 	useFullText         bool
@@ -67,6 +71,20 @@ const (
 
 // DefaultKeywordLimit 限制正/负向关键词数量的默认值。
 const DefaultKeywordLimit = 10
+
+// DefaultKeywordMaxLength 限制单个关键词的最大字符数（按 rune 计）。
+const DefaultKeywordMaxLength = 32
+
+// DefaultTagLimit 限制单个 Prompt 标签数量的默认值。
+const DefaultTagLimit = 5
+
+// DefaultTagMaxLength 限制标签字符数，默认 5 个字符。
+const DefaultTagMaxLength = 5
+
+const (
+	workspaceAttrInstructions = "instructions"
+	workspaceAttrTags         = "tags"
+)
 
 const (
 	// minKeywordWeight/maxKeywordWeight 定义关键词相关度（0~5）的允许区间。
@@ -85,11 +103,16 @@ var (
 	ErrDuplicateKeyword = errors.New("keyword already exists")
 	// ErrPromptNotFound 表示指定 Prompt 不存在或无访问权限。
 	ErrPromptNotFound = errors.New("prompt not found")
+	// ErrTagLimitExceeded 表示标签数量超出上限。
+	ErrTagLimitExceeded = errors.New("tags exceed limit")
 )
 
 // Config 汇总 Prompt 服务的可配置参数。
 type Config struct {
 	KeywordLimit        int
+	KeywordMaxLength    int
+	TagLimit            int
+	TagMaxLength        int
 	DefaultListPageSize int
 	MaxListPageSize     int
 	UseFullTextSearch   bool
@@ -102,6 +125,15 @@ func NewServiceWithConfig(prompts *repository.PromptRepository, keywords *reposi
 	}
 	if cfg.KeywordLimit <= 0 {
 		cfg.KeywordLimit = DefaultKeywordLimit
+	}
+	if cfg.KeywordMaxLength <= 0 {
+		cfg.KeywordMaxLength = DefaultKeywordMaxLength
+	}
+	if cfg.TagLimit <= 0 {
+		cfg.TagLimit = DefaultTagLimit
+	}
+	if cfg.TagMaxLength <= 0 {
+		cfg.TagMaxLength = DefaultTagMaxLength
 	}
 	if cfg.DefaultListPageSize <= 0 {
 		cfg.DefaultListPageSize = 20
@@ -120,6 +152,9 @@ func NewServiceWithConfig(prompts *repository.PromptRepository, keywords *reposi
 		queue:               queue,
 		logger:              logger,
 		keywordLimit:        cfg.KeywordLimit,
+		keywordMaxLength:    cfg.KeywordMaxLength,
+		tagLimit:            cfg.TagLimit,
+		tagMaxLength:        cfg.TagMaxLength,
 		listDefaultPageSize: cfg.DefaultListPageSize,
 		listMaxPageSize:     cfg.MaxListPageSize,
 		useFullText:         cfg.UseFullTextSearch,
@@ -129,6 +164,11 @@ func NewServiceWithConfig(prompts *repository.PromptRepository, keywords *reposi
 // KeywordLimit 暴露当前生效的关键词数量上限，供上层 Handler 使用。
 func (s *Service) KeywordLimit() int {
 	return s.keywordLimit
+}
+
+// TagLimit 返回标签数量限制，供 handler 构造提示信息。
+func (s *Service) TagLimit() int {
+	return s.tagLimit
 }
 
 // ListPageSizeDefaults 返回列表分页的默认与最大页大小。
@@ -162,14 +202,16 @@ func (s *Service) ListPrompts(ctx context.Context, input ListPromptsInput) (List
 	}
 	items := make([]PromptSummary, 0, len(records))
 	for _, record := range records {
+		positive := s.clampKeywordList(decodePromptKeywords(record.PositiveKeywords))
+		negative := s.clampKeywordList(decodePromptKeywords(record.NegativeKeywords))
 		items = append(items, PromptSummary{
 			ID:               record.ID,
 			Topic:            record.Topic,
 			Model:            record.Model,
 			Status:           record.Status,
-			Tags:             decodeTags(record.Tags),
-			PositiveKeywords: decodePromptKeywords(record.PositiveKeywords),
-			NegativeKeywords: decodePromptKeywords(record.NegativeKeywords),
+			Tags:             s.truncateTags(decodeTags(record.Tags)),
+			PositiveKeywords: positive,
+			NegativeKeywords: negative,
 			UpdatedAt:        record.UpdatedAt,
 			PublishedAt:      record.PublishedAt,
 		})
@@ -182,7 +224,7 @@ func (s *Service) ListPrompts(ctx context.Context, input ListPromptsInput) (List
 	}, nil
 }
 
-// GetPrompt 根据 ID 返回 Prompt 详情，并尝试为工作台创建 Redis 工作区快照。
+// GetPrompt 根据 ID 返回 Prompt 详情，并尝试为工作台创建 Redis 工作区快照（包含标签）。
 func (s *Service) GetPrompt(ctx context.Context, input GetPromptInput) (PromptDetail, error) {
 	entity, err := s.prompts.FindByID(ctx, input.UserID, input.PromptID)
 	if err != nil {
@@ -197,9 +239,9 @@ func (s *Service) GetPrompt(ctx context.Context, input GetPromptInput) (PromptDe
 		Body:             entity.Body,
 		Model:            entity.Model,
 		Status:           entity.Status,
-		Tags:             decodeTags(entity.Tags),
-		PositiveKeywords: decodePromptKeywords(entity.PositiveKeywords),
-		NegativeKeywords: decodePromptKeywords(entity.NegativeKeywords),
+		Tags:             s.truncateTags(decodeTags(entity.Tags)),
+		PositiveKeywords: s.clampKeywordList(decodePromptKeywords(entity.PositiveKeywords)),
+		NegativeKeywords: s.clampKeywordList(decodePromptKeywords(entity.NegativeKeywords)),
 		CreatedAt:        entity.CreatedAt,
 		UpdatedAt:        entity.UpdatedAt,
 		PublishedAt:      entity.PublishedAt,
@@ -216,6 +258,10 @@ func (s *Service) GetPrompt(ctx context.Context, input GetPromptInput) (PromptDe
 			PromptID:  entity.ID,
 			Status:    entity.Status,
 			UpdatedAt: time.Now(),
+		}
+		if tags := detail.Tags; len(tags) > 0 {
+			encoded := encodeTagsAttribute(tags)
+			snapshot.Attributes = map[string]string{workspaceAttrTags: encoded}
 		}
 		storeCtx, cancel := s.workspaceContext(ctx)
 		token, workspaceErr := s.workspace.CreateOrReplace(storeCtx, input.UserID, snapshot)
@@ -535,6 +581,7 @@ func (s *Service) Interpret(ctx context.Context, input InterpretInput) (Interpre
 			Polarity: promptdomain.KeywordPolarityPositive,
 			Weight:   clampWeight(entry.Weight),
 		}
+		item.Word = s.clampKeywordWord(item.Word)
 		if normalized.add(item) {
 			result.PositiveKeywords = append(result.PositiveKeywords, item)
 		}
@@ -546,6 +593,7 @@ func (s *Service) Interpret(ctx context.Context, input InterpretInput) (Interpre
 			Polarity: promptdomain.KeywordPolarityNegative,
 			Weight:   clampWeight(entry.Weight),
 		}
+		item.Word = s.clampKeywordWord(item.Word)
 		if normalized.add(item) {
 			result.NegativeKeywords = append(result.NegativeKeywords, item)
 		}
@@ -566,7 +614,7 @@ func (s *Service) Interpret(ctx context.Context, input InterpretInput) (Interpre
 			Version:   1,
 		}
 		if strings.TrimSpace(result.Instructions) != "" {
-			workspaceSnapshot.Attributes = map[string]string{"instructions": result.Instructions}
+			workspaceSnapshot.Attributes = map[string]string{workspaceAttrInstructions: result.Instructions}
 		}
 		if token, err := s.workspace.CreateOrReplace(storeCtx, input.UserID, workspaceSnapshot); err != nil {
 			s.logger.Warnw("store workspace snapshot failed", "user_id", input.UserID, "topic", payload.Topic, "error", err)
@@ -644,6 +692,7 @@ func (s *Service) AugmentKeywords(ctx context.Context, input AugmentInput) (Augm
 			Polarity: promptdomain.KeywordPolarityPositive,
 			Weight:   clampWeight(entry.Weight),
 		}
+		item.Word = s.clampKeywordWord(item.Word)
 		if existing.add(item) {
 			output.Positive = append(output.Positive, item)
 			positiveCapacity--
@@ -672,6 +721,7 @@ func (s *Service) AugmentKeywords(ctx context.Context, input AugmentInput) (Augm
 			Polarity: promptdomain.KeywordPolarityNegative,
 			Weight:   clampWeight(entry.Weight),
 		}
+		item.Word = s.clampKeywordWord(item.Word)
 		if existing.add(item) {
 			output.Negative = append(output.Negative, item)
 			negativeCapacity--
@@ -704,7 +754,7 @@ func (s *Service) AugmentKeywords(ctx context.Context, input AugmentInput) (Augm
 
 // AddManualKeyword 将用户手动输入的关键词写入数据库，并返回最终条目。
 func (s *Service) AddManualKeyword(ctx context.Context, input ManualKeywordInput) (KeywordItem, error) {
-	word := strings.TrimSpace(input.Word)
+	word := s.clampKeywordWord(input.Word)
 	if word == "" {
 		return KeywordItem{}, errors.New("keyword is empty")
 	}
@@ -843,8 +893,8 @@ func (s *Service) SyncWorkspaceKeywords(ctx context.Context, input SyncWorkspace
 		}
 		return err
 	}
-	snapshot.Positive = workspaceKeywordsFromOrdered(input.Positive, s.keywordLimit)
-	snapshot.Negative = workspaceKeywordsFromOrdered(input.Negative, s.keywordLimit)
+	snapshot.Positive = s.workspaceKeywordsFromOrdered(input.Positive)
+	snapshot.Negative = s.workspaceKeywordsFromOrdered(input.Negative)
 	snapshot.UpdatedAt = time.Now()
 	snapshot.Version++
 	snapshot.Token = token
@@ -902,7 +952,11 @@ func (s *Service) GeneratePrompt(ctx context.Context, input GenerateInput) (Gene
 	}, nil
 }
 
-// Save 保存 Prompt 草稿或发布版本。
+// Save 保存或发布 Prompt：
+//  1. 若绑定了 Redis 工作区则合并快照内容（主题/正文/关键词/标签等）
+//  2. 校验关键词 & 标签数量上限
+//  3. 创建/更新 Prompt 主记录与关键词表
+//  4. 回写工作区元数据（prompt_id/status/tags）保持前端同步
 func (s *Service) Save(ctx context.Context, input SaveInput) (SaveOutput, error) {
 	if input.UserID == 0 {
 		return SaveOutput{}, errors.New("user id required")
@@ -936,10 +990,15 @@ func (s *Service) Save(ctx context.Context, input SaveInput) (SaveOutput, error)
 				input.Body = snapshot.DraftBody
 			}
 			if len(input.PositiveKeywords) == 0 {
-				input.PositiveKeywords = keywordItemsFromWorkspace(snapshot.Positive, s.keywordLimit)
+				input.PositiveKeywords = s.keywordItemsFromWorkspace(snapshot.Positive)
 			}
 			if len(input.NegativeKeywords) == 0 {
-				input.NegativeKeywords = keywordItemsFromWorkspace(snapshot.Negative, s.keywordLimit)
+				input.NegativeKeywords = s.keywordItemsFromWorkspace(snapshot.Negative)
+			}
+			if len(input.Tags) == 0 {
+				if tags := extractTagsFromAttributes(snapshot.Attributes); len(tags) > 0 {
+					input.Tags = s.truncateTags(tags)
+				}
 			}
 			if snapshot.PromptID != 0 && input.PromptID == 0 {
 				input.PromptID = snapshot.PromptID
@@ -960,6 +1019,12 @@ func (s *Service) Save(ctx context.Context, input SaveInput) (SaveOutput, error)
 		return SaveOutput{}, err
 	}
 
+	cleanedTags, err := s.normalizeTags(input.Tags)
+	if err != nil {
+		return SaveOutput{}, err
+	}
+	input.Tags = cleanedTags
+
 	action := promptdomain.TaskActionCreate
 	if input.PromptID != 0 {
 		action = promptdomain.TaskActionUpdate
@@ -972,6 +1037,9 @@ func (s *Service) Save(ctx context.Context, input SaveInput) (SaveOutput, error)
 
 	if workspaceEnabled {
 		metaCtx, cancel := s.workspaceContext(ctx)
+		if err := s.workspace.SetAttributes(metaCtx, input.UserID, workspaceToken, map[string]string{workspaceAttrTags: encodeTagsAttribute(input.Tags)}); err != nil {
+			s.logger.Warnw("set workspace tags failed", "user_id", input.UserID, "token", workspaceToken, "error", err)
+		}
 		if err := s.workspace.SetPromptMeta(metaCtx, input.UserID, workspaceToken, result.PromptID, status); err != nil {
 			s.logger.Warnw("set workspace meta failed", "user_id", input.UserID, "token", workspaceToken, "error", err)
 		}
@@ -1021,7 +1089,8 @@ func toWorkspaceKeywords(items []KeywordItem, limit int) []promptdomain.Workspac
 }
 
 // workspaceKeywordsFromOrdered 根据 UI 提交的顺序重建工作区关键词列表，用于拖拽/调权之后的同步。
-func workspaceKeywordsFromOrdered(items []KeywordItem, limit int) []promptdomain.WorkspaceKeyword {
+func (s *Service) workspaceKeywordsFromOrdered(items []KeywordItem) []promptdomain.WorkspaceKeyword {
+	limit := s.keywordLimit
 	if limit <= 0 {
 		limit = DefaultKeywordLimit
 	}
@@ -1034,8 +1103,9 @@ func workspaceKeywordsFromOrdered(items []KeywordItem, limit int) []promptdomain
 		if idx >= limit {
 			break
 		}
+		clamped := s.clampKeywordWord(item.Word)
 		result = append(result, promptdomain.WorkspaceKeyword{
-			Word:     strings.TrimSpace(item.Word),
+			Word:     clamped,
 			Source:   sourceFallback(item.Source),
 			Polarity: normalizePolarity(item.Polarity),
 			Weight:   clampWeight(item.Weight),
@@ -1046,14 +1116,16 @@ func workspaceKeywordsFromOrdered(items []KeywordItem, limit int) []promptdomain
 }
 
 // keywordItemsFromWorkspace 将工作区缓存的关键词还原为业务层结构体。
-func keywordItemsFromWorkspace(items []promptdomain.WorkspaceKeyword, limit int) []KeywordItem {
+func (s *Service) keywordItemsFromWorkspace(items []promptdomain.WorkspaceKeyword) []KeywordItem {
+	limit := s.keywordLimit
 	if limit <= 0 {
 		limit = DefaultKeywordLimit
 	}
 	result := make([]KeywordItem, 0, len(items))
 	for _, item := range items {
+		word := s.clampKeywordWord(item.Word)
 		result = append(result, KeywordItem{
-			Word:     strings.TrimSpace(item.Word),
+			Word:     word,
 			Source:   sourceFallback(item.Source),
 			Polarity: normalizePolarity(item.Polarity),
 			Weight:   clampWeight(item.Weight),
@@ -1156,7 +1228,7 @@ func (s *Service) persistKeywords(ctx context.Context, userID uint, topic string
 	}
 }
 
-// processPersistenceTask 消费异步队列任务，将工作区内容持久化回数据库。
+// processPersistenceTask 消费异步队列任务，将 Redis 工作区内容（含标签）持久化回数据库。
 func (s *Service) processPersistenceTask(ctx context.Context, task promptdomain.PersistenceTask) error {
 	if s.workspace == nil {
 		return errors.New("workspace store not configured")
@@ -1177,10 +1249,15 @@ func (s *Service) processPersistenceTask(ctx context.Context, task promptdomain.
 		Body:             firstNonEmpty(task.Body, snapshot.DraftBody),
 		Model:            firstNonEmpty(task.Model, snapshot.ModelKey),
 		Status:           task.Status,
-		PositiveKeywords: keywordItemsFromWorkspace(snapshot.Positive, s.keywordLimit),
-		NegativeKeywords: keywordItemsFromWorkspace(snapshot.Negative, s.keywordLimit),
+		PositiveKeywords: s.keywordItemsFromWorkspace(snapshot.Positive),
+		NegativeKeywords: s.keywordItemsFromWorkspace(snapshot.Negative),
 		Tags:             task.Tags,
 		Publish:          task.Publish,
+	}
+	if len(input.Tags) == 0 {
+		if tags := extractTagsFromAttributes(snapshot.Attributes); len(tags) > 0 {
+			input.Tags = s.truncateTags(tags)
+		}
 	}
 	if input.PromptID == 0 && snapshot.PromptID != 0 {
 		input.PromptID = snapshot.PromptID
@@ -1197,11 +1274,19 @@ func (s *Service) processPersistenceTask(ctx context.Context, task promptdomain.
 	if err := enforceKeywordLimit(s.keywordLimit, input.PositiveKeywords, input.NegativeKeywords); err != nil {
 		return fmt.Errorf("keyword limit: %w", err)
 	}
+	cleanedTags, err := s.normalizeTags(input.Tags)
+	if err != nil {
+		return fmt.Errorf("tag limit: %w", err)
+	}
+	input.Tags = cleanedTags
 	result, err := s.persistPrompt(ctx, input, status, action)
 	if err != nil {
 		return fmt.Errorf("persist prompt: %w", err)
 	}
 	metaCtx, cancelMeta := s.workspaceContext(ctx)
+	if err := s.workspace.SetAttributes(metaCtx, task.UserID, task.WorkspaceToken, map[string]string{workspaceAttrTags: encodeTagsAttribute(input.Tags)}); err != nil {
+		s.logger.Warnw("set workspace tags failed", "task_id", task.TaskID, "token", task.WorkspaceToken, "error", err)
+	}
 	if err := s.workspace.SetPromptMeta(metaCtx, task.UserID, task.WorkspaceToken, result.PromptID, status); err != nil {
 		s.logger.Warnw("set workspace meta failed", "task_id", task.TaskID, "token", task.WorkspaceToken, "error", err)
 	}
@@ -1221,6 +1306,11 @@ func (s *Service) persistPrompt(ctx context.Context, input SaveInput, status, ac
 	if err := enforceKeywordLimit(s.keywordLimit, input.PositiveKeywords, input.NegativeKeywords); err != nil {
 		return SaveOutput{}, err
 	}
+	cleanedTags, err := s.normalizeTags(input.Tags)
+	if err != nil {
+		return SaveOutput{}, err
+	}
+	input.Tags = cleanedTags
 	action = strings.TrimSpace(action)
 	if action == "" {
 		if input.PromptID == 0 {
@@ -1239,11 +1329,11 @@ func (s *Service) persistPrompt(ctx context.Context, input SaveInput, status, ac
 
 // createPromptRecord 写入新的 Prompt，并在必要时记录首个版本。
 func (s *Service) createPromptRecord(ctx context.Context, input SaveInput, status string) (SaveOutput, error) {
-	encodedPos, err := marshalKeywordItems(input.PositiveKeywords)
+	encodedPos, err := s.marshalKeywordItems(input.PositiveKeywords)
 	if err != nil {
 		return SaveOutput{}, err
 	}
-	encodedNeg, err := marshalKeywordItems(input.NegativeKeywords)
+	encodedNeg, err := s.marshalKeywordItems(input.NegativeKeywords)
 	if err != nil {
 		return SaveOutput{}, err
 	}
@@ -1299,11 +1389,11 @@ func (s *Service) updatePromptRecord(ctx context.Context, input SaveInput, statu
 			return SaveOutput{}, err
 		}
 	}
-	encodedPos, err := marshalKeywordItems(input.PositiveKeywords)
+	encodedPos, err := s.marshalKeywordItems(input.PositiveKeywords)
 	if err != nil {
 		return SaveOutput{}, err
 	}
-	encodedNeg, err := marshalKeywordItems(input.NegativeKeywords)
+	encodedNeg, err := s.marshalKeywordItems(input.NegativeKeywords)
 	if err != nil {
 		return SaveOutput{}, err
 	}
@@ -1539,12 +1629,13 @@ func extractPromptText(resp modeldomain.ChatCompletionResponse) string {
 	return strings.TrimSpace(resp.Choices[0].Message.Content)
 }
 
-func marshalKeywordItems(items []KeywordItem) ([]byte, error) {
+func (s *Service) marshalKeywordItems(items []KeywordItem) ([]byte, error) {
 	payload := make([]promptdomain.PromptKeywordItem, 0, len(items))
 	for _, item := range items {
+		word := s.clampKeywordWord(item.Word)
 		payload = append(payload, promptdomain.PromptKeywordItem{
 			KeywordID: item.KeywordID,
-			Word:      strings.TrimSpace(item.Word),
+			Word:      word,
 			Source:    sourceFallback(item.Source),
 			Weight:    clampWeight(item.Weight),
 		})
@@ -1591,6 +1682,43 @@ func (s *keywordSet) add(item KeywordItem) bool {
 	}
 	s.seen[key] = struct{}{}
 	return true
+}
+
+func trimToRuneLength(input string, limit int) string {
+	if limit <= 0 {
+		return input
+	}
+	runes := []rune(input)
+	if len(runes) <= limit {
+		return input
+	}
+	return string(runes[:limit])
+}
+
+// clampKeywordWord 裁剪单个关键词至最大长度。
+func (s *Service) clampKeywordWord(word string) string {
+	trimmed := strings.TrimSpace(word)
+	if s.keywordMaxLength > 0 && len([]rune(trimmed)) > s.keywordMaxLength {
+		trimmed = trimToRuneLength(trimmed, s.keywordMaxLength)
+	}
+	return trimmed
+}
+
+// clampKeywordList 裁剪关键词列表中的每个词至最大长度。
+func (s *Service) clampKeywordList(items []KeywordItem) []KeywordItem {
+	for idx := range items {
+		items[idx].Word = s.clampKeywordWord(items[idx].Word)
+	}
+	return items
+}
+
+// truncateTags 裁剪标签列表至最大数量。
+func (s *Service) clampTagValue(tag string) string {
+	trimmed := strings.TrimSpace(tag)
+	if s.tagMaxLength > 0 && len([]rune(trimmed)) > s.tagMaxLength {
+		trimmed = trimToRuneLength(trimmed, s.tagMaxLength)
+	}
+	return trimmed
 }
 
 // buildInterpretationRequest 拼装解析自然语言描述所需的模型请求。
@@ -1664,6 +1792,7 @@ func buildGenerateRequest(input GenerateInput) modeldomain.ChatCompletionRequest
 	}
 }
 
+// decodePromptKeywords 将数据库中的关键词 JSON 字符串解析为 KeywordItem 列表，并做基础归一化。
 func decodePromptKeywords(raw string) []KeywordItem {
 	trimmed := strings.TrimSpace(raw)
 	if trimmed == "" {
@@ -1682,6 +1811,80 @@ func decodePromptKeywords(raw string) []KeywordItem {
 	return items
 }
 
+// normalizeTags 去除空白/重复标签，并校验数量是否超过限制。
+func (s *Service) normalizeTags(tags []string) ([]string, error) {
+	if len(tags) == 0 {
+		return []string{}, nil
+	}
+	limit := s.tagLimit
+	cleaned := make([]string, 0, len(tags))
+	seen := make(map[string]struct{}, len(tags))
+	for _, tag := range tags {
+		trimmed := s.clampTagValue(tag)
+		if trimmed == "" {
+			continue
+		}
+		key := strings.ToLower(trimmed)
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		if limit > 0 && len(cleaned) >= limit {
+			return nil, ErrTagLimitExceeded
+		}
+		seen[key] = struct{}{}
+		cleaned = append(cleaned, trimmed)
+	}
+	return cleaned, nil
+}
+
+// truncateTags 在读取已有数据时做降噪，防止历史数据中的标签超出上限。
+func (s *Service) truncateTags(tags []string) []string {
+	if len(tags) == 0 {
+		return []string{}
+	}
+	limit := s.tagLimit
+	cleaned := make([]string, 0, len(tags))
+	seen := make(map[string]struct{}, len(tags))
+	for _, tag := range tags {
+		trimmed := s.clampTagValue(tag)
+		if trimmed == "" {
+			continue
+		}
+		key := strings.ToLower(trimmed)
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		cleaned = append(cleaned, trimmed)
+		if limit > 0 && len(cleaned) >= limit {
+			break
+		}
+	}
+	return cleaned
+}
+
+// extractTagsFromAttributes 从 Redis workspace attributes 中解析标签字符串并转换为切片。
+func extractTagsFromAttributes(attrs map[string]string) []string {
+	if len(attrs) == 0 {
+		return nil
+	}
+	raw := strings.TrimSpace(attrs[workspaceAttrTags])
+	if raw == "" {
+		return nil
+	}
+	return decodeTags(raw)
+}
+
+// encodeTagsAttribute 将标签数组编码为 JSON 字符串，写入 workspace attributes。
+func encodeTagsAttribute(tags []string) string {
+	raw, err := json.Marshal(tags)
+	if err != nil {
+		return "[]"
+	}
+	return string(raw)
+}
+
+// decodeTags 兼容 JSON/逗号两种格式，输出去除空白的标签列表。
 func decodeTags(raw string) []string {
 	trimmed := strings.TrimSpace(raw)
 	if trimmed == "" {
@@ -1709,6 +1912,7 @@ func decodeTags(raw string) []string {
 	return cleaned
 }
 
+// languageOrDefault 若未指定语言则返回中文，供模型提示使用。
 func languageOrDefault(lang string) string {
 	trimmed := strings.TrimSpace(lang)
 	if trimmed == "" {
@@ -1717,6 +1921,7 @@ func languageOrDefault(lang string) string {
 	return trimmed
 }
 
+// joinKeywordWords 将关键词渲染成带权重的提示字符串。
 func joinKeywordWords(items []KeywordItem) string {
 	if len(items) == 0 {
 		return "（无）"
@@ -1736,6 +1941,7 @@ func joinKeywordWords(items []KeywordItem) string {
 	return strings.Join(words, "、")
 }
 
+// defaultIfZero 在请求参数缺省时使用备用值。
 func defaultIfZero(value, fallback int) int {
 	if value <= 0 {
 		return fallback

@@ -607,6 +607,10 @@ func (h *PromptHandler) SavePrompt(c *gin.Context) {
 			h.keywordLimitError(c, promptdomain.KeywordPolarityNegative, len(req.NegativeKeywords))
 			return
 		}
+		if errors.Is(err, promptsvc.ErrTagLimitExceeded) {
+			h.tagLimitError(c, len(req.Tags))
+			return
+		}
 		log.Errorw("save prompt failed", "error", err, "user_id", userID, "prompt_id", req.PromptID)
 		response.Fail(c, http.StatusBadRequest, response.ErrBadRequest, err.Error(), nil)
 		return
@@ -644,6 +648,9 @@ const keywordLimitDetailCode = "KEYWORD_LIMIT"
 // keywordDuplicateDetailCode 用于标记关键词重复的错误。
 const keywordDuplicateDetailCode = "KEYWORD_DUPLICATE"
 
+// tagLimitDetailCode 用于标记标签数量超限的错误。
+const tagLimitDetailCode = "TAG_LIMIT"
+
 // validateKeywordLimit 在进入业务逻辑前做守卫，避免传入超出限制的关键词集合。
 func (h *PromptHandler) validateKeywordLimit(c *gin.Context, positive, negative []KeywordPayload) bool {
 	limit := h.service.KeywordLimit()
@@ -669,6 +676,20 @@ func (h *PromptHandler) keywordLimitError(c *gin.Context, polarity string, count
 		"code":     keywordLimitDetailCode,
 		"polarity": polarity,
 		"limit":    limit,
+	}
+	if count >= 0 {
+		details["count"] = count
+	}
+	response.Fail(c, http.StatusBadRequest, response.ErrBadRequest, message, details)
+}
+
+// tagLimitError 返回统一的标签超限错误响应。
+func (h *PromptHandler) tagLimitError(c *gin.Context, count int) {
+	limit := h.service.TagLimit()
+	message := fmt.Sprintf("标签最多 %d 个", limit)
+	details := gin.H{
+		"code":  tagLimitDetailCode,
+		"limit": limit,
 	}
 	if count >= 0 {
 		details["count"] = count

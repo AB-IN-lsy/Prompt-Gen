@@ -5,8 +5,10 @@
  * @LastEditTime: 2025-10-09 23:53:15
  */
 import type { AxiosResponse } from "axios";
+import { PROMPT_KEYWORD_MAX_LENGTH } from "../config/prompt";
 import { ApiError } from "./errors";
 import { http, normaliseError } from "./http";
+import { clampTextWithOverflow } from "./utils";
 
 export type KeywordPolarity = "positive" | "negative";
 export type KeywordSource = "local" | "api" | "manual";
@@ -41,6 +43,7 @@ export interface Keyword {
   topic?: string;
   language?: string;
   updated_at?: string;
+  overflow?: number;
 }
 
 export interface KeywordFilters {
@@ -477,7 +480,15 @@ export async function deleteKeyword(id: string): Promise<void> {
 
 const normalisePromptKeyword = (keyword: PromptKeywordInput) => {
   const { keyword_id, weight, ...rest } = keyword;
-  const payload = { ...rest, weight: clampKeywordWeight(weight) };
+  const { value } = clampTextWithOverflow(
+    rest.word ?? "",
+    PROMPT_KEYWORD_MAX_LENGTH,
+  );
+  const payload = {
+    ...rest,
+    word: value,
+    weight: clampKeywordWeight(weight),
+  };
   if (typeof keyword_id === "number") {
     return { ...payload, keyword_id };
   }
