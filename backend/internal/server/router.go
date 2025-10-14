@@ -125,12 +125,15 @@ func NewRouter(opts RouterOptions) *gin.Engine {
 			if opts.AuthMW != nil {
 				prompts.Use(opts.AuthMW.Handle())
 			}
+			prompts.GET("", opts.PromptHandler.ListPrompts)
 			prompts.POST("/interpret", opts.PromptHandler.Interpret)
 			prompts.POST("/keywords/augment", opts.PromptHandler.AugmentKeywords)
 			prompts.POST("/keywords/manual", opts.PromptHandler.AddManualKeyword)
 			prompts.POST("/keywords/remove", opts.PromptHandler.RemoveKeyword)
 			prompts.POST("/keywords/sync", opts.PromptHandler.SyncKeywords)
 			prompts.POST("/generate", opts.PromptHandler.GeneratePrompt)
+			prompts.GET("/:id", opts.PromptHandler.GetPrompt)
+			prompts.DELETE("/:id", opts.PromptHandler.DeletePrompt)
 			prompts.POST("", opts.PromptHandler.SavePrompt)
 		}
 

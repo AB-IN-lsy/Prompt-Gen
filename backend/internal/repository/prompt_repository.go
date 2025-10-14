@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	promptdomain "electron-go-app/backend/internal/domain/prompt"
 
@@ -14,6 +15,15 @@ import (
 // PromptRepository 负责 Prompt 及其版本记录的持久化操作。
 type PromptRepository struct {
 	db *gorm.DB
+}
+
+// PromptListFilter 定义查询“我的 Prompt”列表时使用的过滤条件。
+type PromptListFilter struct {
+	Status      string
+	Query       string
+	UseFullText bool
+	Limit       int
+	Offset      int
 }
 
 // NewPromptRepository 创建 PromptRepository。
@@ -111,6 +121,61 @@ func (r *PromptRepository) DeleteOldVersions(ctx context.Context, promptID uint,
 		return fmt.Errorf("delete prompt versions: %w", err)
 	}
 	return nil
+}
+
+// ListByUser 返回指定用户的 Prompt 列表，并按照更新时间倒序排列。
+func (r *PromptRepository) ListByUser(ctx context.Context, userID uint, filter PromptListFilter) ([]promptdomain.Prompt, int64, error) {
+	query := r.db.WithContext(ctx).Model(&promptdomain.Prompt{}).Where("user_id = ?", userID)
+	if strings.TrimSpace(filter.Status) != "" {
+		query = query.Where("status = ?", strings.TrimSpace(filter.Status))
+	}
+	if q := strings.TrimSpace(filter.Query); q != "" {
+		if filter.UseFullText {
+			query = query.Where("MATCH(topic, tags) AGAINST (? IN BOOLEAN MODE)", q)
+		} else {
+			keyword := "%" + q + "%"
+			query = query.Where("(topic LIKE ? OR tags LIKE ?)", keyword, keyword)
+		}
+	}
+
+	var total int64
+	if err := query.Count(&total).Error; err != nil {
+		return nil, 0, fmt.Errorf("count prompts: %w", err)
+	}
+
+	if filter.Limit > 0 {
+		query = query.Limit(filter.Limit)
+	}
+	if filter.Offset > 0 {
+		query = query.Offset(filter.Offset)
+	}
+
+	var records []promptdomain.Prompt
+	if err := query.Order("updated_at DESC").Find(&records).Error; err != nil {
+		return nil, 0, fmt.Errorf("list prompts: %w", err)
+	}
+	return records, total, nil
+}
+
+// Delete 移除指定用户的 Prompt，并级联删除关联数据。
+func (r *PromptRepository) Delete(ctx context.Context, userID, id uint) error {
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		res := tx.Where("prompt_id = ?", id).Delete(&promptdomain.PromptKeyword{})
+		if res.Error != nil {
+			return fmt.Errorf("delete prompt keywords: %w", res.Error)
+		}
+		if res := tx.Where("prompt_id = ?", id).Delete(&promptdomain.PromptVersion{}); res.Error != nil {
+			return fmt.Errorf("delete prompt versions: %w", res.Error)
+		}
+		res = tx.Where("id = ? AND user_id = ?", id, userID).Delete(&promptdomain.Prompt{})
+		if res.Error != nil {
+			return fmt.Errorf("delete prompt: %w", res.Error)
+		}
+		if res.RowsAffected == 0 {
+			return gorm.ErrRecordNotFound
+		}
+		return nil
+	})
 }
 
 // KeywordRepository 负责关键词的增删查改。

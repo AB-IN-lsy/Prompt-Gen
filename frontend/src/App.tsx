@@ -10,6 +10,7 @@ import { useEffect } from "react";
 
 import { AppShell } from "./components/layout/AppShell";
 import DashboardPage from "./pages/Dashboard";
+import MyPromptsPage from "./pages/MyPrompts";
 import PromptWorkbenchPage from "./pages/PromptWorkbench";
 import SettingsPage from "./pages/Settings";
 import LoginPage from "./pages/Login";
@@ -78,7 +79,7 @@ export default function App() {
         <AppShell>
             <Routes>
                 <Route path="/" element={<DashboardPage />} />
-                <Route path="/prompts" element={<Placeholder titleKey="nav.myPrompts" />} />
+                <Route path="/prompts" element={<MyPromptsPage />} />
                 <Route path="/prompt-workbench" element={<PromptWorkbenchPage />} />
                 <Route path="/settings" element={<SettingsPage />} />
                 <Route path="/logs" element={<LogsPage />} />

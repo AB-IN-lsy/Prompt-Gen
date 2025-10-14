@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -153,6 +154,148 @@ type saveRequest struct {
 	PositiveKeywords []KeywordPayload `json:"positive_keywords" binding:"required,dive"`
 	NegativeKeywords []KeywordPayload `json:"negative_keywords"`
 	WorkspaceToken   string           `json:"workspace_token"`
+}
+
+// ListPrompts 返回当前登录用户的 Prompt 列表。
+func (h *PromptHandler) ListPrompts(c *gin.Context) {
+	log := h.scope("list")
+	userID, ok := extractUserID(c)
+	if !ok {
+		response.Fail(c, http.StatusUnauthorized, response.ErrUnauthorized, "missing user id", nil)
+		return
+	}
+
+	defaultPageSize, maxPageSize := h.service.ListPageSizeDefaults()
+	page, err := strconv.Atoi(c.DefaultQuery("page", "1"))
+	if err != nil || page <= 0 {
+		page = 1
+	}
+	pageSize, err := strconv.Atoi(c.DefaultQuery("page_size", "20"))
+	if err != nil || pageSize <= 0 {
+		pageSize = defaultPageSize
+	}
+	if pageSize > maxPageSize {
+		pageSize = maxPageSize
+	}
+
+	out, err := h.service.ListPrompts(c.Request.Context(), promptsvc.ListPromptsInput{
+		UserID:   userID,
+		Status:   c.Query("status"),
+		Query:    c.Query("q"),
+		Page:     page,
+		PageSize: pageSize,
+	})
+	if err != nil {
+		log.Errorw("list prompts failed", "error", err, "user_id", userID)
+		response.Fail(c, http.StatusInternalServerError, response.ErrInternal, "获取 Prompt 列表失败", nil)
+		return
+	}
+
+	items := make([]gin.H, 0, len(out.Items))
+	for _, item := range out.Items {
+		items = append(items, gin.H{
+			"id":                item.ID,
+			"topic":             item.Topic,
+			"model":             item.Model,
+			"status":            item.Status,
+			"tags":              item.Tags,
+			"positive_keywords": toKeywordResponse(item.PositiveKeywords),
+			"negative_keywords": toKeywordResponse(item.NegativeKeywords),
+			"updated_at":        item.UpdatedAt,
+			"published_at":      item.PublishedAt,
+		})
+	}
+
+	totalPages := 0
+	if out.PageSize > 0 {
+		totalPages = int((out.Total + int64(out.PageSize) - 1) / int64(out.PageSize))
+	}
+
+	response.Success(
+		c,
+		http.StatusOK,
+		gin.H{"items": items},
+		response.MetaPagination{
+			Page:       out.Page,
+			PageSize:   out.PageSize,
+			TotalItems: int(out.Total),
+			TotalPages: totalPages,
+		},
+	)
+}
+
+// GetPrompt 返回指定 Prompt 的详情，并附带最新的工作区 token。
+func (h *PromptHandler) GetPrompt(c *gin.Context) {
+	log := h.scope("detail")
+	userID, ok := extractUserID(c)
+	if !ok {
+		response.Fail(c, http.StatusUnauthorized, response.ErrUnauthorized, "missing user id", nil)
+		return
+	}
+	promptID, err := strconv.ParseUint(strings.TrimSpace(c.Param("id")), 10, 64)
+	if err != nil || promptID == 0 {
+		response.Fail(c, http.StatusBadRequest, response.ErrBadRequest, "invalid prompt id", nil)
+		return
+	}
+
+	detail, err := h.service.GetPrompt(c.Request.Context(), promptsvc.GetPromptInput{
+		UserID:   userID,
+		PromptID: uint(promptID),
+	})
+	if err != nil {
+		if errors.Is(err, promptsvc.ErrPromptNotFound) {
+			response.Fail(c, http.StatusNotFound, response.ErrNotFound, "prompt not found", nil)
+			return
+		}
+		log.Errorw("get prompt failed", "error", err, "user_id", userID, "prompt_id", promptID)
+		response.Fail(c, http.StatusInternalServerError, response.ErrInternal, "获取 Prompt 详情失败", nil)
+		return
+	}
+
+	response.Success(c, http.StatusOK, gin.H{
+		"id":                detail.ID,
+		"topic":             detail.Topic,
+		"body":              detail.Body,
+		"model":             detail.Model,
+		"status":            detail.Status,
+		"tags":              detail.Tags,
+		"positive_keywords": toKeywordResponse(detail.PositiveKeywords),
+		"negative_keywords": toKeywordResponse(detail.NegativeKeywords),
+		"workspace_token":   detail.WorkspaceToken,
+		"created_at":        detail.CreatedAt,
+		"updated_at":        detail.UpdatedAt,
+		"published_at":      detail.PublishedAt,
+	}, nil)
+}
+
+// DeletePrompt 删除指定 Prompt。
+func (h *PromptHandler) DeletePrompt(c *gin.Context) {
+	log := h.scope("delete")
+	userID, ok := extractUserID(c)
+	if !ok {
+		response.Fail(c, http.StatusUnauthorized, response.ErrUnauthorized, "missing user id", nil)
+		return
+	}
+	promptID, err := strconv.ParseUint(strings.TrimSpace(c.Param("id")), 10, 64)
+	if err != nil || promptID == 0 {
+		response.Fail(c, http.StatusBadRequest, response.ErrBadRequest, "invalid prompt id", nil)
+		return
+	}
+
+	if err := h.service.DeletePrompt(c.Request.Context(), promptsvc.DeletePromptInput{
+		UserID:   userID,
+		PromptID: uint(promptID),
+	}); err != nil {
+		if errors.Is(err, promptsvc.ErrPromptNotFound) {
+			response.Fail(c, http.StatusNotFound, response.ErrNotFound, "prompt not found", nil)
+			return
+		}
+		log.Errorw("delete prompt failed", "error", err, "user_id", userID, "prompt_id", promptID)
+		response.Fail(c, http.StatusInternalServerError, response.ErrInternal, "删除 Prompt 失败", nil)
+		return
+	}
+
+	response.NoContent(c)
 }
 
 // Interpret 解析自然语言描述，返回主题与关键词，建议

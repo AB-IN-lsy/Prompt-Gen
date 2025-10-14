@@ -2,7 +2,7 @@
  * @Author: NEFU AB-IN
  * @Date: 2025-10-09 20:51:28
  * @FilePath: \electron-go-app\backend\internal\bootstrap\bootstrap.go
- * @LastEditTime: 2025-10-13 20:39:18
+ * @LastEditTime: 2025-10-14 20:38:19
  */
 package bootstrap
 
@@ -127,7 +127,7 @@ func BuildApplication(ctx context.Context, logger *zap.SugaredLogger, resources 
 	// Prompt 服务与 Handler 较为复杂，涉及关键词管理、工作空间、持久化队列等。
 	promptCfg := loadPromptConfig(logger)
 	// 构建 Prompt 工作台服务，并注入关键词上限、限流配置等依赖。
-	promptService := promptsvc.NewService(promptRepo, keywordRepo, modelService, workspaceStore, persistenceQueue, logger, promptCfg.KeywordLimit)
+	promptService := promptsvc.NewServiceWithConfig(promptRepo, keywordRepo, modelService, workspaceStore, persistenceQueue, logger, promptCfg)
 	promptRateLimit := loadPromptRateLimit(logger)
 	promptHandler := handler.NewPromptHandler(promptService, promptLimiter, promptRateLimit)
 
@@ -294,15 +294,13 @@ func loadPromptRateLimit(logger *zap.SugaredLogger) handler.PromptRateLimit {
 	}
 }
 
-// promptConfig 汇总 Prompt 相关的可配置参数。
-type promptConfig struct {
-	KeywordLimit int
-}
-
-// loadPromptConfig 汇总 Prompt 工作台涉及的所有配置项。
-func loadPromptConfig(logger *zap.SugaredLogger) promptConfig {
-	return promptConfig{
-		KeywordLimit: parseIntEnv("PROMPT_KEYWORD_LIMIT", promptsvc.DefaultKeywordLimit, logger),
+// loadPromptConfig 汇总 Prompt 模块使用到的配置项。
+func loadPromptConfig(logger *zap.SugaredLogger) promptsvc.Config {
+	return promptsvc.Config{
+		KeywordLimit:        parseIntEnv("PROMPT_KEYWORD_LIMIT", promptsvc.DefaultKeywordLimit, logger),
+		DefaultListPageSize: parseIntEnv("PROMPT_LIST_PAGE_SIZE", 20, logger),
+		MaxListPageSize:     parseIntEnv("PROMPT_LIST_MAX_PAGE_SIZE", 100, logger),
+		UseFullTextSearch:   parseBoolEnv("PROMPT_USE_FULLTEXT", false),
 	}
 }
 

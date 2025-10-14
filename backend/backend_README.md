@@ -82,6 +82,9 @@
 | `PROMPT_GENERATE_LIMIT` | Prompt 生成接口限流次数，默认 `5` |
 | `PROMPT_GENERATE_WINDOW` | Prompt 生成限流窗口，默认 `1m` |
 | `PROMPT_KEYWORD_LIMIT` | 正向/负向关键词的数量上限，默认 `10`，需与前端 `VITE_PROMPT_KEYWORD_LIMIT` 保持一致 |
+| `PROMPT_LIST_PAGE_SIZE` | “我的 Prompt”列表默认每页数量，默认 `20` |
+| `PROMPT_LIST_MAX_PAGE_SIZE` | “我的 Prompt”列表单页最大数量，默认 `100` |
+| `PROMPT_USE_FULLTEXT` | 设置为 `1` 时使用 FULLTEXT 检索（需提前创建 `ft_prompts_topic_tags` 索引） |
 
 > ❗ **排障提示**：如果日志中出现  
 > `decode interpretation response: json: cannot unmarshal array into Go struct`，说明模型把 `instructions` 字段生成为数组。现有实现已兼容数组与字符串两种格式；若自定义提示词，请确保仍返回 JSON 对象，并将补充要求放在 `instructions` 字段（字符串或字符串数组均可）。
@@ -187,8 +190,11 @@ go run ./backend/cmd/sendmail -to you@example.com -name "测试账号"
 | `POST` | `/api/prompts/keywords/manual` | 手动新增关键词并落库 | JSON：`topic`、`word`、`polarity`、`weight`（可选，默认 5）、`prompt_id`（可选）、`workspace_token`（可选） |
 | `POST` | `/api/prompts/keywords/remove` | 从工作区移除关键词 | JSON：`word`、`polarity`、`workspace_token` |
 | `POST` | `/api/prompts/keywords/sync` | 同步排序与权重到工作区 | JSON：`workspace_token`、`positive_keywords[]`、`negative_keywords[]`（元素含 `word`、`polarity`、`weight`） |
+| `GET` | `/api/prompts` | 获取当前用户的 Prompt 列表 | Query：`status`（可选，draft/published）、`q`（模糊搜索 topic/tags）、`page`、`page_size` |
+| `GET` | `/api/prompts/:id` | 获取单条 Prompt 详情并返回最新工作区 token | 无 |
 | `POST` | `/api/prompts/generate` | 调模型生成 Prompt 正文 | JSON：`topic`、`model_key`、`positive_keywords[]`、`negative_keywords[]`、`workspace_token`（可选） |
 | `POST` | `/api/prompts` | 保存草稿或发布 Prompt | JSON：`prompt_id`、`topic`、`body`、`status`、`publish`、`positive_keywords[]`、`negative_keywords[]`、`workspace_token`（可选） |
+| `DELETE` | `/api/prompts/:id` | 删除指定 Prompt 及其历史版本/关键词关联 | 无 |
 | `GET` | `/api/changelog` | 获取更新日志列表 | Query：`locale`（可选，默认 `en`） |
 | `POST` | `/api/changelog` | 新增更新日志（管理员） | JSON：`locale`、`badge`、`title`、`summary`、`items[]`、`published_at` |
 | `PUT` | `/api/changelog/:id` | 编辑指定日志（管理员） | 同 `POST` |
@@ -197,6 +203,22 @@ go run ./backend/cmd/sendmail -to you@example.com -name "测试账号"
 | `DELETE` | `/api/ip-guard/bans/:ip` | 解除指定 IP 的封禁记录（管理员） | 路径参数 `ip`，需登录且具备 `is_admin=true` |
 
 > 注：出于本地开发便利，来自 127.0.0.1 / ::1 的回环地址会跳过 IP Guard 限制，不计入限流与封禁。
+
+### Prompt 表索引优化
+
+`GET /api/prompts` 默认按照 `user_id`、`status` 过滤并以 `updated_at DESC` 排序，同时支持主题/标签模糊搜索。推荐在 MySQL 中追加以下索引以提升查询效率：
+
+```sql
+-- 用户+状态+更新时间的复合索引，可覆盖分页排序场景。
+ALTER TABLE prompts
+  ADD INDEX idx_prompts_user_status_updated (user_id, status, updated_at DESC);
+
+-- 若启用 MATCH ... AGAINST 搜索，可额外创建全文索引。
+ALTER TABLE prompts
+  ADD FULLTEXT INDEX ft_prompts_topic_tags (topic, tags);
+```
+
+> 当前仓储实现仍使用 `LIKE` 模糊查询；如需利用 FULLTEXT，请将查询改为 `MATCH(topic, tags) AGAINST (? IN BOOLEAN MODE)` 或建立专门的检索服务。
 
 ### 更新日志存储与管理
 
@@ -639,6 +661,52 @@ go run ./backend/cmd/sendmail -to you@example.com -name "测试账号"
 
 - **成功响应**：`204`。
 - **常见错误**：工作区不存在或 token 过期 → `400/404`。
+
+#### GET /api/prompts
+
+- **用途**：分页获取当前登录用户保存的 Prompt 列表，包含关键词摘要与标签等基础信息。
+- **查询参数**
+
+  | 参数 | 说明 |
+  | --- | --- |
+  | `status` | 可选，按 `draft` / `published` 过滤，默认不过滤 |
+  | `q` | 可选，对 `topic` 与 `tags` 做模糊搜索 |
+  | `page` / `page_size` | 可选，分页参数，默认 `page=1`、`page_size=20`，单页上限 100 |
+
+- **成功响应**：`200`，`data.items` 为 Prompt 列表，每项包含 `id`、`topic`、`model`、`status`、`tags`、`positive_keywords`、`negative_keywords`、`updated_at`、`published_at`；`meta` 返回 `page`、`page_size`、`total_items`、`total_pages`。
+
+#### GET /api/prompts/:id
+
+- **用途**：获取单条 Prompt 详情，并返回一个新的 `workspace_token` 方便在工作台继续编辑。
+- **成功响应**：`200`
+
+  ```json
+  {
+    "success": true,
+    "data": {
+      "id": 42,
+      "topic": "React 前端面试",
+      "body": "Prompt 正文……",
+      "model": "deepseek-chat",
+      "status": "draft",
+      "tags": ["前端", "面试"],
+      "positive_keywords": [{"word": "React", "weight": 5}],
+      "negative_keywords": [{"word": "陈旧框架", "weight": 1}],
+      "workspace_token": "c9f0d7...",
+      "created_at": "2025-10-10T12:00:00Z",
+      "updated_at": "2025-10-12T08:15:00Z",
+      "published_at": null
+    }
+  }
+  ```
+
+- **常见错误**：目标 Prompt 不存在或归属不同用户 → `404`。
+
+#### DELETE /api/prompts/:id
+
+- **用途**：删除指定 Prompt 及其关联的关键词关系、历史版本。
+- **成功响应**：`204`。
+- **常见错误**：Prompt 不存在或无访问权限 → `404`。
 
 #### POST /api/prompts/generate
 

@@ -47,13 +47,16 @@ type PersistenceQueue interface {
 // 3. 生成 Prompt 正文并保存历史版本；
 // 4. 维护关键词字典，支持手动新增。
 type Service struct {
-	prompts      *repository.PromptRepository
-	keywords     *repository.KeywordRepository
-	model        ModelInvoker
-	workspace    WorkspaceStore
-	queue        PersistenceQueue
-	logger       *zap.SugaredLogger
-	keywordLimit int
+	prompts             *repository.PromptRepository
+	keywords            *repository.KeywordRepository
+	model               ModelInvoker
+	workspace           WorkspaceStore
+	queue               PersistenceQueue
+	logger              *zap.SugaredLogger
+	keywordLimit        int
+	listDefaultPageSize int
+	listMaxPageSize     int
+	useFullText         bool
 }
 
 const (
@@ -80,30 +83,166 @@ var (
 	ErrNegativeKeywordLimit = errors.New("negative keywords exceed limit")
 	// ErrDuplicateKeyword 表示同极性的关键词已存在。
 	ErrDuplicateKeyword = errors.New("keyword already exists")
+	// ErrPromptNotFound 表示指定 Prompt 不存在或无访问权限。
+	ErrPromptNotFound = errors.New("prompt not found")
 )
 
-// NewService 构建 Service。
-func NewService(prompts *repository.PromptRepository, keywords *repository.KeywordRepository, model ModelInvoker, workspace WorkspaceStore, queue PersistenceQueue, logger *zap.SugaredLogger, keywordLimit int) *Service {
+// Config 汇总 Prompt 服务的可配置参数。
+type Config struct {
+	KeywordLimit        int
+	DefaultListPageSize int
+	MaxListPageSize     int
+	UseFullTextSearch   bool
+}
+
+// NewServiceWithConfig 构建 Service，并允许自定义分页等配置。
+func NewServiceWithConfig(prompts *repository.PromptRepository, keywords *repository.KeywordRepository, model ModelInvoker, workspace WorkspaceStore, queue PersistenceQueue, logger *zap.SugaredLogger, cfg Config) *Service {
 	if logger == nil {
 		logger = zap.NewNop().Sugar()
 	}
-	if keywordLimit <= 0 {
-		keywordLimit = DefaultKeywordLimit
+	if cfg.KeywordLimit <= 0 {
+		cfg.KeywordLimit = DefaultKeywordLimit
+	}
+	if cfg.DefaultListPageSize <= 0 {
+		cfg.DefaultListPageSize = 20
+	}
+	if cfg.MaxListPageSize <= 0 {
+		cfg.MaxListPageSize = 100
+	}
+	if cfg.DefaultListPageSize > cfg.MaxListPageSize {
+		cfg.DefaultListPageSize = cfg.MaxListPageSize
 	}
 	return &Service{
-		prompts:      prompts,
-		keywords:     keywords,
-		model:        model,
-		workspace:    workspace,
-		queue:        queue,
-		logger:       logger,
-		keywordLimit: keywordLimit,
+		prompts:             prompts,
+		keywords:            keywords,
+		model:               model,
+		workspace:           workspace,
+		queue:               queue,
+		logger:              logger,
+		keywordLimit:        cfg.KeywordLimit,
+		listDefaultPageSize: cfg.DefaultListPageSize,
+		listMaxPageSize:     cfg.MaxListPageSize,
+		useFullText:         cfg.UseFullTextSearch,
 	}
 }
 
 // KeywordLimit 暴露当前生效的关键词数量上限，供上层 Handler 使用。
 func (s *Service) KeywordLimit() int {
 	return s.keywordLimit
+}
+
+// ListPageSizeDefaults 返回列表分页的默认与最大页大小。
+func (s *Service) ListPageSizeDefaults() (int, int) {
+	return s.listDefaultPageSize, s.listMaxPageSize
+}
+
+// ListPrompts 返回当前用户的 Prompt 列表，支持状态筛选与关键字搜索。
+func (s *Service) ListPrompts(ctx context.Context, input ListPromptsInput) (ListPromptsOutput, error) {
+	page := input.Page
+	if page <= 0 {
+		page = 1
+	}
+	pageSize := input.PageSize
+	if pageSize <= 0 {
+		pageSize = s.listDefaultPageSize
+	}
+	if pageSize > s.listMaxPageSize {
+		pageSize = s.listMaxPageSize
+	}
+	filter := repository.PromptListFilter{
+		Status:      strings.TrimSpace(input.Status),
+		Query:       strings.TrimSpace(input.Query),
+		UseFullText: s.useFullText,
+		Limit:       pageSize,
+		Offset:      (page - 1) * pageSize,
+	}
+	records, total, err := s.prompts.ListByUser(ctx, input.UserID, filter)
+	if err != nil {
+		return ListPromptsOutput{}, err
+	}
+	items := make([]PromptSummary, 0, len(records))
+	for _, record := range records {
+		items = append(items, PromptSummary{
+			ID:               record.ID,
+			Topic:            record.Topic,
+			Model:            record.Model,
+			Status:           record.Status,
+			Tags:             decodeTags(record.Tags),
+			PositiveKeywords: decodePromptKeywords(record.PositiveKeywords),
+			NegativeKeywords: decodePromptKeywords(record.NegativeKeywords),
+			UpdatedAt:        record.UpdatedAt,
+			PublishedAt:      record.PublishedAt,
+		})
+	}
+	return ListPromptsOutput{
+		Items:    items,
+		Total:    total,
+		Page:     page,
+		PageSize: pageSize,
+	}, nil
+}
+
+// GetPrompt 根据 ID 返回 Prompt 详情，并尝试为工作台创建 Redis 工作区快照。
+func (s *Service) GetPrompt(ctx context.Context, input GetPromptInput) (PromptDetail, error) {
+	entity, err := s.prompts.FindByID(ctx, input.UserID, input.PromptID)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return PromptDetail{}, ErrPromptNotFound
+		}
+		return PromptDetail{}, err
+	}
+	detail := PromptDetail{
+		ID:               entity.ID,
+		Topic:            entity.Topic,
+		Body:             entity.Body,
+		Model:            entity.Model,
+		Status:           entity.Status,
+		Tags:             decodeTags(entity.Tags),
+		PositiveKeywords: decodePromptKeywords(entity.PositiveKeywords),
+		NegativeKeywords: decodePromptKeywords(entity.NegativeKeywords),
+		CreatedAt:        entity.CreatedAt,
+		UpdatedAt:        entity.UpdatedAt,
+		PublishedAt:      entity.PublishedAt,
+	}
+
+	if s.workspace != nil {
+		snapshot := promptdomain.WorkspaceSnapshot{
+			UserID:    input.UserID,
+			Topic:     entity.Topic,
+			ModelKey:  entity.Model,
+			DraftBody: entity.Body,
+			Positive:  toWorkspaceKeywords(detail.PositiveKeywords, s.keywordLimit),
+			Negative:  toWorkspaceKeywords(detail.NegativeKeywords, s.keywordLimit),
+			PromptID:  entity.ID,
+			Status:    entity.Status,
+			UpdatedAt: time.Now(),
+		}
+		storeCtx, cancel := s.workspaceContext(ctx)
+		token, workspaceErr := s.workspace.CreateOrReplace(storeCtx, input.UserID, snapshot)
+		cancel()
+		if workspaceErr != nil {
+			s.logger.Warnw(
+				"create workspace snapshot failed",
+				"prompt_id", entity.ID,
+				"user_id", input.UserID,
+				"error", workspaceErr,
+			)
+		} else {
+			detail.WorkspaceToken = token
+		}
+	}
+	return detail, nil
+}
+
+// DeletePrompt 删除 Prompt 及其关联的关键词/版本记录。
+func (s *Service) DeletePrompt(ctx context.Context, input DeletePromptInput) error {
+	if err := s.prompts.Delete(ctx, input.UserID, input.PromptID); err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return ErrPromptNotFound
+		}
+		return err
+	}
+	return nil
 }
 
 // StartPersistenceWorker 启动后台协程消费 Redis 队列并写入 MySQL。
@@ -175,6 +314,64 @@ type KeywordItem struct {
 	Source    string `json:"source"`
 	Polarity  string `json:"polarity"`
 	Weight    int    `json:"weight"`
+}
+
+// ListPromptsInput 定义“我的 Prompt”列表请求参数。
+type ListPromptsInput struct {
+	UserID   uint
+	Status   string
+	Query    string
+	Page     int
+	PageSize int
+}
+
+// PromptSummary 返回给前端的 Prompt 概览信息。
+type PromptSummary struct {
+	ID               uint
+	Topic            string
+	Model            string
+	Status           string
+	Tags             []string
+	PositiveKeywords []KeywordItem
+	NegativeKeywords []KeywordItem
+	UpdatedAt        time.Time
+	PublishedAt      *time.Time
+}
+
+// ListPromptsOutput 携带分页后的 Prompt 列表。
+type ListPromptsOutput struct {
+	Items    []PromptSummary
+	Total    int64
+	Page     int
+	PageSize int
+}
+
+// GetPromptInput 描述查询单条 Prompt 详情所需参数。
+type GetPromptInput struct {
+	UserID   uint
+	PromptID uint
+}
+
+// PromptDetail 为工作台回填准备的完整 Prompt 信息。
+type PromptDetail struct {
+	ID               uint
+	Topic            string
+	Body             string
+	Model            string
+	Status           string
+	Tags             []string
+	PositiveKeywords []KeywordItem
+	NegativeKeywords []KeywordItem
+	WorkspaceToken   string
+	CreatedAt        time.Time
+	UpdatedAt        time.Time
+	PublishedAt      *time.Time
+}
+
+// DeletePromptInput 描述删除 Prompt 所需参数。
+type DeletePromptInput struct {
+	UserID   uint
+	PromptID uint
 }
 
 // InterpretInput 描述解析自然语言所需的参数。
@@ -1465,6 +1662,51 @@ func buildGenerateRequest(input GenerateInput) modeldomain.ChatCompletionRequest
 		Temperature: input.Temperature,
 		MaxTokens:   input.MaxTokens,
 	}
+}
+
+func decodePromptKeywords(raw string) []KeywordItem {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return []KeywordItem{}
+	}
+	var items []KeywordItem
+	if err := json.Unmarshal([]byte(trimmed), &items); err != nil {
+		return []KeywordItem{}
+	}
+	for idx := range items {
+		items[idx].Word = strings.TrimSpace(items[idx].Word)
+		items[idx].Source = sourceFallback(items[idx].Source)
+		items[idx].Polarity = normalizePolarity(items[idx].Polarity)
+		items[idx].Weight = clampWeight(items[idx].Weight)
+	}
+	return items
+}
+
+func decodeTags(raw string) []string {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return []string{}
+	}
+	var tags []string
+	if err := json.Unmarshal([]byte(trimmed), &tags); err == nil {
+		cleaned := make([]string, 0, len(tags))
+		for _, tag := range tags {
+			tag = strings.TrimSpace(tag)
+			if tag != "" {
+				cleaned = append(cleaned, tag)
+			}
+		}
+		return cleaned
+	}
+	parts := strings.Split(trimmed, ",")
+	cleaned := make([]string, 0, len(parts))
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		if part != "" {
+			cleaned = append(cleaned, part)
+		}
+	}
+	return cleaned
 }
 
 func languageOrDefault(lang string) string {

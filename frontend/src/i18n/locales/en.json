@@ -263,11 +263,55 @@
     "modelFallback": "Selected model is unavailable. Switched to {{model}}.",
     "modelDisabled": "This model is disabled and can’t be selected."
   },
+  "myPrompts": {
+    "eyebrow": "Prompt Library",
+    "title": "My Prompts",
+    "openWorkbench": "Open workbench",
+    "listTitle": "Saved prompts",
+    "searchPlaceholder": "Search topics or tags",
+    "statusFilter": {
+      "label": "Status",
+      "all": "All",
+      "draft": "Draft",
+      "published": "Published",
+      "archived": "Archived"
+    },
+    "table": {
+      "topic": "Topic",
+      "status": "Status",
+      "model": "Model",
+      "keywords": "Keywords",
+      "tags": "Tags",
+      "updatedAt": "Updated at",
+      "actions": "Actions"
+    },
+    "statusBadge": {
+      "draft": "Draft",
+      "published": "Published",
+      "archived": "Archived"
+    },
+    "actions": {
+      "edit": "Continue editing",
+      "delete": "Delete"
+    },
+    "pagination": {
+      "page": "Page {{page}} of {{total}}"
+    },
+    "loading": "Loading prompt...",
+    "editSuccess": "Prompt loaded. Redirecting to the workbench...",
+    "deleteSuccess": "Prompt deleted.",
+    "deleteConfirm": "Delete this prompt? This action cannot be undone.",
+    "empty": "No prompts saved yet. Head to the workbench to create one.",
+    "loadError": "Failed to load the prompt list.",
+    "startCreating": "Create in the workbench"
+  },
   "common": {
     "language": "Language",
     "confirm": "Confirm",
     "close": "Close",
-    "loading": "Loading..."
+    "loading": "Loading...",
+    "search": "Search",
+    "retry": "Retry"
   },
   "auth": {
     "login": {

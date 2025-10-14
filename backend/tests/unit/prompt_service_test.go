@@ -96,7 +96,19 @@ func setupPromptService(t *testing.T) (*promptsvc.Service, *repository.PromptRep
 	promptRepo := repository.NewPromptRepository(db)
 	keywordRepo := repository.NewKeywordRepository(db)
 	modelStub := &fakeModelInvoker{}
-	service := promptsvc.NewService(promptRepo, keywordRepo, modelStub, nil, nil, nil, promptsvc.DefaultKeywordLimit)
+	service := promptsvc.NewServiceWithConfig(
+		promptRepo,
+		keywordRepo,
+		modelStub,
+		nil,
+		nil,
+		nil,
+		promptsvc.Config{
+			KeywordLimit:        promptsvc.DefaultKeywordLimit,
+			DefaultListPageSize: 20,
+			MaxListPageSize:     100,
+		},
+	)
 	return service, promptRepo, keywordRepo, db, modelStub
 }
 
@@ -227,14 +239,14 @@ func TestPromptServiceManualKeywordDuplicate(t *testing.T) {
 			},
 		},
 	}
-	serviceWithWorkspace := promptsvc.NewService(
+	serviceWithWorkspace := promptsvc.NewServiceWithConfig(
 		promptRepo,
 		keywordRepo,
 		modelStub,
 		store,
 		nil,
 		nil,
-		promptsvc.DefaultKeywordLimit,
+		promptsvc.Config{KeywordLimit: promptsvc.DefaultKeywordLimit, DefaultListPageSize: 20, MaxListPageSize: 100},
 	)
 
 	_, err := serviceWithWorkspace.AddManualKeyword(context.Background(), promptsvc.ManualKeywordInput{

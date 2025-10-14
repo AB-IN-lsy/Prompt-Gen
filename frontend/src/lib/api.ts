@@ -74,43 +74,51 @@ export interface KeywordSuggestion {
   confidence?: number;
 }
 
-export interface PromptKeywordRef {
-  keywordId?: string;
+export interface PromptListKeyword {
+  keyword_id?: number;
   word: string;
+  source?: string;
+  polarity?: KeywordPolarity;
   weight?: number;
 }
 
-export interface PromptPayload {
+export interface PromptListItem {
+  id: number;
   topic: string;
-  prompt: string;
-  positiveKeywords: PromptKeywordRef[];
-  negativeKeywords: PromptKeywordRef[];
   model: string;
-  tags?: string[];
-  status?: "draft" | "published" | "archived";
-}
-
-export interface PromptRegenerateResponse {
-  prompt: string;
-  metadata?: {
-    model: string;
-    latency_ms?: number;
-  };
-}
-
-export interface PromptSummary {
-  id: string;
-  topic: string;
-  title: string;
   status: "draft" | "published" | "archived";
-  model: string;
-  tags?: string[];
+  tags: string[];
+  positive_keywords: PromptListKeyword[];
+  negative_keywords: PromptListKeyword[];
   updated_at: string;
+  published_at?: string | null;
 }
 
-export interface PaginatedPromptsResponse {
-  items: PromptSummary[];
-  total: number;
+export interface PromptListMeta {
+  page: number;
+  page_size: number;
+  total_items: number;
+  total_pages: number;
+}
+
+export interface PromptListResponse {
+  items: PromptListItem[];
+  meta: PromptListMeta;
+}
+
+export interface PromptDetailResponse {
+  id: number;
+  topic: string;
+  body: string;
+  model: string;
+  status: "draft" | "published" | "archived";
+  tags: string[];
+  positive_keywords: PromptListKeyword[];
+  negative_keywords: PromptListKeyword[];
+  workspace_token?: string;
+  created_at: string;
+  updated_at: string;
+  published_at?: string | null;
 }
 
 export interface AuthTokens {
@@ -708,66 +716,64 @@ export async function deleteUserModel(id: number): Promise<void> {
   }
 }
 
-/** Fetches a paginated prompt list for the “我的 Prompt”页面. */
-export async function fetchPrompts(
-  params: {
-    status?: "draft" | "published" | "archived";
-    tags?: string[];
-    model?: string;
-    search?: string;
-    page?: number;
-    size?: number;
-  } = {},
-): Promise<{ items: PromptSummary[]; total: number; meta?: unknown }> {
+/** 获取当前用户的 Prompt 列表，支持按状态与关键词查询。 */
+export async function fetchMyPrompts(params: {
+  status?: "draft" | "published" | "archived";
+  query?: string;
+  page?: number;
+  pageSize?: number;
+} = {}): Promise<PromptListResponse> {
   try {
-    const response: AxiosResponse<PaginatedPromptsResponse> & {
-      meta?: unknown;
-    } = await http.get("/prompts", { params });
+    const response: AxiosResponse<{ items: PromptListItem[] }> & {
+      meta?: PromptListMeta;
+    } = await http.get("/prompts", {
+      params: {
+        status: params.status,
+        q: params.query,
+        page: params.page,
+        page_size: params.pageSize,
+      },
+    });
+    const meta = (response as typeof response & { meta?: PromptListMeta }).meta;
+    const fallbackMeta: PromptListMeta = {
+      page: params.page ?? 1,
+      page_size: params.pageSize ?? 20,
+      total_items: response.data?.items?.length ?? 0,
+      total_pages: 1,
+    };
     return {
-      items: response.data.items,
-      total: response.data.total,
-      meta: (response as any).meta,
+      items: response.data?.items ?? [],
+      meta: meta ?? fallbackMeta,
     };
   } catch (error) {
     throw normaliseError(error);
   }
 }
 
-/** Fetches a single prompt by ID, including its versions when supported by the backend. */
-export async function fetchPromptById(id: string): Promise<any> {
+/** 获取单条 Prompt 的详情，同时返回最新工作区 token。 */
+export async function fetchPromptDetail(
+  id: number,
+): Promise<PromptDetailResponse> {
   if (!id) {
     throw new ApiError({ message: "Prompt id is required" });
   }
   try {
-    const response = await http.get(`/prompts/${id}`);
+    const response: AxiosResponse<PromptDetailResponse> = await http.get(
+      `/prompts/${id}`,
+    );
     return response.data;
   } catch (error) {
     throw normaliseError(error);
   }
 }
 
-/** Updates a prompt in place. */
-export async function updatePrompt(
-  id: string,
-  payload: Partial<PromptPayload>,
-): Promise<void> {
+/** 删除指定 Prompt。 */
+export async function deletePrompt(id: number): Promise<void> {
   if (!id) {
     throw new ApiError({ message: "Prompt id is required" });
   }
   try {
-    await http.patch(`/prompts/${id}`, payload);
-  } catch (error) {
-    throw normaliseError(error);
-  }
-}
-
-/** Publishes a prompt (transitioning it from draft to published). */
-export async function publishPrompt(id: string): Promise<void> {
-  if (!id) {
-    throw new ApiError({ message: "Prompt id is required" });
-  }
-  try {
-    await http.post(`/prompts/${id}/publish`);
+    await http.delete(`/prompts/${id}`);
   } catch (error) {
     throw normaliseError(error);
   }

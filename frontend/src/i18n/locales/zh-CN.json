@@ -263,11 +263,55 @@
     "modelFallback": "模型不可用，已自动切换到 {{model}}。",
     "modelDisabled": "该模型已禁用或不可用。"
   },
+  "myPrompts": {
+    "eyebrow": "Prompt 清单",
+    "title": "我的 Prompt",
+    "openWorkbench": "打开工作台",
+    "listTitle": "Prompt 列表",
+    "searchPlaceholder": "搜索主题或标签",
+    "statusFilter": {
+      "label": "状态",
+      "all": "全部",
+      "draft": "草稿",
+      "published": "已发布",
+      "archived": "已归档"
+    },
+    "table": {
+      "topic": "主题",
+      "status": "状态",
+      "model": "模型",
+      "keywords": "关键词",
+      "tags": "标签",
+      "updatedAt": "更新时间",
+      "actions": "操作"
+    },
+    "statusBadge": {
+      "draft": "草稿",
+      "published": "已发布",
+      "archived": "已归档"
+    },
+    "actions": {
+      "edit": "继续编辑",
+      "delete": "删除"
+    },
+    "pagination": {
+      "page": "第 {{page}} 页，共 {{total}} 页"
+    },
+    "loading": "正在加载 Prompt...",
+    "editSuccess": "Prompt 已加载，正在打开工作台。",
+    "deleteSuccess": "Prompt 已删除。",
+    "deleteConfirm": "确定删除该 Prompt 吗？此操作无法撤销。",
+    "empty": "你还没有保存的 Prompt，去工作台生成一个吧。",
+    "loadError": "加载 Prompt 列表失败。",
+    "startCreating": "在工作台创建 Prompt"
+  },
   "common": {
     "language": "语言",
     "confirm": "确认",
     "close": "关闭",
-    "loading": "加载中..."
+    "loading": "加载中...",
+    "search": "搜索",
+    "retry": "重试"
   },
   "auth": {
     "login": {
