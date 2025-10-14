@@ -190,6 +190,8 @@ go run ./backend/cmd/sendmail -to you@example.com -name "测试账号"
 | `POST` | `/api/changelog` | 新增更新日志（管理员） | JSON：`locale`、`badge`、`title`、`summary`、`items[]`、`published_at` |
 | `PUT` | `/api/changelog/:id` | 编辑指定日志（管理员） | 同 `POST` |
 | `DELETE` | `/api/changelog/:id` | 删除指定日志（管理员） | 无 |
+| `GET` | `/api/ip-guard/bans` | 查询仍在封禁期内的 IP 列表（管理员） | 无；需登录且具备 `is_admin=true` |
+| `DELETE` | `/api/ip-guard/bans/:ip` | 解除指定 IP 的封禁记录（管理员） | 路径参数 `ip`，需登录且具备 `is_admin=true` |
 
 ### 更新日志存储与管理
 
@@ -654,6 +656,112 @@ go run ./backend/cmd/sendmail -to you@example.com -name "测试账号"
 - **成功响应**：`200`，返回 `prompt_id`、`status`、`version`。当 `publish=true` 时生成历史版本并更新 `published_at`。
 - **常见错误**：缺少 body/topic → `400`；目标 Prompt 不存在 → `404`。
 
+#### GET /api/changelog
+
+- **用途**：向前端公开最近发布的更新日志，普通用户亦可访问。
+- **查询参数**：`locale`（可选，默认 `en`）。当指定语言暂无数据时自动回退到英文条目。
+- **成功响应**：`200`
+
+  ```json
+  {
+    "success": true,
+    "data": {
+      "items": [
+        {
+          "id": 12,
+          "locale": "zh-CN",
+          "badge": "身份验证",
+          "title": "新增邮箱验证码限流提示",
+          "summary": "登录与注册的验证码流程新增剩余次数提醒。",
+          "items": [
+            "超限后返回 retry_after_seconds，前端自动倒计时。",
+            "邮件验证请求返回 remaining_attempts 字段。"
+          ],
+          "published_at": "2025-10-12",
+          "created_at": "2025-10-12T03:00:00Z",
+          "updated_at": "2025-10-12T03:15:00Z"
+        }
+      ]
+    }
+  }
+  ```
+
+- **常见错误**：无。
+
+#### POST /api/changelog
+
+- **用途**：新增一条更新日志，需管理员权限。
+- **请求头**：`Authorization: Bearer <access_token>`，且该用户 `is_admin=true`。
+- **请求体示例**：
+
+  ```json
+  {
+    "locale": "zh-CN",
+    "badge": "身份验证",
+    "title": "邮箱验证流程 UX 优化",
+    "summary": "验证码限流提示与倒计时已上线。",
+    "items": [
+      "剩余尝试次数随接口返回实时更新。",
+      "限流后返回 retry_after_seconds，前端展示倒计时。"
+    ],
+    "published_at": "2025-10-12",
+    "translate_to": ["en"],
+    "translation_model_key": "deepseek-chat"
+  }
+  ```
+
+- **成功响应**：`201`，返回新建条目与（可选的）翻译条目。
+- **常见错误**：
+  - 非管理员调用 → `403`。
+  - 未提供 `translation_model_key` 却携带 `translate_to` → `400`。
+  - 自动翻译时模型调用失败 → `502`（主记录仍会创建，失败的翻译条目会忽略并写入日志）。
+
+#### PUT /api/changelog/:id
+
+- **用途**：更新指定日志条目（标签、标题、摘要、要点列表、发布日期），需管理员权限。
+- **成功响应**：`200`，返回更新后的 `entry`。
+- **常见错误**：记录不存在 → `404`；非管理员 → `403`。
+
+#### DELETE /api/changelog/:id
+
+- **用途**：删除指定日志条目（硬删除），需管理员权限。
+- **成功响应**：`204`。
+- **常见错误**：记录不存在 → `404`；非管理员 → `403`。
+
+#### GET /api/ip-guard/bans
+
+- **用途**：管理员查询当前仍在封禁期内的恶意 IP，用于后台可视化。
+- **请求头**：`Authorization: Bearer <access_token>`，且 `is_admin=true`。
+- **成功响应**：`200`
+
+  ```json
+  {
+    "success": true,
+    "data": {
+      "items": [
+        {
+          "ip": "203.0.113.15",
+          "ttl_seconds": 1420,
+          "expires_at": "2025-10-14T03:32:15Z"
+        }
+      ]
+    }
+  }
+  ```
+
+  - `ttl_seconds` 会向上取整到秒，`expires_at` 为 UTC 时间，便于前端直接展示。
+
+- **常见错误**：
+  - Redis 未配置或 IP Guard 未启用 → `503`。
+  - 非管理员访问 → `403`。
+
+#### DELETE /api/ip-guard/bans/:ip
+
+- **用途**：手动解除指定 IP 的封禁，解封后该 IP 后续请求将重新走限流计数。
+- **路径参数**：`ip` 支持 IPv4/IPv6 字符串，按原样编码。
+- **成功响应**：`204`。
+- **常见错误**：Redis 不可用或 IP Guard 未启用 → `503`；非管理员 → `403`。
+
 ## 启动与测试
 
 ```powershell
@@ -799,12 +907,3 @@ backend/
 - 再给它套一个 35 秒的 timeout，避免长时间阻塞。
 - 如果外层有更严格的 Deadline，就尊重原有限制。
 - 这样既保留 Request 链上的 Value / Trace，又不会被 Gin 提前 cancel。
-
-## 待办与安全增强排期
-
-- **邮箱校验与验证流程**：新增邮箱格式校验、中间层错误提示，并提供验证邮件链路，防止伪造账号。
-- **密码重置**：设计申请重置、邮件验证码、设置新密码的完整流程，覆盖服务层与 Handler 单元测试。
-- **登录防护**：补充基于 IP 与账号的速率限制，以及可选的登录失败黑名单策略。
-- **审计日志**：记录敏感操作（重置密码、修改邮箱、登出所有设备等），并提供查询接口以便追踪。
-
-以上条目后续会进入迭代计划，优先实现鉴权流程的完整闭环。
