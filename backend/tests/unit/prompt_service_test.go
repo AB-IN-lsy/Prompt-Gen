@@ -109,11 +109,19 @@ func TestPromptServiceInterpret(t *testing.T) {
 	}()
 
 	payload := map[string]any{
-		"topic":             "React 前端面试",
-		"positive_keywords": []string{"React", "Hooks", "状态管理", "React"},
-		"negative_keywords": []string{"过时框架", "重复"},
-		"confidence":        0.92,
-		"instructions":      "强调输出结构化问答",
+		"topic": "React 前端面试",
+		"positive_keywords": []map[string]any{
+			{"word": "React", "weight": 5},
+			{"word": "Hooks", "weight": 4},
+			{"word": "状态管理", "weight": 3},
+			{"word": "React", "weight": 5},
+		},
+		"negative_keywords": []map[string]any{
+			{"word": "过时框架", "weight": 4},
+			{"word": "重复", "weight": 2},
+		},
+		"confidence":   0.92,
+		"instructions": "强调输出结构化问答",
 	}
 	content, _ := json.Marshal(payload)
 	modelStub.responses = []deepseek.ChatCompletionResponse{
@@ -167,9 +175,12 @@ func TestPromptServiceInterpretInstructionsArray(t *testing.T) {
 	}()
 
 	payload := map[string]any{
-		"topic":             "Node.js 面试",
-		"positive_keywords": []string{"并发", "事件循环"},
-		"negative_keywords": []string{},
+		"topic": "Node.js 面试",
+		"positive_keywords": []map[string]any{
+			{"word": "并发", "weight": 5},
+			{"word": "事件循环", "weight": 5},
+		},
+		"negative_keywords": []map[string]any{},
 		"confidence":        0.8,
 		"instructions":      []string{"回答时附带示例代码", "重点解释事件循环机制"},
 	}
@@ -247,8 +258,13 @@ func TestPromptServiceAugmentKeywords(t *testing.T) {
 	}()
 
 	payload := map[string]any{
-		"positive_keywords": []string{"性能优化", "状态管理"},
-		"negative_keywords": []string{"重复"},
+		"positive_keywords": []map[string]any{
+			{"word": "性能优化", "weight": 5},
+			{"word": "状态管理", "weight": 3},
+		},
+		"negative_keywords": []map[string]any{
+			{"word": "重复", "weight": 2},
+		},
 	}
 	content, _ := json.Marshal(payload)
 	modelStub.responses = []deepseek.ChatCompletionResponse{
@@ -264,7 +280,7 @@ func TestPromptServiceAugmentKeywords(t *testing.T) {
 		UserID:           1,
 		Topic:            "React 前端面试",
 		ModelKey:         "deepseek-chat",
-		ExistingPositive: []promptsvc.KeywordItem{{Word: "状态管理", Polarity: promptdomain.KeywordPolarityPositive}},
+		ExistingPositive: []promptsvc.KeywordItem{{Word: "状态管理", Polarity: promptdomain.KeywordPolarityPositive, Weight: 3}},
 		ExistingNegative: []promptsvc.KeywordItem{},
 	})
 	if err != nil {
@@ -275,6 +291,9 @@ func TestPromptServiceAugmentKeywords(t *testing.T) {
 	}
 	if out.Positive[0].Word != "性能优化" {
 		t.Fatalf("unexpected positive keyword: %+v", out.Positive[0])
+	}
+	if out.Positive[0].Weight != 5 {
+		t.Fatalf("unexpected weight for positive keyword: %+v", out.Positive[0])
 	}
 	if len(out.Negative) != 1 || out.Negative[0].Word != "重复" {
 		t.Fatalf("unexpected negative keywords: %+v", out.Negative)

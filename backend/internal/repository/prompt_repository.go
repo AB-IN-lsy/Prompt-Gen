@@ -140,9 +140,7 @@ func (r *KeywordRepository) Upsert(ctx context.Context, entity *promptdomain.Key
 		if entity.Language != "" {
 			stored.Language = entity.Language
 		}
-		if entity.Weight != 0 {
-			stored.Weight = entity.Weight
-		}
+		stored.Weight = entity.Weight
 		if saveErr := r.db.WithContext(ctx).Save(&stored).Error; saveErr != nil {
 			return nil, fmt.Errorf("update keyword: %w", saveErr)
 		}

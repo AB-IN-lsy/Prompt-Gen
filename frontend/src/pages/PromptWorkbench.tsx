@@ -5,8 +5,30 @@
  * @LastEditTime: 2025-10-12 21:59:00
  */
 import { ChangeEvent, useCallback, useEffect, useMemo, useState } from "react";
+import {
+  DndContext,
+  DragEndEvent,
+  PointerSensor,
+  useDroppable,
+  useSensor,
+  useSensors,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  arrayMove,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { LoaderCircle, Plus, Sparkles } from "lucide-react";
+import {
+  GripVertical,
+  LoaderCircle,
+  Minus,
+  Plus,
+  Sparkles,
+  X,
+} from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { nanoid } from "nanoid";
 import { toast } from "sonner";
@@ -26,6 +48,7 @@ import {
   fetchUserModels,
   generatePromptPreview,
   interpretPromptDescription,
+  syncPromptWorkspaceKeywords,
   removePromptKeyword,
   savePrompt,
   updateCurrentUser,
@@ -43,14 +66,30 @@ import { ApiError } from "../lib/errors";
 import { usePromptWorkbench } from "../hooks/usePromptWorkbench";
 import { useAuth } from "../hooks/useAuth";
 
+const DEFAULT_KEYWORD_WEIGHT = 5;
+
+const clampWeight = (value?: number): number => {
+  if (typeof value !== "number" || Number.isNaN(value)) {
+    return DEFAULT_KEYWORD_WEIGHT;
+  }
+  if (value < 0) {
+    return 0;
+  }
+  if (value > 5) {
+    return 5;
+  }
+  return Math.round(value);
+};
+
 const mapKeywordResultToKeyword = (item: PromptKeywordResult): Keyword => {
   const source = (item.source as KeywordSource) ?? "api";
+  const weight = clampWeight(item.weight);
   return {
     id: item.keyword_id ? String(item.keyword_id) : nanoid(),
     word: item.word,
     polarity: item.polarity as Keyword["polarity"],
     source,
-    weight: 5,
+    weight,
   };
 };
 
@@ -59,7 +98,11 @@ const keywordToInput = (keyword: Keyword): PromptKeywordInput => ({
   word: keyword.word,
   polarity: keyword.polarity,
   source: keyword.source,
+  weight: clampWeight(keyword.weight),
 });
+
+const POSITIVE_CONTAINER_ID = "positive-keyword-container";
+const NEGATIVE_CONTAINER_ID = "negative-keyword-container";
 
 const dedupeKeywords = (keywords: Keyword[]): Keyword[] => {
   const seen = new Map<string, Keyword>();
@@ -82,7 +125,9 @@ export default function PromptWorkbenchPage() {
     positiveKeywords,
     negativeKeywords,
     setKeywords,
+    setCollections,
     upsertKeyword,
+    updateKeyword,
     removeKeyword,
     prompt,
     setPrompt,
@@ -106,12 +151,8 @@ export default function PromptWorkbenchPage() {
 
   const limitKeywordCollections = useCallback(
     (keywords: Keyword[]) => {
-      const positives = keywords.filter(
-        (item) => item.polarity === "positive",
-      );
-      const negatives = keywords.filter(
-        (item) => item.polarity === "negative",
-      );
+      const positives = keywords.filter((item) => item.polarity === "positive");
+      const negatives = keywords.filter((item) => item.polarity === "negative");
       const trimmedPositive = positives.length > keywordLimit;
       const trimmedNegative = negatives.length > keywordLimit;
       const limited = [
@@ -144,6 +185,166 @@ export default function PromptWorkbenchPage() {
     },
     [keywordLimit, t],
   );
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: { distance: 6 },
+    }),
+  );
+
+  const positiveIdSet = useMemo(
+    () => new Set(positiveKeywords.map((item) => item.id)),
+    [positiveKeywords],
+  );
+  const negativeIdSet = useMemo(
+    () => new Set(negativeKeywords.map((item) => item.id)),
+    [negativeKeywords],
+  );
+
+  const handleWeightChange = useCallback(
+    (id: string, nextWeight: number) => {
+      updateKeyword(id, (keyword) => ({
+        ...keyword,
+        weight: clampWeight(nextWeight),
+      }));
+    },
+    [updateKeyword],
+  );
+
+  const handleDragEnd = useCallback(
+    (event: DragEndEvent) => {
+      const { active, over } = event;
+      if (!over) {
+        return;
+      }
+      const activeId = String(active.id);
+      const overId = String(over.id);
+      if (activeId === overId) {
+        return;
+      }
+
+      const sourcePolarity: "positive" | "negative" | null = positiveIdSet.has(
+        activeId,
+      )
+        ? "positive"
+        : negativeIdSet.has(activeId)
+          ? "negative"
+          : null;
+      if (!sourcePolarity) {
+        return;
+      }
+
+      let destinationPolarity: "positive" | "negative";
+      if (overId === POSITIVE_CONTAINER_ID) {
+        destinationPolarity = "positive";
+      } else if (overId === NEGATIVE_CONTAINER_ID) {
+        destinationPolarity = "negative";
+      } else if (positiveIdSet.has(overId)) {
+        destinationPolarity = "positive";
+      } else if (negativeIdSet.has(overId)) {
+        destinationPolarity = "negative";
+      } else {
+        return;
+      }
+
+      const nextPositive = [...positiveKeywords];
+      const nextNegative = [...negativeKeywords];
+
+      const getDestinationIndex = (
+        target: Keyword[],
+        targetContainerId: string,
+      ) => {
+        if (
+          overId === targetContainerId ||
+          (!positiveIdSet.has(overId) && !negativeIdSet.has(overId))
+        ) {
+          return target.length;
+        }
+        const idx = target.findIndex((item) => item.id === overId);
+        return idx === -1 ? target.length : idx;
+      };
+
+      if (sourcePolarity === destinationPolarity) {
+        const targetArray =
+          sourcePolarity === "positive" ? nextPositive : nextNegative;
+        const containerId =
+          sourcePolarity === "positive"
+            ? POSITIVE_CONTAINER_ID
+            : NEGATIVE_CONTAINER_ID;
+        const activeIndex = targetArray.findIndex(
+          (item) => item.id === activeId,
+        );
+        if (activeIndex === -1) {
+          return;
+        }
+        let overIndex = getDestinationIndex(targetArray, containerId);
+        if (overIndex >= targetArray.length) {
+          overIndex = targetArray.length - 1;
+        }
+        const reordered = arrayMove(targetArray, activeIndex, overIndex);
+        if (sourcePolarity === "positive") {
+          setCollections(reordered, nextNegative);
+        } else {
+          setCollections(nextPositive, reordered);
+        }
+        return;
+      }
+
+      const sourceArray =
+        sourcePolarity === "positive" ? nextPositive : nextNegative;
+      const destinationArray =
+        destinationPolarity === "positive" ? nextPositive : nextNegative;
+      const sourceIndex = sourceArray.findIndex((item) => item.id === activeId);
+      if (sourceIndex === -1) {
+        return;
+      }
+      const [moved] = sourceArray.splice(sourceIndex, 1);
+      const destinationIndex = getDestinationIndex(
+        destinationArray,
+        destinationPolarity === "positive"
+          ? POSITIVE_CONTAINER_ID
+          : NEGATIVE_CONTAINER_ID,
+      );
+      const insertIndex = Math.min(destinationIndex, destinationArray.length);
+      destinationArray.splice(insertIndex, 0, {
+        ...moved,
+        polarity: destinationPolarity,
+      });
+      setCollections(nextPositive, nextNegative);
+    },
+    [
+      negativeIdSet,
+      negativeKeywords,
+      positiveIdSet,
+      positiveKeywords,
+      setCollections,
+    ],
+  );
+
+  const syncMutation = useMutation({
+    mutationFn: syncPromptWorkspaceKeywords,
+    onError: () => {
+      toast.error(
+        t("promptWorkbench.keywordSyncFailed", {
+          defaultValue: "关键词排序同步失败，请稍后重试",
+        }),
+      );
+    },
+  });
+
+  useEffect(() => {
+    if (!workspaceToken) {
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      syncMutation.mutate({
+        workspace_token: workspaceToken,
+        positive_keywords: positiveKeywords.map(keywordToInput),
+        negative_keywords: negativeKeywords.map(keywordToInput),
+      });
+    }, 400);
+    return () => window.clearTimeout(timer);
+  }, [workspaceToken, positiveKeywords, negativeKeywords, syncMutation]);
 
   const extractKeywordError = useCallback(
     (error: unknown) => {
@@ -368,7 +569,7 @@ export default function PromptWorkbenchPage() {
       );
     },
     onError: (error: unknown) => {
-    const limitMessage = extractKeywordError(error);
+      const limitMessage = extractKeywordError(error);
       if (limitMessage) {
         toast.warning(limitMessage);
         return;
@@ -397,6 +598,7 @@ export default function PromptWorkbenchPage() {
         workspace_token: workspaceToken ?? undefined,
         prompt_id:
           promptId && Number(promptId) > 0 ? Number(promptId) : undefined,
+        weight: DEFAULT_KEYWORD_WEIGHT,
       };
       return createManualPromptKeyword(payload);
     },
@@ -408,7 +610,7 @@ export default function PromptWorkbenchPage() {
       );
     },
     onError: (error: unknown) => {
-    const limitMessage = extractKeywordError(error);
+      const limitMessage = extractKeywordError(error);
       if (limitMessage) {
         toast.warning(limitMessage);
         return;
@@ -438,9 +640,10 @@ export default function PromptWorkbenchPage() {
     onError: (error: unknown) => {
       const message =
         error instanceof ApiError
-          ? error.message ?? t("promptWorkbench.keywordRemoveFailed", {
+          ? (error.message ??
+            t("promptWorkbench.keywordRemoveFailed", {
               defaultValue: "移除关键词失败，请稍后再试。",
-            })
+            }))
           : t("promptWorkbench.keywordRemoveFailed", {
               defaultValue: "移除关键词失败，请稍后再试。",
             });
@@ -490,7 +693,7 @@ export default function PromptWorkbenchPage() {
       );
     },
     onError: (error: unknown) => {
-    const limitMessage = extractKeywordError(error);
+      const limitMessage = extractKeywordError(error);
       if (limitMessage) {
         toast.warning(limitMessage);
         return;
@@ -634,10 +837,7 @@ export default function PromptWorkbenchPage() {
   const handlePublish = () => savePromptMutation.mutate(true);
 
   const handleRemoveKeyword = (keyword: Keyword) => {
-    if (
-      keyword.polarity === "positive" &&
-      positiveKeywords.length <= 1
-    ) {
+    if (keyword.polarity === "positive" && positiveKeywords.length <= 1) {
       toast.warning(
         t("promptWorkbench.keywordPositiveHint", {
           count: positiveKeywords.length,
@@ -663,15 +863,6 @@ export default function PromptWorkbenchPage() {
   };
 
   const hasPositive = positiveKeywords.length > 0;
-
-  const sortedPositive = useMemo(
-    () => [...positiveKeywords].sort((a, b) => b.weight - a.weight),
-    [positiveKeywords],
-  );
-  const sortedNegative = useMemo(
-    () => [...negativeKeywords].sort((a, b) => b.weight - a.weight),
-    [negativeKeywords],
-  );
 
   const totalKeywords = positiveKeywords.length + negativeKeywords.length;
   const promptEditorMinHeight = useMemo(() => {
@@ -894,32 +1085,39 @@ export default function PromptWorkbenchPage() {
           </div>
         </div>
 
-        <KeywordSection
-          title={t("promptWorkbench.positiveSectionTitle", {
-            defaultValue: "正向关键词",
-          })}
-          hint={t("promptWorkbench.keywordPositiveHint", {
-            count: sortedPositive.length,
-            limit: keywordLimit,
-            defaultValue:
-              "已选 {{count}} / {{limit}} 个，点击标签可移除，至少保留 1 个关键词",
-          })}
-          keywords={sortedPositive}
-          onRemove={handleRemoveKeyword}
-        />
-        <KeywordSection
-          title={t("promptWorkbench.negativeSectionTitle", {
-            defaultValue: "负向关键词",
-          })}
-          hint={t("promptWorkbench.keywordNegativeHint", {
-            count: sortedNegative.length,
-            limit: keywordLimit,
-            defaultValue: "已选 {{count}} / {{limit}} 个，点击标签可移除",
-          })}
-          keywords={sortedNegative}
-          tint="negative"
-          onRemove={handleRemoveKeyword}
-        />
+        <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
+          <KeywordSection
+            title={t("promptWorkbench.positiveSectionTitle", {
+              defaultValue: "正向关键词",
+            })}
+            hint={t("promptWorkbench.keywordPositiveHint", {
+              count: positiveKeywords.length,
+              limit: keywordLimit,
+              defaultValue:
+                "已选 {{count}} / {{limit}} 个，点击标签可移除，至少保留 1 个关键词",
+            })}
+            keywords={positiveKeywords}
+            polarity="positive"
+            droppableId={POSITIVE_CONTAINER_ID}
+            onWeightChange={handleWeightChange}
+            onRemove={handleRemoveKeyword}
+          />
+          <KeywordSection
+            title={t("promptWorkbench.negativeSectionTitle", {
+              defaultValue: "负向关键词",
+            })}
+            hint={t("promptWorkbench.keywordNegativeHint", {
+              count: negativeKeywords.length,
+              limit: keywordLimit,
+              defaultValue: "已选 {{count}} / {{limit}} 个，点击标签可移除",
+            })}
+            keywords={negativeKeywords}
+            polarity="negative"
+            droppableId={NEGATIVE_CONTAINER_ID}
+            onWeightChange={handleWeightChange}
+            onRemove={handleRemoveKeyword}
+          />
+        </DndContext>
       </GlassCard>
 
       <GlassCard
@@ -1051,7 +1249,9 @@ interface KeywordSectionProps {
   title: string;
   hint?: string;
   keywords: Keyword[];
-  tint?: "positive" | "negative";
+  polarity: "positive" | "negative";
+  droppableId: string;
+  onWeightChange: (id: string, weight: number) => void;
   onRemove: (keyword: Keyword) => void;
 }
 
@@ -1059,26 +1259,13 @@ function KeywordSection({
   title,
   hint,
   keywords,
-  tint = "positive",
+  polarity,
+  droppableId,
+  onWeightChange,
   onRemove,
 }: KeywordSectionProps) {
   const { t } = useTranslation();
-  const removeHint =
-    hint ??
-    t("promptWorkbench.keywordRemoveHint", {
-      defaultValue: "点击关键词可移除",
-    });
-
-  if (!keywords.length) {
-    return (
-      <div className="rounded-2xl border border-dashed border-slate-200 bg-white/60 p-6 text-center text-sm text-slate-400 transition-colors dark:border-slate-700 dark:bg-slate-900/50 dark:text-slate-500">
-        {t("promptWorkbench.emptySection", {
-          title,
-          defaultValue: `${title} 暂无数据`,
-        })}
-      </div>
-    );
-  }
+  const { setNodeRef, isOver } = useDroppable({ id: droppableId });
 
   return (
     <div className="space-y-3">
@@ -1090,36 +1277,139 @@ function KeywordSection({
           </span>
         ) : null}
       </div>
-      <div className="flex flex-wrap gap-2">
-        {keywords.map((keyword) => (
-          <button
-            key={keyword.id}
-            onClick={() => onRemove(keyword)}
-            type="button"
-            title={removeHint}
-            aria-label={t("promptWorkbench.removeKeywordAria", {
-              defaultValue: "移除关键词",
-            })}
-            className={cn(
-              "group flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-medium shadow-sm transition duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-1 focus-visible:ring-primary/40",
-              tint === "positive"
-                ? "border-primary/30 bg-primary/15 text-primary hover:border-primary hover:bg-primary hover:text-white"
-                : "border-secondary/30 bg-secondary/15 text-secondary hover:border-secondary hover:bg-secondary hover:text-white",
-            )}
-          >
-            <span>{keyword.word}</span>
-            <span className="rounded-full bg-white/80 px-1.5 py-0.5 text-[10px] text-slate-600 transition group-hover:bg-black/20 group-hover:text-white dark:bg-slate-800/60 dark:text-slate-200">
-              {t("promptWorkbench.weight", {
-                value: keyword.weight,
-                defaultValue: `权重 ${keyword.weight}`,
+      <div
+        ref={setNodeRef}
+        className={cn(
+          "rounded-2xl border border-white/60 bg-white/80 p-3 transition-colors dark:border-slate-800 dark:bg-slate-900/70",
+          isOver && "border-primary/60 bg-primary/5 dark:border-primary/60",
+        )}
+      >
+        <SortableContext
+          items={keywords.map((keyword) => keyword.id)}
+          strategy={verticalListSortingStrategy}
+        >
+          {keywords.length === 0 ? (
+            <div className="flex h-16 items-center justify-center text-xs text-slate-400 dark:text-slate-500">
+              {t("promptWorkbench.keywordDropPlaceholder", {
+                defaultValue: "将关键词拖拽到此处",
               })}
-            </span>
-            <span className="rounded-full bg-white/75 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-slate-500 transition group-hover:bg-black/30 group-hover:text-white dark:bg-slate-800/60 dark:text-slate-200">
-              {keyword.source}
-            </span>
-          </button>
-        ))}
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {keywords.map((keyword) => (
+                <SortableKeywordChip
+                  key={keyword.id}
+                  keyword={keyword}
+                  polarity={polarity}
+                  onWeightChange={onWeightChange}
+                  onRemove={onRemove}
+                />
+              ))}
+            </div>
+          )}
+        </SortableContext>
       </div>
+    </div>
+  );
+}
+
+interface SortableKeywordChipProps {
+  keyword: Keyword;
+  polarity: "positive" | "negative";
+  onWeightChange: (id: string, weight: number) => void;
+  onRemove: (keyword: Keyword) => void;
+}
+
+function SortableKeywordChip({
+  keyword,
+  polarity,
+  onWeightChange,
+  onRemove,
+}: SortableKeywordChipProps) {
+  const { t } = useTranslation();
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: keyword.id });
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+  };
+  const isPositive = polarity === "positive";
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={cn(
+        "group relative flex items-center gap-3 rounded-2xl border px-3 py-2 text-sm shadow-sm transition-colors",
+        isPositive
+          ? "border-primary/30 bg-primary/10 text-primary"
+          : "border-secondary/30 bg-secondary/10 text-secondary",
+        isDragging && "opacity-70",
+      )}
+    >
+      <button
+        type="button"
+        className="cursor-grab rounded-full bg-white/70 p-1 text-slate-500 transition hover:text-slate-700 focus:outline-none dark:bg-slate-800/60 dark:text-slate-300"
+        aria-label={t("promptWorkbench.dragHandle", {
+          defaultValue: "拖拽关键词",
+        })}
+        {...listeners}
+        {...attributes}
+      >
+        <GripVertical className="h-3.5 w-3.5" />
+      </button>
+      <div className="flex flex-1 flex-col gap-1 text-left">
+        <span className="text-sm font-medium text-slate-700 dark:text-slate-100">
+          {keyword.word}
+        </span>
+        <div className="flex flex-wrap items-center gap-2 text-xs text-slate-600 dark:text-slate-300">
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              className="rounded-full border border-white/60 bg-white/70 p-1 text-slate-500 transition hover:bg-white focus:outline-none disabled:opacity-40 dark:border-slate-700 dark:bg-slate-800/60"
+              onClick={() => onWeightChange(keyword.id, keyword.weight - 1)}
+              disabled={keyword.weight <= 0}
+              aria-label={t("promptWorkbench.decreaseWeight", {
+                defaultValue: "降低权重",
+              })}
+            >
+              <Minus className="h-3 w-3" />
+            </button>
+            <span className="min-w-[48px] text-center text-[11px] font-semibold text-slate-600 dark:text-slate-200">
+              {keyword.weight}/5
+            </span>
+            <button
+              type="button"
+              className="rounded-full border border-white/60 bg-white/70 p-1 text-slate-500 transition hover:bg-white focus:outline-none disabled:opacity-40 dark:border-slate-700 dark:bg-slate-800/60"
+              onClick={() => onWeightChange(keyword.id, keyword.weight + 1)}
+              disabled={keyword.weight >= 5}
+              aria-label={t("promptWorkbench.increaseWeight", {
+                defaultValue: "提升权重",
+              })}
+            >
+              <Plus className="h-3 w-3" />
+            </button>
+          </div>
+          <span className="rounded-full bg-white/80 px-2 py-0.5 text-[10px] uppercase tracking-wide text-slate-500 dark:bg-slate-800/60 dark:text-slate-200">
+            {keyword.source}
+          </span>
+        </div>
+      </div>
+      <button
+        type="button"
+        className="rounded-full bg-white/70 p-1 text-slate-400 transition hover:bg-rose-100 hover:text-rose-500 focus:outline-none dark:bg-slate-800/60 dark:text-slate-300 dark:hover:bg-rose-500/10 dark:hover:text-rose-400"
+        onClick={() => onRemove(keyword)}
+        aria-label={t("promptWorkbench.removeKeywordAria", {
+          defaultValue: "移除关键词",
+        })}
+      >
+        <X className="h-3 w-3" />
+      </button>
     </div>
   );
 }

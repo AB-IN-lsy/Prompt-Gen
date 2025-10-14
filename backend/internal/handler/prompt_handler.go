@@ -86,6 +86,7 @@ type KeywordPayload struct {
 	Word      string `json:"word" binding:"required"`
 	Source    string `json:"source"`
 	Polarity  string `json:"polarity"`
+	Weight    int    `json:"weight"`
 }
 
 // augmentRequest 描述补充关键词的请求体。
@@ -108,6 +109,7 @@ type manualKeywordRequest struct {
 	Language       string `json:"language"`
 	PromptID       uint   `json:"prompt_id"`
 	WorkspaceToken string `json:"workspace_token"`
+	Weight         int    `json:"weight"`
 }
 
 // removeKeywordRequest 用于同步移除工作区中的关键词。
@@ -115,6 +117,12 @@ type removeKeywordRequest struct {
 	Word           string `json:"word" binding:"required"`
 	Polarity       string `json:"polarity"`
 	WorkspaceToken string `json:"workspace_token"`
+}
+
+type syncWorkspaceRequest struct {
+	WorkspaceToken   string           `json:"workspace_token" binding:"required"`
+	PositiveKeywords []KeywordPayload `json:"positive_keywords"`
+	NegativeKeywords []KeywordPayload `json:"negative_keywords"`
 }
 
 // generateRequest 描述生成 Prompt 的输入。
@@ -147,8 +155,7 @@ type saveRequest struct {
 	WorkspaceToken   string           `json:"workspace_token"`
 }
 
-// Interpret 解析自然语言描述，返回主题与关键词建议。
-// Interpret 接收自然语言描述并调用模型解析主题与关键词。
+// Interpret 解析自然语言描述，返回主题与关键词，建议
 func (h *PromptHandler) Interpret(c *gin.Context) {
 	log := h.scope("interpret")
 
@@ -190,8 +197,7 @@ func (h *PromptHandler) Interpret(c *gin.Context) {
 	}, nil)
 }
 
-// AugmentKeywords 让模型补充更多关键词并自动去重。
-// AugmentKeywords 基于已有关键词调用模型补充新的候选词。
+// AugmentKeywords 让模型补充更多关键词并自动去重，返回新增的关键词列表。
 func (h *PromptHandler) AugmentKeywords(c *gin.Context) {
 	log := h.scope("augment_keywords")
 
@@ -241,7 +247,6 @@ func (h *PromptHandler) AugmentKeywords(c *gin.Context) {
 }
 
 // AddManualKeyword 处理手动关键词录入，立即落库供后续复用。
-// AddManualKeyword 处理手动录入关键词的请求。
 func (h *PromptHandler) AddManualKeyword(c *gin.Context) {
 	log := h.scope("manual_keyword")
 
@@ -265,6 +270,7 @@ func (h *PromptHandler) AddManualKeyword(c *gin.Context) {
 		Language:       req.Language,
 		PromptID:       req.PromptID,
 		WorkspaceToken: strings.TrimSpace(req.WorkspaceToken),
+		Weight:         req.Weight,
 	})
 	if err != nil {
 		if errors.Is(err, promptsvc.ErrPositiveKeywordLimit) {
@@ -288,7 +294,6 @@ func (h *PromptHandler) AddManualKeyword(c *gin.Context) {
 }
 
 // RemoveKeyword 同步删除临时工作区的关键词，保持后端缓存与前端一致。
-// RemoveKeyword 从临时工作区中移除指定关键词。
 func (h *PromptHandler) RemoveKeyword(c *gin.Context) {
 	log := h.scope("remove_keyword")
 
@@ -318,8 +323,37 @@ func (h *PromptHandler) RemoveKeyword(c *gin.Context) {
 	response.NoContent(c)
 }
 
+// SyncKeywords 将关键词的排序与权重同步到 Redis 工作区。
+func (h *PromptHandler) SyncKeywords(c *gin.Context) {
+	log := h.scope("sync_keywords")
+
+	userID, ok := extractUserID(c)
+	if !ok {
+		response.Fail(c, http.StatusUnauthorized, response.ErrUnauthorized, "missing user id", nil)
+		return
+	}
+
+	var req syncWorkspaceRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Fail(c, http.StatusBadRequest, response.ErrBadRequest, err.Error(), nil)
+		return
+	}
+
+	if err := h.service.SyncWorkspaceKeywords(c.Request.Context(), promptsvc.SyncWorkspaceInput{
+		UserID:         userID,
+		WorkspaceToken: strings.TrimSpace(req.WorkspaceToken),
+		Positive:       toServiceKeywords(req.PositiveKeywords),
+		Negative:       toServiceKeywords(req.NegativeKeywords),
+	}); err != nil {
+		log.Warnw("sync workspace keywords failed", "error", err, "user_id", userID)
+		response.Fail(c, http.StatusBadRequest, response.ErrBadRequest, err.Error(), nil)
+		return
+	}
+
+	response.NoContent(c)
+}
+
 // GeneratePrompt 调用大模型生成 Prompt，带限流保护。
-// GeneratePrompt 调用模型生成完整的 Prompt 草稿。
 func (h *PromptHandler) GeneratePrompt(c *gin.Context) {
 	log := h.scope("generate")
 
@@ -388,7 +422,6 @@ func (h *PromptHandler) GeneratePrompt(c *gin.Context) {
 	response.Success(c, http.StatusOK, payload, nil)
 }
 
-// SavePrompt 保存或发布 Prompt，并同步版本号。
 // SavePrompt 保存或发布 Prompt 草稿，并同步工作区元数据。
 func (h *PromptHandler) SavePrompt(c *gin.Context) {
 	log := h.scope("save")
@@ -469,7 +502,6 @@ const keywordLimitDetailCode = "KEYWORD_LIMIT"
 const keywordDuplicateDetailCode = "KEYWORD_DUPLICATE"
 
 // validateKeywordLimit 在进入业务逻辑前做守卫，避免传入超出限制的关键词集合。
-// validateKeywordLimit 在进入业务逻辑前校验正负关键词数量是否超限。
 func (h *PromptHandler) validateKeywordLimit(c *gin.Context, positive, negative []KeywordPayload) bool {
 	limit := h.service.KeywordLimit()
 	if len(positive) > limit {
@@ -483,7 +515,6 @@ func (h *PromptHandler) validateKeywordLimit(c *gin.Context, positive, negative 
 	return true
 }
 
-// keywordLimitError 将关键词超限的错误统一输出。
 // keywordLimitError 返回统一的关键词超限错误响应。
 func (h *PromptHandler) keywordLimitError(c *gin.Context, polarity string, count int) {
 	limit := h.service.KeywordLimit()
@@ -525,6 +556,7 @@ func toServiceKeywords(items []KeywordPayload) []promptsvc.KeywordItem {
 			Word:      item.Word,
 			Source:    item.Source,
 			Polarity:  item.Polarity,
+			Weight:    item.Weight,
 		})
 	}
 	return result
@@ -538,6 +570,7 @@ func toKeywordResponse(items []promptsvc.KeywordItem) []gin.H {
 			"word":       item.Word,
 			"source":     item.Source,
 			"polarity":   item.Polarity,
+			"weight":     item.Weight,
 		})
 	}
 	return result

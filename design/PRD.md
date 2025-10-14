@@ -128,6 +128,8 @@
   - 支持手动补充关键词。
   - 关键词入库后会关联到 Prompt，可在详情中反查被哪些 Prompt 使用。
 
+  - 每个关键词记录 `weight`（0~5），默认 5；前端支持通过 ± 调整并拖拽跨列，最新排序会经由 `/api/prompts/keywords/sync` 写回工作区。
+
 ### 4.4 Prompt 生成与版本管理
 
 - **功能点**：模板应用、生成、预览、保存、历史版本。
@@ -138,7 +140,7 @@
   - 保存时写入 SQLite（`prompts` 表），并记录 `user_id` / 时间戳。
   - 默认保存为 `draft` 状态，自动本地草稿保存（每 5 秒或关键操作后触发），用户显式点击“发布”后才变为 `published` 并进入同步队列。
   - 历史版本保留最近 3 版，可回滚，回滚后生成新的 `draft` 版本记录。
-  - `positive_keywords` / `negative_keywords` 字段逻辑上仍为 JSON 数组（元素结构 `{ "keyword_id": number, "word": string }`），SQLite 表直接使用 JSON 类型并默认 `[]`；MySQL 5.7 由于类型限制，使用 `TEXT` 存储已序列化的 JSON 字符串，服务端在读写时必须保证空数组写为 `'[]'`。
+  - `positive_keywords` / `negative_keywords` 仍保存为 JSON 数组，元素结构扩展为 `{ "keyword_id": number, "word": string, "weight": number, "source": string }`；SQLite 可直接使用 JSON 类型并默认 `[]`，MySQL 5.7 使用 `TEXT` 存储序列化结果，服务端需保证空数组写为 `'[]'`。
 
 ### 4.5 本地存储
 

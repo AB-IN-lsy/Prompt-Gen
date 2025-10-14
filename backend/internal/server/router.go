@@ -129,6 +129,7 @@ func NewRouter(opts RouterOptions) *gin.Engine {
 			prompts.POST("/keywords/augment", opts.PromptHandler.AugmentKeywords)
 			prompts.POST("/keywords/manual", opts.PromptHandler.AddManualKeyword)
 			prompts.POST("/keywords/remove", opts.PromptHandler.RemoveKeyword)
+			prompts.POST("/keywords/sync", opts.PromptHandler.SyncKeywords)
 			prompts.POST("/generate", opts.PromptHandler.GeneratePrompt)
 			prompts.POST("", opts.PromptHandler.SavePrompt)
 		}

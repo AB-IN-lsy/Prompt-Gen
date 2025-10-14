@@ -11,6 +11,23 @@ import { http, normaliseError } from "./http";
 export type KeywordPolarity = "positive" | "negative";
 export type KeywordSource = "local" | "api" | "manual";
 
+const DEFAULT_KEYWORD_WEIGHT = 5;
+const MIN_KEYWORD_WEIGHT = 0;
+const MAX_KEYWORD_WEIGHT = 5;
+
+const clampKeywordWeight = (value?: number): number => {
+  if (typeof value !== "number" || Number.isNaN(value)) {
+    return DEFAULT_KEYWORD_WEIGHT;
+  }
+  if (value < MIN_KEYWORD_WEIGHT) {
+    return MIN_KEYWORD_WEIGHT;
+  }
+  if (value > MAX_KEYWORD_WEIGHT) {
+    return MAX_KEYWORD_WEIGHT;
+  }
+  return Math.round(value);
+};
+
 /**
  * Keyword entity as returned by the backend. The Prompt Workbench primarily uses the
  * `id`, `word`, `polarity`, `source`, and `weight` fields.
@@ -204,6 +221,7 @@ export interface PromptKeywordInput {
   word: string;
   polarity: KeywordPolarity;
   source?: string;
+  weight?: number;
 }
 
 export interface PromptKeywordResult {
@@ -211,6 +229,7 @@ export interface PromptKeywordResult {
   word: string;
   polarity: KeywordPolarity;
   source?: string;
+  weight?: number;
 }
 
 export interface InterpretPromptResponse {
@@ -245,6 +264,7 @@ export interface ManualPromptKeywordRequest {
   workspace_token?: string;
   prompt_id?: number;
   language?: string;
+  weight?: number;
 }
 
 export interface RemovePromptKeywordRequest {
@@ -448,17 +468,18 @@ export async function deleteKeyword(id: string): Promise<void> {
 }
 
 const normalisePromptKeyword = (keyword: PromptKeywordInput) => {
-  const { keyword_id, ...rest } = keyword;
+  const { keyword_id, weight, ...rest } = keyword;
+  const payload = { ...rest, weight: clampKeywordWeight(weight) };
   if (typeof keyword_id === "number") {
-    return { ...rest, keyword_id };
+    return { ...payload, keyword_id };
   }
   if (typeof keyword_id === "string" && keyword_id.trim() !== "") {
     const parsed = Number(keyword_id);
     if (!Number.isNaN(parsed)) {
-      return { ...rest, keyword_id: parsed };
+      return { ...payload, keyword_id: parsed };
     }
   }
-  return rest;
+  return payload;
 };
 
 export async function interpretPromptDescription(payload: {
@@ -513,11 +534,15 @@ export async function createManualPromptKeyword(
   payload: ManualPromptKeywordRequest,
 ): Promise<PromptKeywordResult> {
   try {
+    const normalizedWeight = clampKeywordWeight(
+      payload.weight ?? DEFAULT_KEYWORD_WEIGHT,
+    );
     const response: AxiosResponse<PromptKeywordResult> = await http.post(
       "/prompts/keywords/manual",
       {
         ...payload,
         workspace_token: payload.workspace_token ?? undefined,
+        weight: normalizedWeight,
       },
     );
     return response.data;
@@ -534,6 +559,22 @@ export async function removePromptKeyword(
       word: payload.word,
       polarity: payload.polarity,
       workspace_token: payload.workspace_token ?? undefined,
+    });
+  } catch (error) {
+    throw normaliseError(error);
+  }
+}
+
+export async function syncPromptWorkspaceKeywords(payload: {
+  workspace_token: string;
+  positive_keywords: PromptKeywordInput[];
+  negative_keywords: PromptKeywordInput[];
+}): Promise<void> {
+  try {
+    await http.post("/prompts/keywords/sync", {
+      workspace_token: payload.workspace_token,
+      positive_keywords: payload.positive_keywords.map(normalisePromptKeyword),
+      negative_keywords: payload.negative_keywords.map(normalisePromptKeyword),
     });
   } catch (error) {
     throw normaliseError(error);
@@ -934,9 +975,8 @@ export async function deleteChangelogEntry(id: number): Promise<void> {
 /** 拉取 IP Guard 黑名单列表，仅管理员可用。 */
 export async function fetchIpGuardBans(): Promise<IpGuardEntry[]> {
   try {
-    const response: AxiosResponse<{ items: IpGuardEntry[] }> = await http.get(
-      "/ip-guard/bans",
-    );
+    const response: AxiosResponse<{ items: IpGuardEntry[] }> =
+      await http.get("/ip-guard/bans");
     return response.data.items ?? [];
   } catch (error) {
     throw normaliseError(error);

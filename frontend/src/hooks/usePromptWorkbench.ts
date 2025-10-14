@@ -24,16 +24,32 @@ interface WorkbenchState {
   setPromptId: (id: string | null) => void;
   setWorkspaceToken: (token: string | null) => void;
   setKeywords: (keywords: Keyword[]) => void;
+  setCollections: (positive: Keyword[], negative: Keyword[]) => void;
   addKeyword: (keyword: Keyword) => void;
   upsertKeyword: (keyword: Keyword) => void;
+  updateKeyword: (id: string, updater: (keyword: Keyword) => Keyword) => void;
   removeKeyword: (id: string) => void;
   setSaving: (saving: boolean) => void;
   reset: () => void;
 }
 
 const KEYWORD_LIMIT = PROMPT_KEYWORD_LIMIT;
+const DEFAULT_KEYWORD_WEIGHT = 5;
 
 const normalizeWord = (word: string) => word.trim().toLowerCase();
+
+const clampWeight = (value?: number): number => {
+  if (typeof value !== "number" || Number.isNaN(value)) {
+    return DEFAULT_KEYWORD_WEIGHT;
+  }
+  if (value < 0) {
+    return 0;
+  }
+  if (value > 5) {
+    return 5;
+  }
+  return Math.round(value);
+};
 
 const dedupeByPolarity = (keywords: Keyword[]) => {
   const seen = new Map<string, Keyword>();
@@ -48,9 +64,13 @@ const dedupeByPolarity = (keywords: Keyword[]) => {
 
 const normaliseKeyword = (keyword: Keyword): Keyword => {
   if (!keyword.id || keyword.id.length === 0) {
-    return { ...keyword, id: nanoid() };
+    return {
+      ...keyword,
+      id: nanoid(),
+      weight: clampWeight(keyword.weight),
+    };
   }
-  return keyword;
+  return { ...keyword, weight: clampWeight(keyword.weight) };
 };
 
 export const usePromptWorkbench = create<WorkbenchState>((set, get) => ({
@@ -79,6 +99,11 @@ export const usePromptWorkbench = create<WorkbenchState>((set, get) => ({
           .filter((item) => item.polarity === "negative")
           .map(normaliseKeyword),
       ).slice(0, KEYWORD_LIMIT),
+    }),
+  setCollections: (positive, negative) =>
+    set({
+      positiveKeywords: positive.map(normaliseKeyword).slice(0, KEYWORD_LIMIT),
+      negativeKeywords: negative.map(normaliseKeyword).slice(0, KEYWORD_LIMIT),
     }),
   addKeyword: (keyword) => {
     const entry = normaliseKeyword(keyword);
@@ -140,6 +165,27 @@ export const usePromptWorkbench = create<WorkbenchState>((set, get) => ({
           0,
           KEYWORD_LIMIT,
         ),
+      };
+    });
+  },
+  updateKeyword: (id, updater) => {
+    set(({ positiveKeywords, negativeKeywords }) => {
+      const updateList = (collection: Keyword[]) => {
+        const idx = collection.findIndex((item) => item.id === id);
+        if (idx === -1) {
+          return collection;
+        }
+        const next = [...collection];
+        next[idx] = normaliseKeyword(updater(collection[idx]));
+        return next;
+      };
+      const updatedPositive = updateList(positiveKeywords);
+      if (updatedPositive !== positiveKeywords) {
+        return { positiveKeywords: updatedPositive, negativeKeywords };
+      }
+      return {
+        positiveKeywords,
+        negativeKeywords: updateList(negativeKeywords),
       };
     });
   },

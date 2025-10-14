@@ -182,10 +182,12 @@ go run ./backend/cmd/sendmail -to you@example.com -name "测试账号"
 | `PUT` | `/api/models/:id` | 更新模型凭据（可替换 API Key） | JSON：`label`、`api_key`、`metadata` |
 | `DELETE` | `/api/models/:id` | 删除模型凭据 | 无 |
 | `POST` | `/api/prompts/interpret` | 自然语言解析主题与关键词 | JSON：`description`、`model_key`、`language` |
-| `POST` | `/api/prompts/keywords/augment` | 补充关键词并去重 | JSON：`topic`、`model_key`、`existing_positive[]`、`existing_negative[]` |
-| `POST` | `/api/prompts/keywords/manual` | 手动新增关键词并落库 | JSON：`topic`、`word`、`polarity`、`prompt_id` |
-| `POST` | `/api/prompts/generate` | 调模型生成 Prompt 正文 | JSON：`topic`、`model_key`、`positive_keywords[]`、`negative_keywords[]` |
-| `POST` | `/api/prompts` | 保存草稿或发布 Prompt | JSON：`prompt_id`、`topic`、`body`、`status`、`publish` |
+| `POST` | `/api/prompts/keywords/augment` | 补充关键词并去重 | JSON：`topic`、`model_key`、`existing_positive[]`、`existing_negative[]`、`workspace_token`（可选） |
+| `POST` | `/api/prompts/keywords/manual` | 手动新增关键词并落库 | JSON：`topic`、`word`、`polarity`、`weight`（可选，默认 5）、`prompt_id`（可选）、`workspace_token`（可选） |
+| `POST` | `/api/prompts/keywords/remove` | 从工作区移除关键词 | JSON：`word`、`polarity`、`workspace_token` |
+| `POST` | `/api/prompts/keywords/sync` | 同步排序与权重到工作区 | JSON：`workspace_token`、`positive_keywords[]`、`negative_keywords[]`（元素含 `word`、`polarity`、`weight`） |
+| `POST` | `/api/prompts/generate` | 调模型生成 Prompt 正文 | JSON：`topic`、`model_key`、`positive_keywords[]`、`negative_keywords[]`、`workspace_token`（可选） |
+| `POST` | `/api/prompts` | 保存草稿或发布 Prompt | JSON：`prompt_id`、`topic`、`body`、`status`、`publish`、`positive_keywords[]`、`negative_keywords[]`、`workspace_token`（可选） |
 | `GET` | `/api/changelog` | 获取更新日志列表 | Query：`locale`（可选，默认 `en`） |
 | `POST` | `/api/changelog` | 新增更新日志（管理员） | JSON：`locale`、`badge`、`title`、`summary`、`items[]`、`published_at` |
 | `PUT` | `/api/changelog/:id` | 编辑指定日志（管理员） | 同 `POST` |
@@ -568,7 +570,7 @@ go run ./backend/cmd/sendmail -to you@example.com -name "测试账号"
 
 #### POST /api/prompts/interpret
 
-- **用途**：解析用户输入的自然语言描述，生成主题与首批关键词建议。
+- **用途**：解析自然语言描述，生成主题、关键词及补充要求，并初始化工作区缓存。
 - **请求体**
 
   ```json
@@ -579,29 +581,30 @@ go run ./backend/cmd/sendmail -to you@example.com -name "测试账号"
   }
   ```
 
-- **成功响应**：`200`，返回 `topic`、`positive_keywords[]`、`negative_keywords[]`、`confidence`。同一用户 60 秒内默认限 3 次，超限返回 `429` 并在 `error.details.retry_after_seconds` 给出冷却时间。
+- **成功响应**：`200`，返回 `topic`、`positive_keywords[]`、`negative_keywords[]`（每项包含 `word`、`weight`、`source`）、`confidence`、`instructions` 以及 `workspace_token`。`weight` 为 0~5 的整数，数值越大表示与主题越相关，前端会优先展示权重高的关键词。
 - **常见错误**：描述为空或模型未配置 → `400`。
 
 #### POST /api/prompts/keywords/augment
 
-- **用途**：基于已有关键词调用模型补充新词，同时写入关键词字典，重复词会被自动过滤。
+- **用途**：在现有基础上补充高关联度关键词。若携带 `workspace_token`，新增词条会直接写入 Redis 工作区。
 - **请求体**
 
   ```json
   {
     "topic": "React 前端面试",
     "model_key": "deepseek-chat",
-    "existing_positive": [{"word": "React"}],
-    "existing_negative": [{"word": "过时框架"}]
+    "existing_positive": [{"word": "React", "weight": 5}],
+    "existing_negative": [{"word": "过时框架", "weight": 2}],
+    "workspace_token": "c9f0d7..."
   }
   ```
 
-- **成功响应**：`200`，返回新增的 `positive[]`、`negative[]`。
-- **常见错误**：缺少主题或模型 → `400`。
+- **成功响应**：`200`，返回新增的 `positive[]`、`negative[]`，每个元素同样包含 `word`、`weight`、`source` 字段。
+- **常见错误**：缺少主题或模型 → `400`；关键词数量已达上限 → `429`。
 
 #### POST /api/prompts/keywords/manual
 
-- **用途**：手动录入关键词，系统会在用户词典中落库并可选关联到当前 Prompt。
+- **用途**：手动录入关键词，支持指定权重并可选写入当前 Prompt 或工作区。
 - **请求体**
 
   ```json
@@ -609,30 +612,49 @@ go run ./backend/cmd/sendmail -to you@example.com -name "测试账号"
     "topic": "React 前端面试",
     "word": "组件设计",
     "polarity": "positive",
-    "prompt_id": 18
+    "weight": 5,
+    "prompt_id": 18,
+    "workspace_token": "c9f0d7..."
   }
   ```
 
-- **成功响应**：`201`，返回 `keyword_id`、`word`、`polarity`、`source`。
-- **常见错误**：缺少词语或主题 → `400`。
+- **成功响应**：`201`，返回 `keyword_id`、`word`、`polarity`、`source`、`weight`。
+- **常见错误**：缺少词语或主题 → `400`；超出正/负向上限 → `429`。
+
+#### POST /api/prompts/keywords/sync
+
+- **用途**：在拖拽排序或调整权重后同步前端状态到 Redis 工作区，保持后续生成/保存一致。
+- **请求体**
+
+  ```json
+  {
+    "workspace_token": "c9f0d7...",
+    "positive_keywords": [{"word": "React", "weight": 5}],
+    "negative_keywords": [{"word": "陈旧框架", "weight": 1}]
+  }
+  ```
+
+- **成功响应**：`204`。
+- **常见错误**：工作区不存在或 token 过期 → `400/404`。
 
 #### POST /api/prompts/generate
 
-- **用途**：根据主题与关键词调用用户配置的大模型生成 Prompt 正文。
+- **用途**：根据主题与关键词调用模型生成 Prompt，权重会作为提示语的参考信息。
 - **请求体**
 
   ```json
   {
     "topic": "React 前端面试",
     "model_key": "deepseek-chat",
-    "positive_keywords": [{"word": "React"}, {"word": "Hooks"}],
-    "negative_keywords": [{"word": "陈旧框架"}],
+    "positive_keywords": [{"word": "React", "weight": 5}, {"word": "Hooks", "weight": 4}],
+    "negative_keywords": [{"word": "陈旧框架", "weight": 1}],
     "instructions": "使用 STAR 框架组织问题",
-    "temperature": 0.7
+    "temperature": 0.7,
+    "workspace_token": "c9f0d7..."
   }
   ```
 
-- **成功响应**：`200`，返回 `prompt`、`model`、`duration_ms`、`usage`、关键词快照。同一用户 60 秒内默认限 3 次。
+- **成功响应**：`200`，返回 `prompt`、`model`、`duration_ms`、`usage`、关键词快照，并回传最终使用的关键词（含权重）。同一用户 60 秒内默认限 3 次。
 - **常见错误**：正向关键词为空 → `400`；模型调用失败 → `502`。
 
 #### POST /api/prompts
@@ -648,12 +670,13 @@ go run ./backend/cmd/sendmail -to you@example.com -name "测试账号"
     "model": "deepseek-chat",
     "status": "draft",
     "publish": false,
-    "positive_keywords": [{"word": "React"}],
-    "negative_keywords": []
+    "positive_keywords": [{"word": "React", "weight": 5}],
+    "negative_keywords": [{"word": "陈旧框架", "weight": 1}],
+    "workspace_token": "c9f0d7..."
   }
   ```
 
-- **成功响应**：`200`，返回 `prompt_id`、`status`、`version`。当 `publish=true` 时生成历史版本并更新 `published_at`。
+- **成功响应**：`200`，返回 `prompt_id`、`status`、`version`。当 `publish=true` 时生成历史版本并更新 `published_at`；关键字权重会一起落库，便于后续回滚与再生成。
 - **常见错误**：缺少 body/topic → `400`；目标 Prompt 不存在 → `404`。
 
 #### GET /api/changelog

@@ -65,6 +65,14 @@ const (
 // DefaultKeywordLimit 限制正/负向关键词数量的默认值。
 const DefaultKeywordLimit = 10
 
+const (
+	// minKeywordWeight/maxKeywordWeight 定义关键词相关度（0~5）的允许区间。
+	minKeywordWeight = 0
+	maxKeywordWeight = 5
+	// defaultKeywordWeight 用于 Interpret/Augment 未返回权重或手动录入时的兜底值。
+	defaultKeywordWeight = 5
+)
+
 var (
 	// ErrPositiveKeywordLimit 表示正向关键词数量超出上限。
 	ErrPositiveKeywordLimit = errors.New("positive keywords exceed limit")
@@ -166,6 +174,7 @@ type KeywordItem struct {
 	Word      string `json:"word"`
 	Source    string `json:"source"`
 	Polarity  string `json:"polarity"`
+	Weight    int    `json:"weight"`
 }
 
 // InterpretInput 描述解析自然语言所需的参数。
@@ -215,6 +224,7 @@ type ManualKeywordInput struct {
 	Language       string
 	PromptID       uint
 	WorkspaceToken string // interpret 返回的 Redis 工作区 token，用于把手动关键词写入缓存。
+	Weight         int
 }
 
 // RemoveKeywordInput 描述移除临时工作区关键词所需的参数。
@@ -223,6 +233,14 @@ type RemoveKeywordInput struct {
 	Word           string
 	Polarity       string
 	WorkspaceToken string
+}
+
+// SyncWorkspaceInput 用于将前端排序/权重调整同步到 Redis 工作区。
+type SyncWorkspaceInput struct {
+	UserID         uint
+	WorkspaceToken string
+	Positive       []KeywordItem
+	Negative       []KeywordItem
 }
 
 // GenerateInput 描述生成 Prompt 正文所需的上下文。
@@ -313,21 +331,23 @@ func (s *Service) Interpret(ctx context.Context, input InterpretInput) (Interpre
 		return InterpretOutput{}, errors.New("model did not return topic")
 	}
 	normalized := newKeywordSet()
-	for _, word := range payload.Positive {
+	for _, entry := range payload.Positive {
 		item := KeywordItem{
-			Word:     word,
+			Word:     entry.Word,
 			Source:   promptdomain.KeywordSourceModel,
 			Polarity: promptdomain.KeywordPolarityPositive,
+			Weight:   clampWeight(entry.Weight),
 		}
 		if normalized.add(item) {
 			result.PositiveKeywords = append(result.PositiveKeywords, item)
 		}
 	}
-	for _, word := range payload.Negative {
+	for _, entry := range payload.Negative {
 		item := KeywordItem{
-			Word:     word,
+			Word:     entry.Word,
 			Source:   promptdomain.KeywordSourceModel,
 			Polarity: promptdomain.KeywordPolarityNegative,
+			Weight:   clampWeight(entry.Weight),
 		}
 		if normalized.add(item) {
 			result.NegativeKeywords = append(result.NegativeKeywords, item)
@@ -417,14 +437,15 @@ func (s *Service) AugmentKeywords(ctx context.Context, input AugmentInput) (Augm
 		workspaceNew     []promptdomain.WorkspaceKeyword
 		workspaceEnabled = s.workspace != nil && strings.TrimSpace(input.WorkspaceToken) != ""
 	)
-	for _, word := range payload.Positive {
+	for idx, entry := range payload.Positive {
 		if positiveCapacity <= 0 {
 			break
 		}
 		item := KeywordItem{
-			Word:     word,
+			Word:     entry.Word,
 			Source:   promptdomain.KeywordSourceModel,
 			Polarity: promptdomain.KeywordPolarityPositive,
+			Weight:   clampWeight(entry.Weight),
 		}
 		if existing.add(item) {
 			output.Positive = append(output.Positive, item)
@@ -434,6 +455,8 @@ func (s *Service) AugmentKeywords(ctx context.Context, input AugmentInput) (Augm
 					Word:     strings.TrimSpace(item.Word),
 					Source:   sourceFallback(item.Source),
 					Polarity: promptdomain.KeywordPolarityPositive,
+					Weight:   clampWeight(entry.Weight),
+					Score:    float64(time.Now().UnixNano()) + float64(idx),
 				})
 			} else {
 				if _, err := s.keywords.Upsert(ctx, toKeywordEntity(input.UserID, input.Topic, item)); err != nil {
@@ -442,14 +465,15 @@ func (s *Service) AugmentKeywords(ctx context.Context, input AugmentInput) (Augm
 			}
 		}
 	}
-	for _, word := range payload.Negative {
+	for idx, entry := range payload.Negative {
 		if negativeCapacity <= 0 {
 			break
 		}
 		item := KeywordItem{
-			Word:     word,
+			Word:     entry.Word,
 			Source:   promptdomain.KeywordSourceModel,
 			Polarity: promptdomain.KeywordPolarityNegative,
+			Weight:   clampWeight(entry.Weight),
 		}
 		if existing.add(item) {
 			output.Negative = append(output.Negative, item)
@@ -459,6 +483,8 @@ func (s *Service) AugmentKeywords(ctx context.Context, input AugmentInput) (Augm
 					Word:     strings.TrimSpace(item.Word),
 					Source:   sourceFallback(item.Source),
 					Polarity: promptdomain.KeywordPolarityNegative,
+					Weight:   clampWeight(entry.Weight),
+					Score:    float64(time.Now().UnixNano()) + float64(idx),
 				})
 			} else {
 				if _, err := s.keywords.Upsert(ctx, toKeywordEntity(input.UserID, input.Topic, item)); err != nil {
@@ -496,6 +522,12 @@ func (s *Service) AddManualKeyword(ctx context.Context, input ManualKeywordInput
 	if source == "" {
 		source = promptdomain.KeywordSourceManual
 	}
+	weight := clampWeight(func(val int) int {
+		if val <= 0 {
+			return defaultKeywordWeight
+		}
+		return val
+	}(input.Weight))
 	if s.workspace != nil && strings.TrimSpace(input.WorkspaceToken) != "" {
 		token := strings.TrimSpace(input.WorkspaceToken)
 		storeCtx, cancel := s.workspaceContext(ctx)
@@ -525,6 +557,8 @@ func (s *Service) AddManualKeyword(ctx context.Context, input ManualKeywordInput
 			Word:     word,
 			Source:   source,
 			Polarity: polarity,
+			Weight:   weight,
+			Score:    float64(time.Now().UnixNano()),
 		}
 		if err := s.workspace.MergeKeywords(storeCtx, input.UserID, token, []promptdomain.WorkspaceKeyword{workspaceKeyword}); err != nil {
 			s.logger.Warnw("merge manual keyword to workspace failed", "user_id", input.UserID, "token", token, "word", word, "error", err)
@@ -536,6 +570,7 @@ func (s *Service) AddManualKeyword(ctx context.Context, input ManualKeywordInput
 			Word:      word,
 			Source:    source,
 			Polarity:  polarity,
+			Weight:    weight,
 		}, nil
 	}
 
@@ -543,6 +578,7 @@ func (s *Service) AddManualKeyword(ctx context.Context, input ManualKeywordInput
 		Word:     word,
 		Source:   source,
 		Polarity: polarity,
+		Weight:   weight,
 	})
 	if lang := strings.TrimSpace(input.Language); lang != "" {
 		entity.Language = lang
@@ -557,6 +593,7 @@ func (s *Service) AddManualKeyword(ctx context.Context, input ManualKeywordInput
 		Word:      stored.Word,
 		Source:    stored.Source,
 		Polarity:  stored.Polarity,
+		Weight:    clampWeight(stored.Weight),
 	}
 	if input.PromptID != 0 {
 		if err := s.keywords.AttachToPrompt(ctx, input.PromptID, stored.ID, relationByPolarity(item.Polarity)); err != nil {
@@ -582,6 +619,39 @@ func (s *Service) RemoveWorkspaceKeyword(ctx context.Context, input RemoveKeywor
 	storeCtx, cancel := s.workspaceContext(ctx)
 	defer cancel()
 	if err := s.workspace.RemoveKeyword(storeCtx, input.UserID, token, normalizePolarity(input.Polarity), word); err != nil {
+		return err
+	}
+	return nil
+}
+
+// SyncWorkspaceKeywords 将前端的排序与权重同步到工作区缓存，保持 Redis 状态与 UI 一致。
+// 若工作区 token 失效会返回错误，前端需重新获取最新数据。
+func (s *Service) SyncWorkspaceKeywords(ctx context.Context, input SyncWorkspaceInput) error {
+	if s.workspace == nil {
+		return nil
+	}
+	token := strings.TrimSpace(input.WorkspaceToken)
+	if token == "" {
+		return errors.New("workspace token is empty")
+	}
+	if err := enforceKeywordLimit(s.keywordLimit, input.Positive, input.Negative); err != nil {
+		return err
+	}
+	storeCtx, cancel := s.workspaceContext(ctx)
+	defer cancel()
+	snapshot, err := s.workspace.Snapshot(storeCtx, input.UserID, token)
+	if err != nil {
+		if errors.Is(err, redis.Nil) {
+			return fmt.Errorf("workspace not found")
+		}
+		return err
+	}
+	snapshot.Positive = workspaceKeywordsFromOrdered(input.Positive, s.keywordLimit)
+	snapshot.Negative = workspaceKeywordsFromOrdered(input.Negative, s.keywordLimit)
+	snapshot.UpdatedAt = time.Now()
+	snapshot.Version++
+	snapshot.Token = token
+	if _, err := s.workspace.CreateOrReplace(storeCtx, input.UserID, snapshot); err != nil {
 		return err
 	}
 	return nil
@@ -727,6 +797,7 @@ func toKeywordEntity(userID uint, topic string, item KeywordItem) *promptdomain.
 		Polarity: normalizePolarity(item.Polarity),
 		Source:   sourceFallback(item.Source),
 		Language: "zh",
+		Weight:   clampWeight(item.Weight),
 	}
 }
 
@@ -745,7 +816,33 @@ func toWorkspaceKeywords(items []KeywordItem, limit int) []promptdomain.Workspac
 			Word:     strings.TrimSpace(item.Word),
 			Source:   sourceFallback(item.Source),
 			Polarity: normalizePolarity(item.Polarity),
-			Weight:   0,
+			Weight:   clampWeight(item.Weight),
+			Score:    float64(idx + 1),
+		})
+	}
+	return result
+}
+
+// workspaceKeywordsFromOrdered 根据 UI 提交的顺序重建工作区关键词列表，用于拖拽/调权之后的同步。
+func workspaceKeywordsFromOrdered(items []KeywordItem, limit int) []promptdomain.WorkspaceKeyword {
+	if limit <= 0 {
+		limit = DefaultKeywordLimit
+	}
+	capacity := limit
+	if len(items) < capacity {
+		capacity = len(items)
+	}
+	result := make([]promptdomain.WorkspaceKeyword, 0, capacity)
+	for idx, item := range items {
+		if idx >= limit {
+			break
+		}
+		result = append(result, promptdomain.WorkspaceKeyword{
+			Word:     strings.TrimSpace(item.Word),
+			Source:   sourceFallback(item.Source),
+			Polarity: normalizePolarity(item.Polarity),
+			Weight:   clampWeight(item.Weight),
+			Score:    float64(idx + 1),
 		})
 	}
 	return result
@@ -762,6 +859,7 @@ func keywordItemsFromWorkspace(items []promptdomain.WorkspaceKeyword, limit int)
 			Word:     strings.TrimSpace(item.Word),
 			Source:   sourceFallback(item.Source),
 			Polarity: normalizePolarity(item.Polarity),
+			Weight:   clampWeight(item.Weight),
 		})
 		if len(result) >= limit {
 			break
@@ -1094,21 +1192,26 @@ func (s *Service) recordPromptVersion(ctx context.Context, prompt *promptdomain.
 	return s.prompts.CreateVersion(ctx, version)
 }
 
+type keywordPayload struct {
+	Word   string `json:"word"`
+	Weight int    `json:"weight"`
+}
+
 type interpretationPayload struct {
 	Topic        string
-	Positive     []string
-	Negative     []string
+	Positive     []keywordPayload
+	Negative     []keywordPayload
 	Confidence   float64
 	Instructions string
 }
 
 // rawInterpretationPayload 用于兼容模型返回的多种 instructions 表达形式（字符串或数组）。
 type rawInterpretationPayload struct {
-	Topic        string      `json:"topic"`
-	Positive     []string    `json:"positive_keywords"`
-	Negative     []string    `json:"negative_keywords"`
-	Confidence   float64     `json:"confidence"`
-	Instructions interface{} `json:"instructions"`
+	Topic        string           `json:"topic"`
+	Positive     []keywordPayload `json:"positive_keywords"`
+	Negative     []keywordPayload `json:"negative_keywords"`
+	Confidence   float64          `json:"confidence"`
+	Instructions interface{}      `json:"instructions"`
 }
 
 func parseInterpretationPayload(resp modeldomain.ChatCompletionResponse) (interpretationPayload, error) {
@@ -1125,8 +1228,8 @@ func parseInterpretationPayload(resp modeldomain.ChatCompletionResponse) (interp
 	}
 	result := interpretationPayload{
 		Topic:        strings.TrimSpace(raw.Topic),
-		Positive:     normalizeWordSlice(raw.Positive),
-		Negative:     normalizeWordSlice(raw.Negative),
+		Positive:     normalizeKeywordPayloadSlice(raw.Positive),
+		Negative:     normalizeKeywordPayloadSlice(raw.Negative),
 		Confidence:   raw.Confidence,
 		Instructions: normalizeInstructions(raw.Instructions),
 	}
@@ -1134,8 +1237,8 @@ func parseInterpretationPayload(resp modeldomain.ChatCompletionResponse) (interp
 }
 
 type augmentPayload struct {
-	Positive []string `json:"positive_keywords"`
-	Negative []string `json:"negative_keywords"`
+	Positive []keywordPayload `json:"positive_keywords"`
+	Negative []keywordPayload `json:"negative_keywords"`
 }
 
 func parseAugmentPayload(resp modeldomain.ChatCompletionResponse) (augmentPayload, error) {
@@ -1150,26 +1253,30 @@ func parseAugmentPayload(resp modeldomain.ChatCompletionResponse) (augmentPayloa
 	if err := json.Unmarshal([]byte(content), &payload); err != nil {
 		return augmentPayload{}, fmt.Errorf("decode augment response: %w", err)
 	}
-	payload.Positive = normalizeWordSlice(payload.Positive)
-	payload.Negative = normalizeWordSlice(payload.Negative)
+	payload.Positive = normalizeKeywordPayloadSlice(payload.Positive)
+	payload.Negative = normalizeKeywordPayloadSlice(payload.Negative)
 	return payload, nil
 }
 
-// normalizeWordSlice 去除关键词前后空白并以忽略大小写的方式去重。
-func normalizeWordSlice(words []string) []string {
-	out := make([]string, 0, len(words))
+// normalizeKeywordPayloadSlice 对模型返回的关键词 payload 进行清洗，补齐权重并去重。
+func normalizeKeywordPayloadSlice(items []keywordPayload) []keywordPayload {
+	out := make([]keywordPayload, 0, len(items))
 	seen := map[string]struct{}{}
-	for _, word := range words {
-		trimmed := strings.TrimSpace(word)
-		if trimmed == "" {
+	for _, item := range items {
+		word := strings.TrimSpace(item.Word)
+		if word == "" {
 			continue
 		}
-		key := strings.ToLower(trimmed)
+		key := strings.ToLower(word)
 		if _, ok := seen[key]; ok {
 			continue
 		}
 		seen[key] = struct{}{}
-		out = append(out, trimmed)
+		weight := clampWeight(item.Weight)
+		out = append(out, keywordPayload{
+			Word:   word,
+			Weight: weight,
+		})
 	}
 	return out
 }
@@ -1216,6 +1323,17 @@ func joinInstructions(items []string) string {
 	return builder.String()
 }
 
+// clampWeight 用于清洗模型或前端传入的权重，避免写入异常值。
+func clampWeight(value int) int {
+	if value < minKeywordWeight {
+		return minKeywordWeight
+	}
+	if value > maxKeywordWeight {
+		return maxKeywordWeight
+	}
+	return value
+}
+
 func extractPromptText(resp modeldomain.ChatCompletionResponse) string {
 	if len(resp.Choices) == 0 {
 		return ""
@@ -1230,6 +1348,7 @@ func marshalKeywordItems(items []KeywordItem) ([]byte, error) {
 			KeywordID: item.KeywordID,
 			Word:      strings.TrimSpace(item.Word),
 			Source:    sourceFallback(item.Source),
+			Weight:    clampWeight(item.Weight),
 		})
 	}
 	data, err := json.Marshal(payload)
@@ -1281,8 +1400,8 @@ func buildInterpretationRequest(description, language string) modeldomain.ChatCo
 	lang := languageOrDefault(language)
 	system := "你是一名 Prompt 主题解析助手，负责从用户的自然语言意图中提炼主题、补充要求以及关键词。请始终返回结构化 JSON。"
 	user := fmt.Sprintf(
-		"目标语言：%s\n请从以下描述中提炼一个主题，拆分 3~6 个正向关键词与 1~4 个负向关键词，并总结 1~2 条补充要求，输出 JSON：\n"+
-			"{\"topic\":\"主题名称\",\"instructions\":\"补充要求\",\"positive_keywords\":[\"关键词\"],\"negative_keywords\":[\"关键词\"],\"confidence\":0.0~1.0}\n"+
+		"目标语言：%s\n请从以下描述中提炼一个主题，拆分 3~6 个正向关键词与 1~4 个负向关键词，并总结 1~2 条补充要求。每个关键词需返回 0~5 的整数权重，表示与主题的相关度（0 为几乎无关，5 为强相关）。输出 JSON（保持字段命名一致）：\n"+
+			"{\"topic\":\"主题名称\",\"instructions\":\"补充要求\",\"positive_keywords\":[{\"word\":\"关键词\",\"weight\":0-5}],\"negative_keywords\":[{\"word\":\"关键词\",\"weight\":0-5}],\"confidence\":0.0-1.0}\n"+
 			"描述：%s",
 		lang, description,
 	)
@@ -1304,8 +1423,8 @@ func buildAugmentRequest(input AugmentInput) modeldomain.ChatCompletionRequest {
 	fmt.Fprintf(builder, "目标语言：%s\n主题：%s\n", lang, input.Topic)
 	fmt.Fprintf(builder, "已有正向关键词：%s\n", joinKeywordWords(input.ExistingPositive))
 	fmt.Fprintf(builder, "已有负向关键词：%s\n", joinKeywordWords(input.ExistingNegative))
-	fmt.Fprintf(builder, "请补充不超过 %d 个正向关键词与 %d 个负向关键词，保持 JSON 输出：\n"+
-		"{\"positive_keywords\":[\"词汇\"],\"negative_keywords\":[\"词汇\"]}",
+	fmt.Fprintf(builder, "请补充不超过 %d 个正向关键词与 %d 个负向关键词，保持 JSON 输出，并为每个关键词给出 0~5 的整数权重（5 表示与主题高度相关）：\n"+
+		"{\"positive_keywords\":[{\"word\":\"词汇\",\"weight\":0-5}],\"negative_keywords\":[{\"word\":\"词汇\",\"weight\":0-5}]}",
 		defaultIfZero(input.RequestedPositive, 5),
 		defaultIfZero(input.RequestedNegative, 3),
 	)
@@ -1329,6 +1448,7 @@ func buildGenerateRequest(input GenerateInput) modeldomain.ChatCompletionRequest
 	if len(input.NegativeKeywords) > 0 {
 		fmt.Fprintf(builder, "负向关键词：%s\n", joinKeywordWords(input.NegativeKeywords))
 	}
+	fmt.Fprintf(builder, "请优先覆盖相关度较高（接近 %d）的正向关键词，并避免引入负向关键词。\n", maxKeywordWeight)
 	if strings.TrimSpace(input.Instructions) != "" {
 		fmt.Fprintf(builder, "补充要求：%s\n", input.Instructions)
 	}
@@ -1364,7 +1484,8 @@ func joinKeywordWords(items []KeywordItem) string {
 		if word == "" {
 			continue
 		}
-		words = append(words, word)
+		weight := clampWeight(item.Weight)
+		words = append(words, fmt.Sprintf("%s（相关度 %d/%d）", word, weight, maxKeywordWeight))
 	}
 	if len(words) == 0 {
 		return "（无）"

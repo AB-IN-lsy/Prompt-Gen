@@ -27,6 +27,7 @@ type PromptKeywordItem struct {
 	KeywordID uint   `json:"keyword_id,omitempty"`
 	Word      string `json:"word"`
 	Source    string `json:"source,omitempty"`
+	Weight    int    `json:"weight,omitempty"`
 }
 
 // Prompt 表示用户保存的完整 Prompt 记录。
