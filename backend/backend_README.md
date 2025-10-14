@@ -4,6 +4,7 @@
 
 ## 最近进展
 
+- 调整 Prompt 工作台：前端仅在检测到关键词顺序或权重实际变化时才调用 `POST /api/prompts/keywords/sync`，显著降低接口调用频率，后端无需额外改动即可受益。
 - 新增用户头像字段 `avatar_url`，支持上传后通过 `PUT /api/users/me` 保存。
 - 新增 `POST /api/uploads/avatar` 接口，可接收 multipart 头像并返回可访问的静态地址。
 - 默认开放 `/static/**` 路由映射到 `backend/public` 目录，供头像等资源直接访问。
@@ -194,6 +195,8 @@ go run ./backend/cmd/sendmail -to you@example.com -name "测试账号"
 | `DELETE` | `/api/changelog/:id` | 删除指定日志（管理员） | 无 |
 | `GET` | `/api/ip-guard/bans` | 查询仍在封禁期内的 IP 列表（管理员） | 无；需登录且具备 `is_admin=true` |
 | `DELETE` | `/api/ip-guard/bans/:ip` | 解除指定 IP 的封禁记录（管理员） | 路径参数 `ip`，需登录且具备 `is_admin=true` |
+
+> 注：出于本地开发便利，来自 127.0.0.1 / ::1 的回环地址会跳过 IP Guard 限制，不计入限流与封禁。
 
 ### 更新日志存储与管理
 

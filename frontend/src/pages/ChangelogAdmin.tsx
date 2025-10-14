@@ -3,7 +3,14 @@
  * @Date: 2025-10-14
  * @FilePath: \electron-go-app\frontend\src\pages\ChangelogAdmin.tsx
  */
-import { FormEvent, useEffect, useMemo, useReducer, useState } from "react";
+import {
+  FormEvent,
+  useEffect,
+  useMemo,
+  useReducer,
+  useRef,
+  useState,
+} from "react";
 import { useTranslation } from "react-i18next";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -72,6 +79,8 @@ function editorReducer(state: EditorState, action: EditorAction): EditorState {
 export default function ChangelogAdminPage() {
   const { t, i18n } = useTranslation();
   const isAdmin = useAuth((state) => state.profile?.user?.is_admin ?? false);
+  const preferredModel =
+    useAuth((state) => state.profile?.settings?.preferred_model) ?? "";
   const queryClient = useQueryClient();
   const locale = i18n.language.startsWith("zh") ? "zh-CN" : "en";
   const [editorState, dispatch] = useReducer(
@@ -84,6 +93,7 @@ export default function ChangelogAdminPage() {
   );
   const [translationModelKey, setTranslationModelKey] = useState("");
   const [isDeleting, setDeleting] = useState<number | null>(null);
+  const translationToastId = useRef<string | number | null>(null);
 
   if (!isAdmin) {
     return (
@@ -114,8 +124,8 @@ export default function ChangelogAdminPage() {
     dispatch({ type: "reset", locale });
     setAutoTranslate(false);
     setTranslateTargets(locale === "zh-CN" ? ["en"] : ["zh-CN"]);
-    setTranslationModelKey("");
-  }, [locale]);
+    setTranslationModelKey(preferredModel || "");
+  }, [locale, preferredModel]);
 
   useEffect(() => {
     setTranslateTargets((prev) => {
@@ -128,18 +138,45 @@ export default function ChangelogAdminPage() {
     });
   }, [editorState.locale]);
 
-  const createMutation = useMutation<
-    ChangelogCreateResult,
-    unknown,
-    ChangelogPayload
-  >({
-    mutationFn: createChangelogEntry,
-    onSuccess: (result) => {
-      const translations = result.translations ?? [];
-      if (translations.length > 0) {
-        toast.success(
-          t("logsPage.admin.successCreateWithTranslations", {
-            count: translations.length,
+  useEffect(() => {
+    if (
+      autoTranslate &&
+      !(translationModelKey || "").trim() &&
+      preferredModel
+    ) {
+      setTranslationModelKey(preferredModel);
+    }
+  }, [autoTranslate, preferredModel, translationModelKey]);
+
+const createMutation = useMutation<
+  ChangelogCreateResult,
+  unknown,
+  ChangelogPayload
+>({
+  mutationFn: createChangelogEntry,
+  onMutate: () => {
+    if (autoTranslate && translationModelKey.trim()) {
+      if (translationToastId.current) {
+        toast.dismiss(translationToastId.current);
+      }
+      translationToastId.current = toast.loading(
+        t("logsPage.admin.translateLoading", {
+          defaultValue: "正在提交并请求翻译...",
+        }),
+        { duration: Infinity },
+      );
+    }
+  },
+  onSuccess: (result) => {
+    if (translationToastId.current) {
+      toast.dismiss(translationToastId.current);
+      translationToastId.current = null;
+    }
+    const translations = result.translations ?? [];
+    if (translations.length > 0) {
+      toast.success(
+        t("logsPage.admin.successCreateWithTranslations", {
+          count: translations.length,
           }),
         );
       } else {
@@ -148,36 +185,61 @@ export default function ChangelogAdminPage() {
       dispatch({ type: "reset", locale });
       setAutoTranslate(false);
       setTranslateTargets(locale === "zh-CN" ? ["en"] : ["zh-CN"]);
-      setTranslationModelKey("");
+      setTranslationModelKey(preferredModel || "");
       void queryClient.invalidateQueries({ queryKey: ["changelog-admin", locale] });
       void queryClient.invalidateQueries({ queryKey: ["changelog", locale] });
     },
     onError: (error: unknown) => {
+    if (translationToastId.current) {
+      toast.dismiss(translationToastId.current);
+      translationToastId.current = null;
+    }
       console.error(error);
       toast.error(t("errors.generic"));
     },
   });
 
-  const updateMutation = useMutation<
-    ChangelogEntry,
-    unknown,
-    { id: number; payload: ChangelogPayload }
-  >({
-    mutationFn: ({ id, payload }) => updateChangelogEntry(id, payload),
-    onSuccess: () => {
-      toast.success(t("logsPage.admin.successUpdate"));
-      dispatch({ type: "reset", locale });
-      setAutoTranslate(false);
-      setTranslateTargets(locale === "zh-CN" ? ["en"] : ["zh-CN"]);
-      setTranslationModelKey("");
+const updateMutation = useMutation<
+  ChangelogEntry,
+  unknown,
+  { id: number; payload: ChangelogPayload }
+>({
+  mutationFn: ({ id, payload }) => updateChangelogEntry(id, payload),
+  onMutate: () => {
+    if (autoTranslate && translationModelKey.trim()) {
+      if (translationToastId.current) {
+        toast.dismiss(translationToastId.current);
+      }
+      translationToastId.current = toast.loading(
+        t("logsPage.admin.translateLoading", {
+          defaultValue: "正在提交并请求翻译...",
+        }),
+        { duration: Infinity },
+      );
+    }
+  },
+  onSuccess: () => {
+    if (translationToastId.current) {
+      toast.dismiss(translationToastId.current);
+      translationToastId.current = null;
+    }
+    toast.success(t("logsPage.admin.successUpdate"));
+    dispatch({ type: "reset", locale });
+    setAutoTranslate(false);
+    setTranslateTargets(locale === "zh-CN" ? ["en"] : ["zh-CN"]);
+    setTranslationModelKey(preferredModel || "");
       void queryClient.invalidateQueries({ queryKey: ["changelog-admin", locale] });
       void queryClient.invalidateQueries({ queryKey: ["changelog", locale] });
     },
-    onError: (error: unknown) => {
-      console.error(error);
-      toast.error(t("errors.generic"));
-    },
-  });
+  onError: (error: unknown) => {
+    if (translationToastId.current) {
+      toast.dismiss(translationToastId.current);
+      translationToastId.current = null;
+    }
+    console.error(error);
+    toast.error(t("errors.generic"));
+  },
+});
 
   const deleteMutation = useMutation({
     mutationFn: deleteChangelogEntry,
@@ -381,7 +443,19 @@ export default function ChangelogAdminPage() {
               type="button"
               size="sm"
               variant="outline"
-              onClick={() => setAutoTranslate((prev) => !prev)}
+              onClick={() =>
+                setAutoTranslate((prev) => {
+                  const next = !prev;
+                  if (
+                    next &&
+                    !(translationModelKey || "").trim() &&
+                    preferredModel
+                  ) {
+                    setTranslationModelKey(preferredModel);
+                  }
+                  return next;
+                })
+              }
             >
               {autoTranslate
                 ? t("logsPage.admin.cancel")
@@ -456,7 +530,7 @@ export default function ChangelogAdminPage() {
                 dispatch({ type: "reset", locale });
                 setAutoTranslate(false);
                 setTranslateTargets(locale === "zh-CN" ? ["en"] : ["zh-CN"]);
-                setTranslationModelKey("");
+                setTranslationModelKey(preferredModel || "");
               }}
             >
               {editorState.id

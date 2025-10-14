@@ -10,6 +10,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"strings"
 	"time"
@@ -106,6 +107,11 @@ func (m *IPGuardMiddleware) Handle() gin.HandlerFunc {
 		}
 
 		ctx := c.Request.Context()
+		if isLoopbackIP(ip) {
+			c.Next()
+			return
+		}
+
 		if blocked, ttl, err := m.isBlacklisted(ctx, ip); err == nil && blocked {
 			m.logger.Infow("blocked by ipguard", "ip", ip, "ttl_seconds", int(ttl.Seconds()))
 			response.Fail(c, http.StatusForbidden, response.ErrForbidden, "access temporarily denied", nil)
@@ -154,6 +160,7 @@ func (m *IPGuardMiddleware) HoneypotHandler() gin.HandlerFunc {
 	}
 }
 
+// hit 会在当前时间窗口内累加指定 IP 的请求次数，并在触发阈值时返回限流信息。
 func (m *IPGuardMiddleware) hit(ctx context.Context, ip string) (bool, time.Duration, error) {
 	counterKey := fmt.Sprintf("%s:cnt:%s", m.cfg.Prefix, ip)
 	pipe := m.client.TxPipeline()
@@ -178,6 +185,7 @@ func (m *IPGuardMiddleware) hit(ctx context.Context, ip string) (bool, time.Dura
 	return false, retryAfter, nil
 }
 
+// recordStrike 记录一次触发限流的“违规”次数，累计达到上限时自动拉黑该 IP。
 func (m *IPGuardMiddleware) recordStrike(ctx context.Context, ip string) error {
 	strikeKey := fmt.Sprintf("%s:str:%s", m.cfg.Prefix, ip)
 	pipe := m.client.TxPipeline()
@@ -192,6 +200,7 @@ func (m *IPGuardMiddleware) recordStrike(ctx context.Context, ip string) error {
 	return nil
 }
 
+// blacklist 将目标 IP 写入黑名单并设置过期时间。
 func (m *IPGuardMiddleware) blacklist(ctx context.Context, ip string, ttl time.Duration) error {
 	key := fmt.Sprintf("%s:ban:%s", m.cfg.Prefix, ip)
 	if err := m.client.Set(ctx, key, "1", ttl).Err(); err != nil {
@@ -200,6 +209,7 @@ func (m *IPGuardMiddleware) blacklist(ctx context.Context, ip string, ttl time.D
 	return nil
 }
 
+// isBlacklisted 查询指定 IP 是否仍处于黑名单状态，同时返回剩余封禁时长。
 func (m *IPGuardMiddleware) isBlacklisted(ctx context.Context, ip string) (bool, time.Duration, error) {
 	key := fmt.Sprintf("%s:ban:%s", m.cfg.Prefix, ip)
 	ttl, err := m.client.TTL(ctx, key).Result()
@@ -213,6 +223,21 @@ func (m *IPGuardMiddleware) isBlacklisted(ctx context.Context, ip string) (bool,
 		return false, 0, nil
 	}
 	return true, ttl, nil
+}
+
+// isLoopbackIP 判断 IP 是否属于本地回环地址，内部调用 net.ParseIP 兼容 IPv6。
+func isLoopbackIP(ip string) bool {
+	parsed := net.ParseIP(ip)
+	if parsed == nil {
+		// 处理形如 "::1%lo0" 的地址：先剥离 zone
+		if idx := strings.LastIndex(ip, "%"); idx > 0 {
+			parsed = net.ParseIP(ip[:idx])
+		}
+	}
+	if parsed == nil {
+		return false
+	}
+	return parsed.IsLoopback()
 }
 
 // ListBlacklistEntries 汇总 Redis 中仍处于封禁态的 IP，供后台可视化展示。

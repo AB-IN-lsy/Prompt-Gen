@@ -2,12 +2,23 @@
  * @Author: NEFU AB-IN
  * @Date: 2025-10-09 22:47:19
  * @FilePath: \electron-go-app\frontend\src\pages\PromptWorkbench.tsx
- * @LastEditTime: 2025-10-12 21:59:00
+ * @LastEditTime: 2025-10-14 16:16:50
  */
-import { ChangeEvent, useCallback, useEffect, useMemo, useState } from "react";
+import {
+  ChangeEvent,
+  Fragment,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   DndContext,
+  DragCancelEvent,
   DragEndEvent,
+  DragOverEvent,
+  DragStartEvent,
   PointerSensor,
   useDroppable,
   useSensor,
@@ -147,6 +158,29 @@ export default function PromptWorkbenchPage() {
   const [newKeyword, setNewKeyword] = useState("");
   const [polarity, setPolarity] = useState<"positive" | "negative">("positive");
   const [confidence, setConfidence] = useState<number | null>(null);
+  const [keywordsDirty, setKeywordsDirty] = useState(false);
+  const [dropIndicator, setDropIndicator] = useState<{
+    polarity: "positive" | "negative";
+    index: number;
+  } | null>(null);
+  const interpretToastId = useRef<string | number | null>(null);
+  const augmentToastId = useRef<string | number | null>(null);
+  const generateToastId = useRef<string | number | null>(null);
+  const clearDropIndicator = useCallback(() => {
+    setDropIndicator((previous) => (previous ? null : previous));
+  }, []);
+  const showLoadingToast = useCallback((ref: { current: string | number | null }, message: string) => {
+    if (ref.current) {
+      toast.dismiss(ref.current);
+    }
+    ref.current = toast.loading(message, { duration: Infinity });
+  }, []);
+  const dismissLoadingToast = useCallback((ref: { current: string | number | null }) => {
+    if (ref.current) {
+      toast.dismiss(ref.current);
+      ref.current = null;
+    }
+  }, []);
   const keywordLimit = PROMPT_KEYWORD_LIMIT;
 
   const limitKeywordCollections = useCallback(
@@ -201,18 +235,184 @@ export default function PromptWorkbenchPage() {
     [negativeKeywords],
   );
 
+  const serializeKeywords = useCallback(
+    (keywords: Keyword[]) =>
+      keywords.map((item) => ({
+        id: item.id,
+        weight: clampWeight(item.weight),
+        polarity: item.polarity,
+        word: item.word,
+      })),
+    [],
+  );
+
+  const buildSignature = useCallback(
+    (positive: Keyword[], negative: Keyword[]) =>
+      JSON.stringify({
+        positive: serializeKeywords(positive),
+        negative: serializeKeywords(negative),
+      }),
+    [serializeKeywords],
+  );
+
+  const syncSignature = useMemo(
+    () => buildSignature(positiveKeywords, negativeKeywords),
+    [buildSignature, negativeKeywords, positiveKeywords],
+  );
+
+  const lastSyncedSignature = useRef<string>("");
+  const latestSignatureRef = useRef<string>(syncSignature);
+  const syncTimerRef = useRef<number | null>(null);
+
+  const markKeywordsDirty = useCallback(() => setKeywordsDirty(true), []);
+
+  const updateSignatureBaseline = useCallback(
+    (positive: Keyword[], negative: Keyword[]) => {
+      const signature = buildSignature(positive, negative);
+      lastSyncedSignature.current = signature;
+      latestSignatureRef.current = signature;
+      setKeywordsDirty(false);
+    },
+    [buildSignature],
+  );
+
   const handleWeightChange = useCallback(
     (id: string, nextWeight: number) => {
       updateKeyword(id, (keyword) => ({
         ...keyword,
         weight: clampWeight(nextWeight),
       }));
+      markKeywordsDirty();
     },
-    [updateKeyword],
+    [markKeywordsDirty, updateKeyword],
+  );
+
+  const sortByWeight = useCallback(
+    (polarity: "positive" | "negative") => {
+      const sortedPositive = [...positiveKeywords];
+      const sortedNegative = [...negativeKeywords];
+      const compare = (a: Keyword, b: Keyword) =>
+        clampWeight(b.weight) - clampWeight(a.weight) ||
+        a.word.localeCompare(b.word, undefined, { sensitivity: "base" });
+      if (polarity === "positive") {
+        sortedPositive.sort(compare);
+      } else {
+        sortedNegative.sort(compare);
+      }
+      setCollections(sortedPositive, sortedNegative);
+      markKeywordsDirty();
+    },
+    [markKeywordsDirty, negativeKeywords, positiveKeywords, setCollections],
+  );
+
+  const handleDragStart = useCallback(
+    (event: DragStartEvent) => {
+      const activeId = String(event.active.id);
+      const keywordExists =
+        positiveKeywords.some((item) => item.id === activeId) ||
+        negativeKeywords.some((item) => item.id === activeId);
+      if (!keywordExists) {
+        return;
+      }
+      clearDropIndicator();
+    },
+    [
+      clearDropIndicator,
+      negativeKeywords,
+      positiveKeywords,
+    ],
+  );
+
+  const handleDragOver = useCallback(
+    (event: DragOverEvent) => {
+      const { active, over } = event;
+      if (!over) {
+        clearDropIndicator();
+        return;
+      }
+      const activeId = String(active.id);
+      const overId = String(over.id);
+      if (overId === activeId) {
+        clearDropIndicator();
+        return;
+      }
+      const sourcePolarity: "positive" | "negative" | null = positiveIdSet.has(
+        activeId,
+      )
+        ? "positive"
+        : negativeIdSet.has(activeId)
+          ? "negative"
+          : null;
+      if (!sourcePolarity) {
+        clearDropIndicator();
+        return;
+      }
+      let destinationPolarity: "positive" | "negative" | null = null;
+      if (overId === POSITIVE_CONTAINER_ID || positiveIdSet.has(overId)) {
+        destinationPolarity = "positive";
+      } else if (overId === NEGATIVE_CONTAINER_ID || negativeIdSet.has(overId)) {
+        destinationPolarity = "negative";
+      }
+      if (!destinationPolarity) {
+        clearDropIndicator();
+        return;
+      }
+      const targetKeywords =
+        destinationPolarity === "positive"
+          ? positiveKeywords
+          : negativeKeywords;
+      const targetContainerId =
+        destinationPolarity === "positive"
+          ? POSITIVE_CONTAINER_ID
+          : NEGATIVE_CONTAINER_ID;
+      let destinationIndex: number;
+      if (
+        overId === targetContainerId ||
+        (!positiveIdSet.has(overId) && !negativeIdSet.has(overId))
+      ) {
+        destinationIndex = targetKeywords.length;
+      } else {
+        const idx = targetKeywords.findIndex((item) => item.id === overId);
+        destinationIndex = idx === -1 ? targetKeywords.length : idx;
+      }
+      if (
+        sourcePolarity === destinationPolarity &&
+        destinationIndex ===
+          targetKeywords.findIndex((item) => item.id === activeId)
+      ) {
+        clearDropIndicator();
+        return;
+      }
+      setDropIndicator((previous) => {
+        if (
+          previous &&
+          previous.polarity === destinationPolarity &&
+          previous.index === destinationIndex
+        ) {
+          return previous;
+        }
+        return { polarity: destinationPolarity, index: destinationIndex };
+      });
+    },
+    [
+      clearDropIndicator,
+      negativeIdSet,
+      negativeKeywords,
+      positiveIdSet,
+      positiveKeywords,
+    ],
+  );
+
+  const handleDragCancel = useCallback(
+    (_event: DragCancelEvent) => {
+      clearDropIndicator();
+    },
+    [clearDropIndicator],
   );
 
   const handleDragEnd = useCallback(
     (event: DragEndEvent) => {
+      clearDropIndicator();
       const { active, over } = event;
       if (!over) {
         return;
@@ -283,36 +483,41 @@ export default function PromptWorkbenchPage() {
         }
         const reordered = arrayMove(targetArray, activeIndex, overIndex);
         if (sourcePolarity === "positive") {
-          setCollections(reordered, nextNegative);
+          nextPositive.splice(0, nextPositive.length, ...reordered);
         } else {
-          setCollections(nextPositive, reordered);
+          nextNegative.splice(0, nextNegative.length, ...reordered);
         }
-        return;
+      } else {
+        const sourceArray =
+          sourcePolarity === "positive" ? nextPositive : nextNegative;
+        const destinationArray =
+          destinationPolarity === "positive" ? nextPositive : nextNegative;
+        const sourceIndex = sourceArray.findIndex(
+          (item) => item.id === activeId,
+        );
+        if (sourceIndex === -1) {
+          return;
+        }
+        const [moved] = sourceArray.splice(sourceIndex, 1);
+        const destinationIndex = getDestinationIndex(
+          destinationArray,
+          destinationPolarity === "positive"
+            ? POSITIVE_CONTAINER_ID
+            : NEGATIVE_CONTAINER_ID,
+        );
+        const insertIndex = Math.min(destinationIndex, destinationArray.length);
+        destinationArray.splice(insertIndex, 0, {
+          ...moved,
+          polarity: destinationPolarity,
+        });
       }
 
-      const sourceArray =
-        sourcePolarity === "positive" ? nextPositive : nextNegative;
-      const destinationArray =
-        destinationPolarity === "positive" ? nextPositive : nextNegative;
-      const sourceIndex = sourceArray.findIndex((item) => item.id === activeId);
-      if (sourceIndex === -1) {
-        return;
-      }
-      const [moved] = sourceArray.splice(sourceIndex, 1);
-      const destinationIndex = getDestinationIndex(
-        destinationArray,
-        destinationPolarity === "positive"
-          ? POSITIVE_CONTAINER_ID
-          : NEGATIVE_CONTAINER_ID,
-      );
-      const insertIndex = Math.min(destinationIndex, destinationArray.length);
-      destinationArray.splice(insertIndex, 0, {
-        ...moved,
-        polarity: destinationPolarity,
-      });
       setCollections(nextPositive, nextNegative);
+      markKeywordsDirty();
     },
     [
+      clearDropIndicator,
+      markKeywordsDirty,
       negativeIdSet,
       negativeKeywords,
       positiveIdSet,
@@ -330,21 +535,63 @@ export default function PromptWorkbenchPage() {
         }),
       );
     },
+    onSuccess: () => {
+      lastSyncedSignature.current = latestSignatureRef.current;
+      setKeywordsDirty(false);
+    },
   });
 
   useEffect(() => {
+    latestSignatureRef.current = syncSignature;
+  }, [syncSignature]);
+
+  useEffect(() => {
+    if (syncTimerRef.current !== null) {
+      window.clearTimeout(syncTimerRef.current);
+      syncTimerRef.current = null;
+    }
+
     if (!workspaceToken) {
+      lastSyncedSignature.current = "";
       return;
     }
-    const timer = window.setTimeout(() => {
+
+    if (!keywordsDirty) {
+      return;
+    }
+
+    if (syncMutation.isPending) {
+      return;
+    }
+
+    if (syncSignature === lastSyncedSignature.current) {
+      setKeywordsDirty(false);
+      return;
+    }
+
+    syncTimerRef.current = window.setTimeout(() => {
+      latestSignatureRef.current = syncSignature;
       syncMutation.mutate({
         workspace_token: workspaceToken,
         positive_keywords: positiveKeywords.map(keywordToInput),
         negative_keywords: negativeKeywords.map(keywordToInput),
       });
     }, 400);
-    return () => window.clearTimeout(timer);
-  }, [workspaceToken, positiveKeywords, negativeKeywords, syncMutation]);
+
+    return () => {
+      if (syncTimerRef.current !== null) {
+        window.clearTimeout(syncTimerRef.current);
+        syncTimerRef.current = null;
+      }
+    };
+  }, [
+    keywordsDirty,
+    negativeKeywords,
+    positiveKeywords,
+    syncMutation,
+    syncSignature,
+    workspaceToken,
+  ]);
 
   const extractKeywordError = useCallback(
     (error: unknown) => {
@@ -393,11 +640,19 @@ export default function PromptWorkbenchPage() {
         limitKeywordCollections(keywordQuery.data);
       setKeywords(limited);
       notifyKeywordTrim(trimmedPositive, trimmedNegative);
+      const nextPositive = limited.filter(
+        (item) => item.polarity === "positive",
+      );
+      const nextNegative = limited.filter(
+        (item) => item.polarity === "negative",
+      );
+      updateSignatureBaseline(nextPositive, nextNegative);
     }
   }, [
     keywordQuery.data,
     limitKeywordCollections,
     notifyKeywordTrim,
+    updateSignatureBaseline,
     setKeywords,
   ]);
 
@@ -499,7 +754,16 @@ export default function PromptWorkbenchPage() {
         workspace_token: workspaceToken ?? undefined,
       });
     },
+    onMutate: () => {
+      showLoadingToast(
+        interpretToastId,
+        t("promptWorkbench.interpretLoading", {
+          defaultValue: "正在解析描述...",
+        }),
+      );
+    },
     onSuccess: (data) => {
+      dismissLoadingToast(interpretToastId);
       if (data.topic) {
         setTopic(data.topic);
       }
@@ -512,6 +776,13 @@ export default function PromptWorkbenchPage() {
         limitKeywordCollections(deduped);
       setKeywords(limited);
       notifyKeywordTrim(trimmedPositive, trimmedNegative);
+      const nextPositive = limited.filter(
+        (item) => item.polarity === "positive",
+      );
+      const nextNegative = limited.filter(
+        (item) => item.polarity === "negative",
+      );
+      updateSignatureBaseline(nextPositive, nextNegative);
       setInstructions(data.instructions ?? "");
       setConfidence(data.confidence ?? null);
       setPrompt("");
@@ -522,6 +793,7 @@ export default function PromptWorkbenchPage() {
       );
     },
     onError: (error: unknown) => {
+      dismissLoadingToast(interpretToastId);
       const limitMessage = extractKeywordError(error);
       if (limitMessage) {
         toast.warning(limitMessage);
@@ -552,7 +824,16 @@ export default function PromptWorkbenchPage() {
         workspace_token: workspaceToken ?? undefined,
       });
     },
+    onMutate: () => {
+      showLoadingToast(
+        augmentToastId,
+        t("promptWorkbench.augmentLoading", {
+          defaultValue: "正在补充关键词...",
+        }),
+      );
+    },
     onSuccess: (data: AugmentPromptKeywordsResponse) => {
+      dismissLoadingToast(augmentToastId);
       const nextKeywords = [
         ...positiveKeywords,
         ...negativeKeywords,
@@ -564,11 +845,19 @@ export default function PromptWorkbenchPage() {
         limitKeywordCollections(deduped);
       setKeywords(limited);
       notifyKeywordTrim(trimmedPositive, trimmedNegative);
+      const nextPositive = limited.filter(
+        (item) => item.polarity === "positive",
+      );
+      const nextNegative = limited.filter(
+        (item) => item.polarity === "negative",
+      );
+      updateSignatureBaseline(nextPositive, nextNegative);
       toast.success(
         t("promptWorkbench.augmentSuccess", { defaultValue: "已补充关键词" }),
       );
     },
     onError: (error: unknown) => {
+      dismissLoadingToast(augmentToastId);
       const limitMessage = extractKeywordError(error);
       if (limitMessage) {
         toast.warning(limitMessage);
@@ -636,6 +925,7 @@ export default function PromptWorkbenchPage() {
     },
     onSuccess: (_, keyword) => {
       removeKeyword(keyword.id);
+      markKeywordsDirty();
     },
     onError: (error: unknown) => {
       const message =
@@ -672,7 +962,16 @@ export default function PromptWorkbenchPage() {
         workspace_token: workspaceToken ?? undefined,
       });
     },
+    onMutate: () => {
+      showLoadingToast(
+        generateToastId,
+        t("promptWorkbench.generateLoading", {
+          defaultValue: "正在生成 Prompt...",
+        }),
+      );
+    },
     onSuccess: (response: GeneratePromptResponse) => {
+      dismissLoadingToast(generateToastId);
       setPrompt(response.prompt);
       setWorkspaceToken(response.workspace_token ?? workspaceToken ?? null);
       if (response.positive_keywords || response.negative_keywords) {
@@ -687,12 +986,20 @@ export default function PromptWorkbenchPage() {
           limitKeywordCollections(deduped);
         setKeywords(limited);
         notifyKeywordTrim(trimmedPositive, trimmedNegative);
+        const nextPositive = limited.filter(
+          (item) => item.polarity === "positive",
+        );
+        const nextNegative = limited.filter(
+          (item) => item.polarity === "negative",
+        );
+        updateSignatureBaseline(nextPositive, nextNegative);
       }
       toast.success(
         t("promptWorkbench.generateSuccess", { defaultValue: "生成完成" }),
       );
     },
     onError: (error: unknown) => {
+      dismissLoadingToast(generateToastId);
       const limitMessage = extractKeywordError(error);
       if (limitMessage) {
         toast.warning(limitMessage);
@@ -850,6 +1157,7 @@ export default function PromptWorkbenchPage() {
     }
     if (!workspaceToken) {
       removeKeyword(keyword.id);
+      markKeywordsDirty();
       return;
     }
     removeKeywordMutation.mutate(keyword);
@@ -880,7 +1188,7 @@ export default function PromptWorkbenchPage() {
   const isAugmenting = augmentMutation.isPending;
 
   return (
-    <div className="grid grid-cols-1 gap-6 text-slate-700 transition-colors dark:text-slate-200 xl:grid-cols-[420px_minmax(0,1fr)] xl:items-start">
+    <div className="grid grid-cols-1 gap-6 text-slate-700 transition-colors dark:text-slate-200 xl:grid-cols-[360px_minmax(320px,360px)_minmax(0,1fr)] xl:items-start">
       <GlassCard className="flex flex-col gap-6">
         <header className="flex items-center justify-between">
           <div>
@@ -993,33 +1301,15 @@ export default function PromptWorkbenchPage() {
           </div>
         </div>
 
-        <header className="flex items-center justify-between">
-          <div>
-            <p className="text-xs uppercase tracking-[0.28em] text-slate-400 dark:text-slate-500">
-              {t("promptWorkbench.keywordsTitle", { defaultValue: "关键词" })}
-            </p>
-            <h2 className="mt-1 text-xl font-semibold text-slate-800 dark:text-slate-100">
-              {t("promptWorkbench.keywordsSubtitle", {
-                defaultValue: "关键词治理",
-              })}
-            </h2>
-          </div>
-          <Button
-            variant="default"
-            size="sm"
-            className="shadow-md"
-            onClick={handleAugment}
-            disabled={isAugmenting || !topic}
-          >
-            {isAugmenting ? (
-              <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
-            ) : (
-              <Sparkles className="mr-2 h-4 w-4" />
-            )}
-            {t("promptWorkbench.augmentKeywords", {
-              defaultValue: "AI 补充关键词",
+        <header>
+          <p className="text-xs uppercase tracking-[0.28em] text-slate-400 dark:text-slate-500">
+            {t("promptWorkbench.keywordsTitle", { defaultValue: "关键词" })}
+          </p>
+          <h2 className="mt-1 text-xl font-semibold text-slate-800 dark:text-slate-100">
+            {t("promptWorkbench.keywordsSubtitle", {
+              defaultValue: "关键词治理",
             })}
-          </Button>
+          </h2>
         </header>
 
         <div className="rounded-2xl border border-white/60 bg-white/80 p-4 shadow-sm transition-colors dark:border-slate-800 dark:bg-slate-900/70">
@@ -1083,9 +1373,37 @@ export default function PromptWorkbenchPage() {
               {t("promptWorkbench.negative", { defaultValue: "负向" })}
             </Badge>
           </div>
+          <div className="mt-4 flex flex-wrap items-center gap-3 text-sm text-slate-500 dark:text-slate-300">
+            <span>{t("promptWorkbench.augmentSuggestion")}</span>
+            <Button
+              variant="secondary"
+              size="sm"
+              className="shadow-sm"
+              onClick={handleAugment}
+              disabled={isAugmenting || !topic}
+            >
+              {isAugmenting ? (
+                <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <Sparkles className="mr-2 h-4 w-4" />
+              )}
+              {t("promptWorkbench.augmentKeywords", {
+                defaultValue: "AI 补充关键词",
+              })}
+            </Button>
+          </div>
         </div>
 
-        <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
+      </GlassCard>
+
+      <GlassCard className="flex flex-col gap-5">
+        <DndContext
+          sensors={sensors}
+          onDragStart={handleDragStart}
+          onDragOver={handleDragOver}
+          onDragEnd={handleDragEnd}
+          onDragCancel={handleDragCancel}
+        >
           <KeywordSection
             title={t("promptWorkbench.positiveSectionTitle", {
               defaultValue: "正向关键词",
@@ -1099,6 +1417,12 @@ export default function PromptWorkbenchPage() {
             keywords={positiveKeywords}
             polarity="positive"
             droppableId={POSITIVE_CONTAINER_ID}
+            onSort={() => sortByWeight("positive")}
+            dropIndicatorIndex={
+              dropIndicator?.polarity === "positive"
+                ? dropIndicator.index
+                : null
+            }
             onWeightChange={handleWeightChange}
             onRemove={handleRemoveKeyword}
           />
@@ -1114,6 +1438,12 @@ export default function PromptWorkbenchPage() {
             keywords={negativeKeywords}
             polarity="negative"
             droppableId={NEGATIVE_CONTAINER_ID}
+            onSort={() => sortByWeight("negative")}
+            dropIndicatorIndex={
+              dropIndicator?.polarity === "negative"
+                ? dropIndicator.index
+                : null
+            }
             onWeightChange={handleWeightChange}
             onRemove={handleRemoveKeyword}
           />
@@ -1251,6 +1581,8 @@ interface KeywordSectionProps {
   keywords: Keyword[];
   polarity: "positive" | "negative";
   droppableId: string;
+  onSort?: () => void;
+  dropIndicatorIndex?: number | null;
   onWeightChange: (id: string, weight: number) => void;
   onRemove: (keyword: Keyword) => void;
 }
@@ -1261,27 +1593,44 @@ function KeywordSection({
   keywords,
   polarity,
   droppableId,
+  onSort,
+  dropIndicatorIndex,
   onWeightChange,
   onRemove,
 }: KeywordSectionProps) {
   const { t } = useTranslation();
   const { setNodeRef, isOver } = useDroppable({ id: droppableId });
+  const indicatorIndex = typeof dropIndicatorIndex === "number" ? dropIndicatorIndex : -1;
 
   return (
     <div className="space-y-3">
-      <div className="flex items-center justify-between text-sm text-slate-500 dark:text-slate-400">
-        <span>{title}</span>
-        {hint ? (
-          <span className="text-xs text-slate-400 dark:text-slate-500">
-            {hint}
-          </span>
+      <div className="flex flex-wrap items-center justify-between gap-2 text-sm text-slate-500 dark:text-slate-400">
+        <span className="flex-1 min-w-[140px]">{title}</span>
+        {onSort ? (
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            className="ml-auto h-7 rounded-lg px-2 text-xs font-medium text-primary shadow-sm transition-colors hover:bg-primary/15 hover:text-primary dark:bg-primary/20 dark:text-primary-100 dark:hover:bg-primary/25"
+            onClick={onSort}
+          >
+            {t("promptWorkbench.sortByWeight", {
+              defaultValue: "按权重排序",
+            })}
+          </Button>
         ) : null}
       </div>
+      {hint ? (
+        <p className="text-xs text-slate-400 dark:text-slate-500">{hint}</p>
+      ) : null}
       <div
         ref={setNodeRef}
         className={cn(
-          "rounded-2xl border border-white/60 bg-white/80 p-3 transition-colors dark:border-slate-800 dark:bg-slate-900/70",
-          isOver && "border-primary/60 bg-primary/5 dark:border-primary/60",
+          "rounded-2xl border border-white/60 bg-white/80 p-3 transition-all duration-200 dark:border-slate-800 dark:bg-slate-900/70",
+          isOver &&
+            "border-primary/70 bg-primary/10 shadow-[0_0_0_3px_rgba(59,130,246,0.12)] dark:border-primary/70 dark:bg-primary/10",
+          indicatorIndex >= 0 &&
+            "border-primary/60 bg-primary/5 dark:border-primary/60 dark:bg-primary/5",
         )}
       >
         <SortableContext
@@ -1289,22 +1638,30 @@ function KeywordSection({
           strategy={verticalListSortingStrategy}
         >
           {keywords.length === 0 ? (
-            <div className="flex h-16 items-center justify-center text-xs text-slate-400 dark:text-slate-500">
-              {t("promptWorkbench.keywordDropPlaceholder", {
-                defaultValue: "将关键词拖拽到此处",
-              })}
+            <div className="flex h-16 flex-col items-center justify-center gap-2 text-xs text-slate-400 dark:text-slate-500">
+              <span>
+                {t("promptWorkbench.keywordDropPlaceholder", {
+                  defaultValue: "将关键词拖拽到此处",
+                })}
+              </span>
+              {indicatorIndex === 0 ? <KeywordDropIndicator /> : null}
             </div>
           ) : (
             <div className="space-y-2">
-              {keywords.map((keyword) => (
-                <SortableKeywordChip
-                  key={keyword.id}
-                  keyword={keyword}
-                  polarity={polarity}
-                  onWeightChange={onWeightChange}
-                  onRemove={onRemove}
-                />
+              {keywords.map((keyword, index) => (
+                <Fragment key={keyword.id}>
+                  {indicatorIndex === index ? <KeywordDropIndicator /> : null}
+                  <SortableKeywordChip
+                    keyword={keyword}
+                    polarity={polarity}
+                    onWeightChange={onWeightChange}
+                    onRemove={onRemove}
+                  />
+                </Fragment>
               ))}
+              {indicatorIndex === keywords.length ? (
+                <KeywordDropIndicator />
+              ) : null}
             </div>
           )}
         </SortableContext>
@@ -1338,6 +1695,7 @@ function SortableKeywordChip({
   const style = {
     transform: CSS.Transform.toString(transform),
     transition,
+    zIndex: isDragging ? 30 : undefined,
   };
   const isPositive = polarity === "positive";
   return (
@@ -1345,11 +1703,11 @@ function SortableKeywordChip({
       ref={setNodeRef}
       style={style}
       className={cn(
-        "group relative flex items-center gap-3 rounded-2xl border px-3 py-2 text-sm shadow-sm transition-colors",
+        "group relative flex items-center gap-3 rounded-2xl border px-3 py-2 text-sm shadow-sm transition-colors transition-transform duration-150 ease-out",
         isPositive
           ? "border-primary/30 bg-primary/10 text-primary"
           : "border-secondary/30 bg-secondary/10 text-secondary",
-        isDragging && "opacity-70",
+        isDragging && "scale-[1.02] border-dashed opacity-80 shadow-md",
       )}
     >
       <button
@@ -1380,8 +1738,11 @@ function SortableKeywordChip({
             >
               <Minus className="h-3 w-3" />
             </button>
-            <span className="min-w-[48px] text-center text-[11px] font-semibold text-slate-600 dark:text-slate-200">
-              {keyword.weight}/5
+            <span className="min-w-[64px] text-center text-[11px] font-semibold text-slate-600 dark:text-slate-200">
+              {t("promptWorkbench.weightDisplay", {
+                value: keyword.weight,
+                defaultValue: `${keyword.weight}/5`,
+              })}
             </span>
             <button
               type="button"
@@ -1395,8 +1756,10 @@ function SortableKeywordChip({
               <Plus className="h-3 w-3" />
             </button>
           </div>
-          <span className="rounded-full bg-white/80 px-2 py-0.5 text-[10px] uppercase tracking-wide text-slate-500 dark:bg-slate-800/60 dark:text-slate-200">
-            {keyword.source}
+          <span className="rounded-full bg-white/80 px-2 py-0.5 text-[10px] text-slate-500 dark:bg-slate-800/60 dark:text-slate-200">
+            {t(`promptWorkbench.sourceLabels.${keyword.source ?? "model"}`, {
+              defaultValue: keyword.source ?? "model",
+            })}
           </span>
         </div>
       </div>
@@ -1411,5 +1774,14 @@ function SortableKeywordChip({
         <X className="h-3 w-3" />
       </button>
     </div>
+  );
+}
+
+function KeywordDropIndicator() {
+  return (
+    <div
+      className="h-1 w-full rounded-full bg-primary/60 transition-all duration-150 dark:bg-primary/50"
+      role="presentation"
+    />
   );
 }

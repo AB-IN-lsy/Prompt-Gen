@@ -32,6 +32,7 @@ type RedisLimiter struct {
 	prefix string
 }
 
+// NewRedisLimiter 根据 Redis 客户端构造限流器，可自定义 key 前缀。
 func NewRedisLimiter(client *redis.Client, prefix string) *RedisLimiter {
 	if prefix == "" {
 		prefix = "ratelimit"
@@ -39,6 +40,7 @@ func NewRedisLimiter(client *redis.Client, prefix string) *RedisLimiter {
 	return &RedisLimiter{client: client, prefix: prefix}
 }
 
+// Allow 以 Redis 计数器实现固定窗口限流，返回是否放行、剩余次数与等待时间。
 func (r *RedisLimiter) Allow(ctx context.Context, key string, limit int, window time.Duration) (AllowResult, error) {
 	if limit <= 0 {
 		return AllowResult{Allowed: true, Remaining: -1}, nil
@@ -89,10 +91,12 @@ type entry struct {
 	expires time.Time
 }
 
+// NewMemoryLimiter 构建内存版限流器，常用于本地开发与单元测试。
 func NewMemoryLimiter() *MemoryLimiter {
 	return &MemoryLimiter{store: make(map[string]entry)}
 }
 
+// Allow 通过内存 map 统计请求次数，模拟 Redis 的固定窗口限流行为。
 func (m *MemoryLimiter) Allow(_ context.Context, key string, limit int, window time.Duration) (AllowResult, error) {
 	if limit <= 0 {
 		return AllowResult{Allowed: true, Remaining: -1}, nil

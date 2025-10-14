@@ -897,6 +897,7 @@ func relationByPolarity(polarity string) string {
 }
 
 // sourceFallback 在缺失来源时回落到手动标签，保持字段完整性。
+// sourceFallback 在关键词来源缺失时使用“manual”作为默认值，保证字段完整。
 func sourceFallback(source string) string {
 	if source == "" {
 		return promptdomain.KeywordSourceManual
