@@ -297,6 +297,10 @@
       "updatedAt": "更新时间",
       "actions": "操作"
     },
+    "keywordLabels": {
+      "positive": "正",
+      "negative": "负"
+    },
     "statusBadge": {
       "draft": "草稿",
       "published": "已发布",

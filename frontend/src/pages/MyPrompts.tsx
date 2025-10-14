@@ -32,7 +32,7 @@ import {
 } from "../lib/api";
 import { usePromptWorkbench } from "../hooks/usePromptWorkbench";
 import type { Keyword, KeywordSource } from "../lib/api";
-import { clampTextWithOverflow, formatOverflowLabel } from "../lib/utils";
+import { clampTextWithOverflow, formatOverflowLabel, cn } from "../lib/utils";
 
 type StatusFilter = "all" | "draft" | "published" | "archived";
 
@@ -66,7 +66,7 @@ const formatDateTime = (value?: string | null, locale?: string): string => {
   }).format(date);
 };
 
-const MAX_KEYWORDS_PREVIEW = 3;
+const KEYWORD_ROW_LIMIT = 5;
 
 export default function MyPromptsPage(): JSX.Element {
   const { t, i18n } = useTranslation();
@@ -422,13 +422,14 @@ function PromptRow({
       <td className="px-4 py-4 align-top">
         <Badge
           variant="outline"
-          className={
+          className={cn(
+            "whitespace-nowrap",
             item.status === "published"
               ? "border-emerald-300 text-emerald-600 dark:border-emerald-500 dark:text-emerald-300"
               : item.status === "draft"
                 ? "border-slate-300 text-slate-500 dark:border-slate-600 dark:text-slate-300"
-                : "border-amber-300 text-amber-600 dark:border-amber-500 dark:text-amber-300"
-          }
+                : "border-amber-300 text-amber-600 dark:border-amber-500 dark:text-amber-300",
+          )}
         >
           {statusLabel}
         </Badge>
@@ -439,9 +440,17 @@ function PromptRow({
         </span>
       </td>
       <td className="px-4 py-4 align-top">
-        <div className="flex flex-wrap gap-1">
-          {renderKeywordPreview(item.positive_keywords, "positive")}
-          {renderKeywordPreview(item.negative_keywords, "negative")}
+        <div className="flex flex-col gap-2">
+          {renderKeywordLine(
+            item.positive_keywords,
+            "positive",
+            t("myPrompts.keywordLabels.positive", { defaultValue: "正" }),
+          )}
+          {renderKeywordLine(
+            item.negative_keywords,
+            "negative",
+            t("myPrompts.keywordLabels.negative", { defaultValue: "负" }),
+          )}
         </div>
       </td>
       <td className="px-4 py-4 align-top">
@@ -460,7 +469,7 @@ function PromptRow({
                 <Badge
                   key={tag}
                   variant="outline"
-                  className="border-slate-200 text-slate-500 dark:border-slate-700 dark:text-slate-300"
+                  className="border-slate-200 text-slate-500 dark:border-slate-700 dark:text-slate-300 whitespace-nowrap"
                   title={value}
                 >
                   {formatOverflowLabel(value, overflow)}
@@ -478,6 +487,7 @@ function PromptRow({
           <Button
             size="sm"
             variant="outline"
+            className="whitespace-nowrap"
             onClick={onEdit}
             disabled={isEditing || isDeleting}
           >
@@ -486,12 +496,14 @@ function PromptRow({
             ) : (
               <Edit3 className="h-4 w-4" />
             )}
-            <span className="ml-2">{t("myPrompts.actions.edit")}</span>
+            <span className="ml-2 whitespace-nowrap">
+              {t("myPrompts.actions.edit")}
+            </span>
           </Button>
           <Button
             size="sm"
             variant="ghost"
-            className="text-rose-500 hover:bg-rose-50 hover:text-rose-600 dark:text-rose-400 dark:hover:bg-rose-500/10"
+            className="whitespace-nowrap text-rose-500 hover:bg-rose-50 hover:text-rose-600 dark:text-rose-400 dark:hover:bg-rose-500/10"
             onClick={onDelete}
             disabled={isDeleting || isEditing}
           >
@@ -500,7 +512,9 @@ function PromptRow({
             ) : (
               <Trash2 className="h-4 w-4" />
             )}
-            <span className="ml-2">{t("myPrompts.actions.delete")}</span>
+            <span className="ml-2 whitespace-nowrap">
+              {t("myPrompts.actions.delete")}
+            </span>
           </Button>
         </div>
       </td>
@@ -508,46 +522,58 @@ function PromptRow({
   );
 }
 
-function renderKeywordPreview(
-  keywords: PromptListKeyword[],
+function renderKeywordLine(
+  keywords: PromptListKeyword[] | undefined,
   polarity: "positive" | "negative",
+  label: string,
 ) {
-  if (!keywords || keywords.length === 0) {
-    return null;
-  }
-  const samples = keywords.slice(0, MAX_KEYWORDS_PREVIEW);
-  const remaining = keywords.length - samples.length;
+  const samples = keywords?.slice(0, KEYWORD_ROW_LIMIT) ?? [];
+  const remaining = Math.max((keywords?.length ?? 0) - samples.length, 0);
+  const badgeClass =
+    polarity === "positive"
+      ? "border-blue-200 text-blue-600 dark:border-blue-500/60 dark:text-blue-300"
+      : "border-rose-200 text-rose-600 dark:border-rose-500/60 dark:text-rose-300";
+
+  const hasContent = samples.length > 0;
+
   return (
-    <>
-      {samples.map((keyword, index) => {
-        const { value, overflow } = clampTextWithOverflow(
-          keyword.word ?? "",
-          PROMPT_KEYWORD_MAX_LENGTH,
-        );
-        return (
-          <Badge
-            key={`${polarity}-${keyword.word}-${index}`}
-            variant="outline"
-            className={
-              polarity === "positive"
-                ? "border-blue-200 text-blue-600 dark:border-blue-500/60 dark:text-blue-300"
-                : "border-rose-200 text-rose-600 dark:border-rose-500/60 dark:text-rose-300"
-            }
-            title={value}
-          >
-            {formatOverflowLabel(value, overflow)}
-          </Badge>
-        );
-      })}
-      {remaining > 0 ? (
-        <Badge
-          variant="outline"
-          className="border-slate-200 text-slate-400 dark:border-slate-700 dark:text-slate-400"
-        >
-          +{remaining}
-        </Badge>
-      ) : null}
-    </>
+    <div className="flex items-center gap-2">
+      <span className="text-xs font-semibold text-slate-400 dark:text-slate-500 whitespace-nowrap">
+        {label}
+      </span>
+      <div className="flex flex-wrap items-center gap-1">
+        {hasContent ? (
+          <>
+            {samples.map((keyword, index) => {
+              const { value, overflow } = clampTextWithOverflow(
+                keyword.word ?? "",
+                PROMPT_KEYWORD_MAX_LENGTH,
+              );
+              return (
+                <Badge
+                  key={`${polarity}-${keyword.word}-${index}`}
+                  variant="outline"
+                  className={`${badgeClass} whitespace-nowrap`}
+                  title={value}
+                >
+                  {formatOverflowLabel(value, overflow)}
+                </Badge>
+              );
+            })}
+            {remaining > 0 ? (
+              <Badge
+                variant="outline"
+                className="border-slate-200 text-slate-400 dark:border-slate-700 dark:text-slate-400 whitespace-nowrap"
+              >
+                +{remaining}
+              </Badge>
+            ) : null}
+          </>
+        ) : (
+          <span className="text-xs text-slate-400 dark:text-slate-600">—</span>
+        )}
+      </div>
+    </div>
   );
 }
 

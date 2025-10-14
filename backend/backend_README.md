@@ -83,7 +83,7 @@
 | `PROMPT_GENERATE_WINDOW` | Prompt 生成限流窗口，默认 `1m` |
 | `PROMPT_KEYWORD_LIMIT` | 正向/负向关键词的数量上限，默认 `10`，需与前端 `VITE_PROMPT_KEYWORD_LIMIT` 保持一致 |
 | `PROMPT_KEYWORD_MAX_LENGTH` | 单个关键词允许的最大字符数（按 Unicode 码点计），默认 `32` |
-| `PROMPT_TAG_LIMIT` | 标签数量上限，默认 `5`，需与前端 `VITE_PROMPT_TAG_LIMIT` 保持一致 |
+| `PROMPT_TAG_LIMIT` | 标签数量上限，默认 `3`，需与前端 `VITE_PROMPT_TAG_LIMIT` 保持一致 |
 | `PROMPT_TAG_MAX_LENGTH` | 单个标签允许的最大字符数，默认 `5` |
 | `PROMPT_LIST_PAGE_SIZE` | “我的 Prompt”列表默认每页数量，默认 `20` |
 | `PROMPT_LIST_MAX_PAGE_SIZE` | “我的 Prompt”列表单页最大数量，默认 `100` |
@@ -980,7 +980,7 @@ backend/
 ### 标签管理
 
 - `SavePrompt` 接口新增 `tags` 字段，Handler 会统一捕获错误并按模块日志输出，Service 负责去重、裁剪空白并校验数量，只返回语义化错误对象。
-- 标签上限由 `PROMPT_TAG_LIMIT` 控制（默认 5 个），同时暴露给 Handler 以便生成统一错误提示；持久化时始终写入去重后的 JSON 数组，返回给前端时亦会自动裁剪历史超限数据。
+- 标签上限由 `PROMPT_TAG_LIMIT` 控制（默认 3 个），同时暴露给 Handler 以便生成统一错误提示；持久化时始终写入去重后的 JSON 数组，返回给前端时亦会自动裁剪历史超限数据。
 - 单元测试覆盖超限报错与去重行为，避免回归；若需放宽上限，只需修改环境变量并重启服务即可生效。
 
 ### Redis 工作区模型

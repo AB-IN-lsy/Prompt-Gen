@@ -195,7 +195,7 @@
     "tagsLabel": "Tags",
     "tagLimitHint": "Up to {{limit}} tags",
     "tagsPlaceholder": "Type a tag and press Enter",
-    "tagsHelper": "Organise or search prompts with tags. Press Enter to add quickly. Each tag is limited to {{maxLength}} characters.",
+    "tagsHelper": "Organise or search prompts with tags. Press Enter to add quickly—each tag can contain at most {{maxLength}} characters.",
     "tagsEmptyHint": "No tags yet. Enter text above to add one.",
     "tagDuplicate": "This tag already exists.",
     "tagLimitReached": "You can add at most {{limit}} tags.",
@@ -296,6 +296,10 @@
       "tags": "Tags",
       "updatedAt": "Updated at",
       "actions": "Actions"
+    },
+    "keywordLabels": {
+      "positive": "Pos",
+      "negative": "Neg"
     },
     "statusBadge": {
       "draft": "Draft",

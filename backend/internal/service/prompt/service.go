@@ -76,7 +76,7 @@ const DefaultKeywordLimit = 10
 const DefaultKeywordMaxLength = 32
 
 // DefaultTagLimit 限制单个 Prompt 标签数量的默认值。
-const DefaultTagLimit = 5
+const DefaultTagLimit = 3
 
 // DefaultTagMaxLength 限制标签字符数，默认 5 个字符。
 const DefaultTagMaxLength = 5
