@@ -13,9 +13,8 @@ import {
   PROMPT_TAG_LIMIT,
   PROMPT_TAG_MAX_LENGTH,
 } from "../config/prompt";
-import {
-  clampTextWithOverflow,
-} from "../lib/utils";
+import { clampTextWithOverflow } from "../lib/utils";
+import { DEFAULT_KEYWORD_WEIGHT } from "../config/env";
 
 interface TagEntry {
   value: string;
@@ -54,8 +53,6 @@ const KEYWORD_LIMIT = PROMPT_KEYWORD_LIMIT;
 const KEYWORD_MAX_LENGTH = PROMPT_KEYWORD_MAX_LENGTH;
 const TAG_LIMIT = PROMPT_TAG_LIMIT;
 const TAG_MAX_LENGTH = PROMPT_TAG_MAX_LENGTH;
-const DEFAULT_KEYWORD_WEIGHT = 5;
-
 const normalizeWord = (word: string) => word.trim().toLowerCase();
 
 const clampWeight = (value?: number): number => {
@@ -65,8 +62,8 @@ const clampWeight = (value?: number): number => {
   if (value < 0) {
     return 0;
   }
-  if (value > 5) {
-    return 5;
+  if (value > DEFAULT_KEYWORD_WEIGHT) {
+    return DEFAULT_KEYWORD_WEIGHT;
   }
   return Math.round(value);
 };

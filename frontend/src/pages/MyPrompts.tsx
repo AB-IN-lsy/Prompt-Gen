@@ -20,6 +20,7 @@ import {
   PROMPT_KEYWORD_MAX_LENGTH,
   PROMPT_TAG_MAX_LENGTH,
 } from "../config/prompt";
+import { KEYWORD_ROW_LIMIT, DEFAULT_KEYWORD_WEIGHT } from "../config/env";
 import {
   deletePrompt,
   fetchMyPrompts,
@@ -33,15 +34,16 @@ import {
 import { usePromptWorkbench } from "../hooks/usePromptWorkbench";
 import type { Keyword, KeywordSource } from "../lib/api";
 import { clampTextWithOverflow, formatOverflowLabel, cn } from "../lib/utils";
+import { PageHeader } from "../components/layout/PageHeader";
 
 type StatusFilter = "all" | "draft" | "published" | "archived";
 
 const clampWeight = (value?: number): number => {
   if (typeof value !== "number" || Number.isNaN(value)) {
-    return 5;
+    return DEFAULT_KEYWORD_WEIGHT;
   }
   if (value < 0) return 0;
-  if (value > 5) return 5;
+  if (value > DEFAULT_KEYWORD_WEIGHT) return DEFAULT_KEYWORD_WEIGHT;
   return Math.round(value);
 };
 
@@ -54,19 +56,24 @@ const fallbackSource = (value?: string): KeywordSource => {
   return "manual";
 };
 
-const formatDateTime = (value?: string | null, locale?: string): string => {
-  if (!value) return "—";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    return value;
-  }
-  return new Intl.DateTimeFormat(locale ?? undefined, {
-    dateStyle: "medium",
-    timeStyle: "short",
-  }).format(date);
+type FormattedDateTime = {
+  date: string;
+  time: string;
 };
 
-const KEYWORD_ROW_LIMIT = 5;
+const formatDateTime = (value?: string | null, locale?: string): FormattedDateTime => {
+  if (!value) return { date: "—", time: "" };
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return { date: value, time: "" };
+  }
+  const dateFormatter = new Intl.DateTimeFormat(locale ?? undefined, { dateStyle: "short" });
+  const timeFormatter = new Intl.DateTimeFormat(locale ?? undefined, { timeStyle: "short" });
+  return {
+    date: dateFormatter.format(date),
+    time: timeFormatter.format(date),
+  };
+};
 
 export default function MyPromptsPage(): JSX.Element {
   const { t, i18n } = useTranslation();
@@ -208,18 +215,14 @@ export default function MyPromptsPage(): JSX.Element {
 
   return (
     <div className="flex h-full flex-col gap-6">
-      <header className="flex flex-col gap-3">
-        <div className="flex items-center justify-between gap-3">
-          <div>
-            <p className="text-xs uppercase tracking-[0.28em] text-slate-400 dark:text-slate-500">
-              {t("myPrompts.eyebrow")}
-            </p>
-            <h1 className="mt-1 text-2xl font-semibold text-slate-800 dark:text-slate-100">
-              {t("myPrompts.title")}
-            </h1>
-          </div>
+      <PageHeader
+        eyebrow={t("myPrompts.eyebrow")}
+        title={t("myPrompts.title")}
+        description={t("myPrompts.subtitle")}
+        actions={
           <Button
             variant="secondary"
+            size="sm"
             className="shadow-sm dark:shadow-none"
             onClick={() => {
               resetWorkbench();
@@ -229,8 +232,9 @@ export default function MyPromptsPage(): JSX.Element {
             <RefreshCcw className="mr-2 h-4 w-4" />
             {t("myPrompts.openWorkbench")}
           </Button>
-        </div>
-        <form
+        }
+      />
+      <form
           className="flex flex-col gap-3 rounded-3xl border border-white/60 bg-white/80 p-4 shadow-sm transition-colors dark:border-slate-800 dark:bg-slate-900/70 md:flex-row md:items-center md:justify-between"
           onSubmit={handleSearchSubmit}
         >
@@ -266,8 +270,7 @@ export default function MyPromptsPage(): JSX.Element {
               ))}
             </select>
           </div>
-        </form>
-      </header>
+      </form>
 
       <section className="flex-1 overflow-hidden rounded-3xl border border-white/60 bg-white/85 shadow-sm transition-colors dark:border-slate-800 dark:bg-slate-900/70">
         <div className="flex items-center justify-between border-b border-white/60 px-6 py-3 text-xs uppercase tracking-[0.26em] text-slate-400 dark:border-slate-800">
@@ -309,11 +312,11 @@ export default function MyPromptsPage(): JSX.Element {
                 navigate("/prompt-workbench");
               }}
             >
-            <Sparkles className="mr-2 h-4 w-4" />
-            {t("myPrompts.startCreating")}
-          </Button>
-        </div>
-      ) : (
+              <Sparkles className="mr-2 h-4 w-4" />
+              {t("myPrompts.startCreating")}
+            </Button>
+          </div>
+        ) : (
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-white/60 text-sm dark:divide-slate-800">
               <thead className="bg-white/80 text-left text-xs font-semibold uppercase tracking-[0.24em] text-slate-400 dark:bg-slate-900/60">
@@ -330,7 +333,7 @@ export default function MyPromptsPage(): JSX.Element {
                 </tr>
               </thead>
               <tbody className="divide-y divide-white/60 dark:divide-slate-800">
-        {items.map((item: PromptListItem) => (
+                {items.map((item: PromptListItem) => (
                   <PromptRow
                     key={item.id}
                     item={item}
@@ -361,7 +364,7 @@ export default function MyPromptsPage(): JSX.Element {
         )}
       </section>
 
-  <footer className="flex items-center justify-between rounded-3xl border border-white/60 bg-white/75 px-4 py-3 text-sm text-slate-500 shadow-sm transition-colors dark:border-slate-800 dark:bg-slate-900/60 dark:text-slate-400">
+      <footer className="flex items-center justify-between rounded-3xl border border-white/60 bg-white/75 px-4 py-3 text-sm text-slate-500 shadow-sm transition-colors dark:border-slate-800 dark:bg-slate-900/60 dark:text-slate-400">
         <span>
           {t("myPrompts.pagination.page", {
             page,
@@ -410,6 +413,7 @@ function PromptRow({
 }: PromptRowProps) {
   const { t } = useTranslation();
   const statusLabel = t(`myPrompts.statusBadge.${item.status}`);
+  const formattedUpdatedAt = formatDateTime(item.updated_at, locale);
   return (
     <tr className="bg-white/40 transition hover:bg-white/70 dark:bg-slate-900/40 dark:hover:bg-slate-900/60">
       <td className="px-6 py-4 align-top">
@@ -479,8 +483,13 @@ function PromptRow({
           )}
         </div>
       </td>
-      <td className="px-4 py-4 align-top text-sm text-slate-500 dark:text-slate-400">
-        {formatDateTime(item.updated_at, locale)}
+      <td className="px-4 py-4 align-top text-sm text-slate-500 dark:text-slate-400 whitespace-nowrap tabular-nums">
+        <div className="flex flex-col leading-tight">
+          <span>{formattedUpdatedAt.date}</span>
+          {formattedUpdatedAt.time ? (
+            <span className="text-xs text-slate-400 dark:text-slate-500">{formattedUpdatedAt.time}</span>
+          ) : null}
+        </div>
       </td>
       <td className="px-4 py-4 align-top">
         <div className="flex justify-end gap-2">

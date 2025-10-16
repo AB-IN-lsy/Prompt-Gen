@@ -9,6 +9,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Badge } from "../components/ui/badge";
 import { GlassCard } from "../components/ui/glass-card";
 import { fetchChangelogEntries, type ChangelogEntry } from "../lib/api";
+import { PageHeader } from "../components/layout/PageHeader";
 
 export default function LogsPage() {
   const { t, i18n } = useTranslation();
@@ -27,15 +28,11 @@ export default function LogsPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="space-y-1">
-        <span className="text-xs uppercase tracking-[0.3em] text-slate-400">
-          {t("logsPage.eyebrow")}
-        </span>
-        <h1 className="text-3xl font-semibold text-slate-800 dark:text-slate-100">
-          {t("logsPage.title")}
-        </h1>
-        <p className="text-sm text-slate-500">{t("logsPage.subtitle")}</p>
-      </div>
+      <PageHeader
+        eyebrow={t("logsPage.eyebrow")}
+        title={t("logsPage.title")}
+        description={t("logsPage.subtitle")}
+      />
       <div className="grid gap-4">
         {entries.length === 0 ? (
           <GlassCard className="text-sm text-slate-500">

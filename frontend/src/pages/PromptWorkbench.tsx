@@ -81,8 +81,8 @@ import {
 import { ApiError } from "../lib/errors";
 import { usePromptWorkbench } from "../hooks/usePromptWorkbench";
 import { useAuth } from "../hooks/useAuth";
-
-const DEFAULT_KEYWORD_WEIGHT = 5;
+import { DEFAULT_KEYWORD_WEIGHT } from "../config/env";
+import { PageHeader } from "../components/layout/PageHeader";
 
 const clampWeight = (value?: number): number => {
   if (typeof value !== "number" || Number.isNaN(value)) {
@@ -91,8 +91,8 @@ const clampWeight = (value?: number): number => {
   if (value < 0) {
     return 0;
   }
-  if (value > 5) {
-    return 5;
+  if (value > DEFAULT_KEYWORD_WEIGHT) {
+    return DEFAULT_KEYWORD_WEIGHT;
   }
   return Math.round(value);
 };
@@ -1274,7 +1274,19 @@ export default function PromptWorkbenchPage() {
   const isAugmenting = augmentMutation.isPending;
 
   return (
-    <div className="grid grid-cols-1 gap-6 text-slate-700 transition-colors dark:text-slate-200 xl:grid-cols-[360px_minmax(320px,360px)_minmax(0,1fr)] xl:items-start">
+    <div className="flex flex-col gap-6 text-slate-700 transition-colors dark:text-slate-200">
+      <PageHeader
+        eyebrow={t("promptWorkbench.workbenchEyebrow", {
+          defaultValue: "Prompt 工作台",
+        })}
+        title={t("promptWorkbench.workbenchTitle", {
+          defaultValue: "打造你的面试脚本",
+        })}
+        description={t("promptWorkbench.workbenchSubtitle", {
+          defaultValue: "从解析需求到发布 Prompt 的一站式工作区。",
+        })}
+      />
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-[360px_minmax(320px,360px)_minmax(0,1fr)] xl:items-start">
       <GlassCard className="flex flex-col gap-6">
         <header className="flex items-center justify-between">
           <div>
@@ -1580,7 +1592,7 @@ export default function PromptWorkbenchPage() {
         </div>
 
         <div className="rounded-3xl border border-white/60 bg-white/80 p-5 shadow-inner transition-colors dark:border-slate-800 dark:bg-slate-900/70">
-          <div className="flex flex-col gap-5 lg:grid lg:grid-cols-2 lg:gap-6">
+          <div className="flex flex-col gap-5">
             <div className="flex flex-col">
               <label className="text-sm font-medium text-slate-600 dark:text-slate-300">
                 {t("promptWorkbench.instructionsLabel", {
@@ -1588,7 +1600,7 @@ export default function PromptWorkbenchPage() {
                 })}
               </label>
               <Textarea
-                className="mt-3 min-h-[160px]"
+                className="mt-3 min-h-[120px]"
                 value={instructions}
                 onChange={(event: ChangeEvent<HTMLTextAreaElement>) =>
                   setInstructions(event.target.value)
@@ -1610,7 +1622,7 @@ export default function PromptWorkbenchPage() {
                   })}
                 </span>
               </div>
-              <div className="mt-3 flex gap-2">
+              <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
                 <Input
                   value={tagInput}
                   onChange={(event: ChangeEvent<HTMLInputElement>) =>
@@ -1631,7 +1643,7 @@ export default function PromptWorkbenchPage() {
                   type="button"
                   variant="secondary"
                   size="sm"
-                  className="min-w-[104px] justify-center whitespace-nowrap px-4"
+                  className="sm:w-auto sm:min-w-[120px] sm:justify-center sm:px-5"
                   onClick={handleAddTag}
                   disabled={tagLimit > 0 && tags.length >= tagLimit}
                 >
@@ -1646,7 +1658,7 @@ export default function PromptWorkbenchPage() {
                     "Use tags to organise prompts. Press Enter to add, each tag can contain at most {{maxLength}} characters",
                 })}
               </p>
-              <div className="mt-3 flex flex-wrap gap-2">
+              <div className="mt-2 flex flex-wrap gap-2">
                 {tags.length === 0 ? (
                   <span className="text-xs text-slate-400 dark:text-slate-500">
                     {t("promptWorkbench.tagsEmptyHint", {
@@ -1751,7 +1763,8 @@ export default function PromptWorkbenchPage() {
         </div>
       </GlassCard>
     </div>
-  );
+  </div>
+);
 }
 
 interface KeywordSectionProps {

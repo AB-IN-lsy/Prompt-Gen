@@ -256,6 +256,7 @@
     "emptySection": "No {{title}} yet. Use \"Add keyword\" to enrich it.",
     "workbenchEyebrow": "Prompt workbench",
     "workbenchTitle": "Craft your interview script",
+    "workbenchSubtitle": "Parse natural language briefs, curate keywords, and publish prompts in one place.",
     "regenerate": "Regenerate",
     "topicLabel": "Topic",
     "topicPlaceholder": "e.g. Frontend interview cheat sheet",
@@ -276,8 +277,9 @@
     "modelDisabled": "This model is disabled and can’t be selected."
   },
   "myPrompts": {
-    "eyebrow": "Prompt Library",
-    "title": "My Prompts",
+    "eyebrow": "Prompt library",
+    "title": "My prompts",
+    "subtitle": "Search, filter, and revisit drafts or published prompts at any time.",
     "openWorkbench": "Open workbench",
     "listTitle": "Saved prompts",
     "searchPlaceholder": "Search topics or tags",
@@ -405,6 +407,7 @@
     }
   },
   "dashboard": {
+    "eyebrow": "Dashboard overview",
     "title": "Workspace dashboard",
     "welcome": "Welcome back, {{name}}",
     "subtitle": "Here's what's happening across your prompt workspace today.",
@@ -443,6 +446,7 @@
     }
   },
   "settings": {
+    "eyebrow": "Profile & workspace",
     "title": "Settings",
     "subtitle": "Update your profile and workspace preferences.",
     "languageCardTitle": "Language",

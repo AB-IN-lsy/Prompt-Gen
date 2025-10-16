@@ -9,7 +9,7 @@ import { useTranslation } from "react-i18next";
 import { ExternalLink, LifeBuoy, Mail, KeyRound, Rocket, ShieldCheck, Sparkles } from "lucide-react";
 
 import { GlassCard } from "../components/ui/glass-card";
-import { Badge } from "../components/ui/badge";
+import { PageHeader } from "../components/layout/PageHeader";
 
 interface HelpSectionContent {
     title: string;
@@ -58,11 +58,7 @@ export default function HelpPage() {
 
     return (
         <div className="space-y-8 text-slate-700 transition-colors dark:text-slate-200">
-            <div className="space-y-3">
-                <Badge variant="outline">{eyebrow}</Badge>
-                <h1 className="text-3xl font-semibold text-slate-900 dark:text-white sm:text-4xl">{title}</h1>
-                <p className="max-w-3xl text-sm text-slate-500 dark:text-slate-400 sm:text-base">{subtitle}</p>
-            </div>
+            <PageHeader eyebrow={eyebrow} title={title} description={subtitle} headingClassName="max-w-3xl" />
 
             <div className="grid gap-4 md:grid-cols-2">
                 {sectionKeys.map((key) => {

@@ -9,13 +9,13 @@ import { PROMPT_KEYWORD_MAX_LENGTH } from "../config/prompt";
 import { ApiError } from "./errors";
 import { http, normaliseError } from "./http";
 import { clampTextWithOverflow } from "./utils";
+import { DEFAULT_KEYWORD_WEIGHT } from "../config/env";
 
 export type KeywordPolarity = "positive" | "negative";
 export type KeywordSource = "local" | "api" | "manual";
 
-const DEFAULT_KEYWORD_WEIGHT = 5;
 const MIN_KEYWORD_WEIGHT = 0;
-const MAX_KEYWORD_WEIGHT = 5;
+const MAX_KEYWORD_WEIGHT = DEFAULT_KEYWORD_WEIGHT;
 
 const clampKeywordWeight = (value?: number): number => {
   if (typeof value !== "number" || Number.isNaN(value)) {

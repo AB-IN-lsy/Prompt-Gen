@@ -20,6 +20,7 @@ import { Button } from "../components/ui/button";
 import { Badge } from "../components/ui/badge";
 import { GlassCard } from "../components/ui/glass-card";
 import { useAuth } from "../hooks/useAuth";
+import { PageHeader } from "../components/layout/PageHeader";
 
 interface Metric {
     id: string;
@@ -185,38 +186,33 @@ export default function DashboardPage(): JSX.Element {
 
     return (
         <div className="space-y-6 text-slate-700 transition-colors dark:text-slate-200">
-            <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
-                <div className="space-y-2">
-                    <Badge className="w-fit" variant="outline">
-                        {t("dashboard.title")}
-                    </Badge>
-                    <h1 className="text-3xl font-semibold text-slate-900 dark:text-slate-100 sm:text-4xl">
-                        {t("dashboard.welcome", { name: displayName })}
-                    </h1>
-                    <p className="text-sm text-slate-500 dark:text-slate-400 sm:text-base">{t("dashboard.subtitle")}</p>
-                </div>
-                <div className="flex flex-wrap gap-3">
-                    <Button
-                        variant="secondary"
-                        size="lg"
-                        onClick={() => navigate("/prompt-workbench")}
-                        className="gap-2"
-                    >
-                        <Sparkles className="h-4 w-4" aria-hidden="true" />
-                        {t("dashboard.openWorkbench")}
-                    </Button>
-                    <Button
-                        variant="outline"
-                        size="lg"
-                        onClick={() => navigate("/prompt-workbench?tab=create")}
-                        className="gap-2"
-                    >
-                        <ArrowUpRight className="h-4 w-4" aria-hidden="true" />
-                        {t("dashboard.createPrompt")}
-                    </Button>
-                </div>
-            </div>
-
+            <PageHeader
+                eyebrow={t("dashboard.eyebrow")}
+                title={t("dashboard.welcome", { name: displayName })}
+                description={t("dashboard.subtitle")}
+                actions={
+                    <>
+                        <Button
+                            variant="secondary"
+                            size="sm"
+                            onClick={() => navigate("/prompt-workbench")}
+                            className="gap-2"
+                        >
+                            <Sparkles className="h-4 w-4" aria-hidden="true" />
+                            {t("dashboard.openWorkbench")}
+                        </Button>
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => navigate("/prompt-workbench?tab=create")}
+                            className="gap-2"
+                        >
+                            <ArrowUpRight className="h-4 w-4" aria-hidden="true" />
+                            {t("dashboard.createPrompt")}
+                        </Button>
+                    </>
+                }
+            />
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
                 {metrics.map((metric) => (
                     <MetricCard key={metric.id} {...metric} />

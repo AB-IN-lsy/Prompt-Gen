@@ -19,6 +19,7 @@ import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Textarea } from "../components/ui/textarea";
 import { Badge } from "../components/ui/badge";
+import { PageHeader } from "../components/layout/PageHeader";
 import {
   createChangelogEntry,
   deleteChangelogEntry,
@@ -97,12 +98,19 @@ export default function ChangelogAdminPage() {
 
   if (!isAdmin) {
     return (
-      <GlassCard className="flex flex-1 flex-col items-center justify-center gap-3 text-slate-500">
-        <span className="text-lg font-semibold text-slate-600">
-          {t("logsPage.admin.title")}
-        </span>
-        <p className="text-sm">{t("ipGuardPage.noPermission.subtitle")}</p>
-      </GlassCard>
+      <div className="flex flex-col gap-6">
+        <PageHeader
+          eyebrow={t("logsPage.eyebrow")}
+          title={t("nav.changelogAdmin")}
+          description={t("logsPage.admin.description")}
+        />
+        <GlassCard className="flex flex-1 flex-col items-center justify-center gap-3 text-slate-500">
+          <span className="text-lg font-semibold text-slate-600">
+            {t("logsPage.admin.title")}
+          </span>
+          <p className="text-sm">{t("ipGuardPage.noPermission.subtitle")}</p>
+        </GlassCard>
+      </div>
     );
   }
 
@@ -314,17 +322,11 @@ const updateMutation = useMutation<
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="space-y-1">
-        <span className="text-xs uppercase tracking-[0.3em] text-slate-400">
-          {t("logsPage.eyebrow")}
-        </span>
-        <h1 className="text-3xl font-semibold text-slate-800 dark:text-slate-100">
-          {t("nav.changelogAdmin")}
-        </h1>
-        <p className="text-sm text-slate-500">
-          {t("logsPage.admin.description")}
-        </p>
-      </div>
+      <PageHeader
+        eyebrow={t("logsPage.eyebrow")}
+        title={t("nav.changelogAdmin")}
+        description={t("logsPage.admin.description")}
+      />
       <GlassCard className="space-y-4">
         <form className="space-y-4" onSubmit={handleSubmit}>
           <div className="grid gap-4 md:grid-cols-2">

@@ -256,6 +256,7 @@
     "emptySection": "暂无{{title}}，可通过“添加关键词”迅速补充。",
     "workbenchEyebrow": "Prompt 工作台",
     "workbenchTitle": "打造你的面试脚本",
+    "workbenchSubtitle": "从解析需求到补充关键词、生成与发布的一站式流程。",
     "regenerate": "再次生成",
     "topicLabel": "主题",
     "topicPlaceholder": "例如：前端面试技术提示词",
@@ -278,6 +279,7 @@
   "myPrompts": {
     "eyebrow": "Prompt 清单",
     "title": "我的 Prompt",
+    "subtitle": "快速筛选、检索并继续编辑草稿或已发布的 Prompt。",
     "openWorkbench": "打开工作台",
     "listTitle": "Prompt 列表",
     "searchPlaceholder": "搜索主题或标签",
@@ -405,6 +407,7 @@
     }
   },
   "dashboard": {
+    "eyebrow": "工作总览",
     "title": "工作台概览",
     "welcome": "欢迎回来，{{name}}",
     "subtitle": "了解今天 Prompt 工作台的关键动态。",
@@ -443,6 +446,7 @@
     }
   },
   "settings": {
+    "eyebrow": "账户与偏好",
     "title": "设置",
     "subtitle": "更新账户资料和界面偏好。",
     "languageCardTitle": "界面语言",

@@ -76,3 +76,11 @@ body {
 .dark .markdown-preview pre {
     background-color: rgba(226, 232, 240, 0.12);
 }
+
+.drag-region {
+    -webkit-app-region: drag;
+}
+
+.no-drag {
+    -webkit-app-region: no-drag;
+}

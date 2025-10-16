@@ -11,6 +11,7 @@ import { GlassCard } from "../components/ui/glass-card";
 import { Button } from "../components/ui/button";
 import { fetchIpGuardBans, removeIpGuardBan, type IpGuardEntry } from "../lib/api";
 import { useAuth } from "../hooks/useAuth";
+import { PageHeader } from "../components/layout/PageHeader";
 
 // 管理后台的查询 Key，确保列表与操作保持一致刷新。
 const QUERY_KEY = ["ip-guard", "bans"];
@@ -24,15 +25,11 @@ export default function IpGuardPage() {
   if (!isAdmin) {
     return (
       <div className="flex flex-col gap-6">
-        <div className="space-y-1">
-          <span className="text-xs uppercase tracking-[0.3em] text-slate-400">
-            {t("ipGuardPage.eyebrow")}
-          </span>
-          <h1 className="text-3xl font-semibold text-slate-800 dark:text-slate-100">
-            {t("ipGuardPage.title")}
-          </h1>
-          <p className="text-sm text-slate-500">{t("ipGuardPage.subtitle")}</p>
-        </div>
+        <PageHeader
+          eyebrow={t("ipGuardPage.eyebrow")}
+          title={t("ipGuardPage.title")}
+          description={t("ipGuardPage.subtitle")}
+        />
         <GlassCard className="flex flex-1 flex-col items-center justify-center gap-3 text-slate-500">
           <span className="text-lg font-semibold text-slate-600">
             {t("ipGuardPage.noPermission.title")}
@@ -76,15 +73,11 @@ export default function IpGuardPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="space-y-1">
-        <span className="text-xs uppercase tracking-[0.3em] text-slate-400">
-          {t("ipGuardPage.eyebrow")}
-        </span>
-        <h1 className="text-3xl font-semibold text-slate-800 dark:text-slate-100">
-          {t("ipGuardPage.title")}
-        </h1>
-        <p className="text-sm text-slate-500">{t("ipGuardPage.subtitle")}</p>
-      </div>
+      <PageHeader
+        eyebrow={t("ipGuardPage.eyebrow")}
+        title={t("ipGuardPage.title")}
+        description={t("ipGuardPage.subtitle")}
+      />
       <GlassCard className="flex flex-col">
         <div className="flex items-center justify-between gap-3 border-b border-white/40 pb-4 dark:border-slate-800/60">
           <div className="flex flex-col">

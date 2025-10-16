@@ -25,6 +25,7 @@ import { Badge } from "../components/ui/badge";
 import { Textarea } from "../components/ui/textarea";
 import { AvatarUploader } from "../components/account/AvatarUploader";
 import { useAuth } from "../hooks/useAuth";
+import { PageHeader } from "../components/layout/PageHeader";
 import {
   updateCurrentUser,
   requestEmailVerification,
@@ -742,14 +743,11 @@ export default function SettingsPage() {
 
   return (
     <div className="mx-auto flex w-full max-w-4xl flex-col gap-6 text-slate-700 transition-colors dark:text-slate-200">
-      <header className="flex flex-col gap-1">
-        <h1 className="text-2xl font-semibold text-slate-800 dark:text-slate-100">
-          {t("settings.title")}
-        </h1>
-        <p className="text-sm text-slate-500 dark:text-slate-400">
-          {t("settings.subtitle")}
-        </p>
-      </header>
+      <PageHeader
+        eyebrow={t("settings.eyebrow")}
+        title={t("settings.title")}
+        description={t("settings.subtitle")}
+      />
 
       {isEmailVerified ? null : (
         <div className="rounded-xl border border-amber-200 bg-amber-50/80 p-4 text-sm leading-relaxed text-amber-800 transition-colors dark:border-amber-400/50 dark:bg-amber-500/10 dark:text-amber-100">
