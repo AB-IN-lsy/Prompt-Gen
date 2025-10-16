@@ -237,6 +237,7 @@ func (s *Service) GetPrompt(ctx context.Context, input GetPromptInput) (PromptDe
 		ID:               entity.ID,
 		Topic:            entity.Topic,
 		Body:             entity.Body,
+		Instructions:     entity.Instructions,
 		Model:            entity.Model,
 		Status:           entity.Status,
 		Tags:             s.truncateTags(decodeTags(entity.Tags)),
@@ -403,6 +404,7 @@ type PromptDetail struct {
 	ID               uint
 	Topic            string
 	Body             string
+	Instructions     string
 	Model            string
 	Status           string
 	Tags             []string
@@ -522,6 +524,7 @@ type SaveInput struct {
 	PromptID         uint
 	Topic            string
 	Body             string
+	Instructions     string
 	Model            string
 	Status           string
 	PositiveKeywords []KeywordItem
@@ -1000,6 +1003,11 @@ func (s *Service) Save(ctx context.Context, input SaveInput) (SaveOutput, error)
 					input.Tags = s.truncateTags(tags)
 				}
 			}
+			if strings.TrimSpace(input.Instructions) == "" {
+				if instr := extractInstructionsFromAttributes(snapshot.Attributes); instr != "" {
+					input.Instructions = instr
+				}
+			}
 			if snapshot.PromptID != 0 && input.PromptID == 0 {
 				input.PromptID = snapshot.PromptID
 			}
@@ -1024,6 +1032,7 @@ func (s *Service) Save(ctx context.Context, input SaveInput) (SaveOutput, error)
 		return SaveOutput{}, err
 	}
 	input.Tags = cleanedTags
+	input.Instructions = strings.TrimSpace(input.Instructions)
 
 	action := promptdomain.TaskActionCreate
 	if input.PromptID != 0 {
@@ -1037,7 +1046,11 @@ func (s *Service) Save(ctx context.Context, input SaveInput) (SaveOutput, error)
 
 	if workspaceEnabled {
 		metaCtx, cancel := s.workspaceContext(ctx)
-		if err := s.workspace.SetAttributes(metaCtx, input.UserID, workspaceToken, map[string]string{workspaceAttrTags: encodeTagsAttribute(input.Tags)}); err != nil {
+		attrs := map[string]string{
+			workspaceAttrTags:         encodeTagsAttribute(input.Tags),
+			workspaceAttrInstructions: input.Instructions,
+		}
+		if err := s.workspace.SetAttributes(metaCtx, input.UserID, workspaceToken, attrs); err != nil {
 			s.logger.Warnw("set workspace tags failed", "user_id", input.UserID, "token", workspaceToken, "error", err)
 		}
 		if err := s.workspace.SetPromptMeta(metaCtx, input.UserID, workspaceToken, result.PromptID, status); err != nil {
@@ -1247,6 +1260,7 @@ func (s *Service) processPersistenceTask(ctx context.Context, task promptdomain.
 		PromptID:         task.PromptID,
 		Topic:            firstNonEmpty(task.Topic, snapshot.Topic),
 		Body:             firstNonEmpty(task.Body, snapshot.DraftBody),
+		Instructions:     firstNonEmpty(task.Instructions, extractInstructionsFromAttributes(snapshot.Attributes)),
 		Model:            firstNonEmpty(task.Model, snapshot.ModelKey),
 		Status:           task.Status,
 		PositiveKeywords: s.keywordItemsFromWorkspace(snapshot.Positive),
@@ -1284,7 +1298,11 @@ func (s *Service) processPersistenceTask(ctx context.Context, task promptdomain.
 		return fmt.Errorf("persist prompt: %w", err)
 	}
 	metaCtx, cancelMeta := s.workspaceContext(ctx)
-	if err := s.workspace.SetAttributes(metaCtx, task.UserID, task.WorkspaceToken, map[string]string{workspaceAttrTags: encodeTagsAttribute(input.Tags)}); err != nil {
+	attrs := map[string]string{
+		workspaceAttrTags:         encodeTagsAttribute(input.Tags),
+		workspaceAttrInstructions: input.Instructions,
+	}
+	if err := s.workspace.SetAttributes(metaCtx, task.UserID, task.WorkspaceToken, attrs); err != nil {
 		s.logger.Warnw("set workspace tags failed", "task_id", task.TaskID, "token", task.WorkspaceToken, "error", err)
 	}
 	if err := s.workspace.SetPromptMeta(metaCtx, task.UserID, task.WorkspaceToken, result.PromptID, status); err != nil {
@@ -1303,6 +1321,7 @@ func (s *Service) persistPrompt(ctx context.Context, input SaveInput, status, ac
 	if strings.TrimSpace(input.Body) == "" {
 		return SaveOutput{}, errors.New("body required")
 	}
+	input.Instructions = strings.TrimSpace(input.Instructions)
 	if err := enforceKeywordLimit(s.keywordLimit, input.PositiveKeywords, input.NegativeKeywords); err != nil {
 		return SaveOutput{}, err
 	}
@@ -1345,6 +1364,7 @@ func (s *Service) createPromptRecord(ctx context.Context, input SaveInput, statu
 		UserID:           input.UserID,
 		Topic:            strings.TrimSpace(input.Topic),
 		Body:             input.Body,
+		Instructions:     input.Instructions,
 		PositiveKeywords: string(encodedPos),
 		NegativeKeywords: string(encodedNeg),
 		Model:            strings.TrimSpace(input.Model),
@@ -1404,6 +1424,7 @@ func (s *Service) updatePromptRecord(ctx context.Context, input SaveInput, statu
 	wasPublished := entity.Status == promptdomain.PromptStatusPublished
 	entity.Topic = strings.TrimSpace(input.Topic)
 	entity.Body = input.Body
+	entity.Instructions = input.Instructions
 	entity.PositiveKeywords = string(encodedPos)
 	entity.NegativeKeywords = string(encodedNeg)
 	entity.Model = strings.TrimSpace(input.Model)
@@ -1473,6 +1494,7 @@ func (s *Service) recordPromptVersion(ctx context.Context, prompt *promptdomain.
 		PromptID:         prompt.ID,
 		VersionNo:        prompt.LatestVersionNo,
 		Body:             prompt.Body,
+		Instructions:     prompt.Instructions,
 		PositiveKeywords: prompt.PositiveKeywords,
 		NegativeKeywords: prompt.NegativeKeywords,
 		Model:            prompt.Model,
@@ -1873,6 +1895,14 @@ func extractTagsFromAttributes(attrs map[string]string) []string {
 		return nil
 	}
 	return decodeTags(raw)
+}
+
+func extractInstructionsFromAttributes(attrs map[string]string) string {
+	// extractInstructionsFromAttributes 从 Workspace 的 attributes 中解析补充要求字符串。
+	if len(attrs) == 0 {
+		return ""
+	}
+	return strings.TrimSpace(attrs[workspaceAttrInstructions])
 }
 
 // encodeTagsAttribute 将标签数组编码为 JSON 字符串，写入 workspace attributes。

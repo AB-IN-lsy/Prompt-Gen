@@ -147,6 +147,7 @@ type saveRequest struct {
 	PromptID         uint             `json:"prompt_id"`
 	Topic            string           `json:"topic"`
 	Body             string           `json:"body"`
+	Instructions     string           `json:"instructions"`
 	Model            string           `json:"model"`
 	Status           string           `json:"status"`
 	Publish          bool             `json:"publish"`
@@ -256,6 +257,7 @@ func (h *PromptHandler) GetPrompt(c *gin.Context) {
 		"id":                detail.ID,
 		"topic":             detail.Topic,
 		"body":              detail.Body,
+		"instructions":      detail.Instructions,
 		"model":             detail.Model,
 		"status":            detail.Status,
 		"tags":              detail.Tags,
@@ -590,6 +592,7 @@ func (h *PromptHandler) SavePrompt(c *gin.Context) {
 		PromptID:         req.PromptID,
 		Topic:            req.Topic,
 		Body:             req.Body,
+		Instructions:     req.Instructions,
 		Model:            req.Model,
 		Status:           req.Status,
 		Publish:          req.Publish,

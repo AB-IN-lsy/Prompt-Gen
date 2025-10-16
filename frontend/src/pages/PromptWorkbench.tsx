@@ -18,12 +18,14 @@ import {
   DragCancelEvent,
   DragEndEvent,
   DragOverEvent,
+  DragOverlay,
   DragStartEvent,
   PointerSensor,
   useDroppable,
   useSensor,
   useSensors,
 } from "@dnd-kit/core";
+import type { Modifier } from "@dnd-kit/core";
 import {
   SortableContext,
   arrayMove,
@@ -40,8 +42,8 @@ import {
   Sparkles,
   X,
 } from "lucide-react";
-import { useTranslation } from "react-i18next";
 import { nanoid } from "nanoid";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
 import { GlassCard } from "../components/ui/glass-card";
@@ -97,17 +99,23 @@ const clampWeight = (value?: number): number => {
   return Math.round(value);
 };
 
-const mapKeywordResultToKeyword = (item: PromptKeywordResult): Keyword => {
+const mapKeywordResultToKeyword = (
+  item: PromptKeywordResult,
+): Keyword => {
+  const polarity = (item.polarity as Keyword["polarity"]) ?? "positive";
   const source = (item.source as KeywordSource) ?? "api";
   const weight = clampWeight(item.weight);
   const { value, overflow } = clampTextWithOverflow(
     item.word ?? "",
     PROMPT_KEYWORD_MAX_LENGTH,
   );
+  const backendId =
+    typeof item.keyword_id === "number" ? item.keyword_id : undefined;
   return {
-    id: item.keyword_id ? String(item.keyword_id) : nanoid(),
+    id: nanoid(),
+    keywordId: backendId,
     word: value,
-    polarity: item.polarity as Keyword["polarity"],
+    polarity,
     source,
     weight,
     overflow,
@@ -119,8 +127,10 @@ const keywordToInput = (keyword: Keyword): PromptKeywordInput => {
     keyword.word,
     PROMPT_KEYWORD_MAX_LENGTH,
   );
+  const backendId =
+    typeof keyword.keywordId === "number" ? keyword.keywordId : undefined;
   return {
-    keyword_id: keyword.id,
+    keyword_id: backendId,
     word: value,
     polarity: keyword.polarity,
     source: keyword.source,
@@ -130,6 +140,55 @@ const keywordToInput = (keyword: Keyword): PromptKeywordInput => {
 
 const POSITIVE_CONTAINER_ID = "positive-keyword-container";
 const NEGATIVE_CONTAINER_ID = "negative-keyword-container";
+
+interface ClientCoordinates {
+  x: number;
+  y: number;
+}
+
+const getEventClientPoint = (event: Event): ClientCoordinates | null => {
+  if ("touches" in event) {
+    const touchEvent = event as TouchEvent;
+    const touch =
+      touchEvent.touches[0] ||
+      (touchEvent.changedTouches && touchEvent.changedTouches[0]);
+    if (touch) {
+      return { x: touch.clientX, y: touch.clientY };
+    }
+    return null;
+  }
+
+  if ("clientX" in event && "clientY" in event) {
+    const pointerEvent = event as MouseEvent;
+    return { x: pointerEvent.clientX, y: pointerEvent.clientY };
+  }
+
+  return null;
+};
+
+const snapOverlayToCursor: Modifier = ({
+  activatorEvent,
+  draggingNodeRect,
+  transform,
+}) => {
+  if (!activatorEvent || !draggingNodeRect) {
+    return transform;
+  }
+
+  const point = getEventClientPoint(activatorEvent);
+  if (!point) {
+    return transform;
+  }
+
+  const centerX = draggingNodeRect.left + draggingNodeRect.width / 2;
+  const centerY = draggingNodeRect.top + draggingNodeRect.height / 2;
+
+  return {
+    ...transform,
+    x: transform.x + (point.x - centerX),
+    y: transform.y + (point.y - centerY),
+  };
+};
 
 const dedupeKeywords = (keywords: Keyword[]): Keyword[] => {
   const seen = new Map<string, Keyword>();
@@ -174,6 +233,7 @@ export default function PromptWorkbenchPage() {
 
   const [description, setDescription] = useState("");
   const [instructions, setInstructions] = useState("");
+  const [activeKeyword, setActiveKeyword] = useState<Keyword | null>(null);
   const [newKeyword, setNewKeyword] = useState("");
   const [tagInput, setTagInput] = useState("");
   const [polarity, setPolarity] = useState<"positive" | "negative">("positive");
@@ -258,6 +318,18 @@ export default function PromptWorkbenchPage() {
     [negativeKeywords],
   );
 
+  const findKeywordById = useCallback(
+    (id: string): Keyword | null => {
+      const fromPositive = positiveKeywords.find((item) => item.id === id);
+      if (fromPositive) {
+        return fromPositive;
+      }
+      const fromNegative = negativeKeywords.find((item) => item.id === id);
+      return fromNegative ?? null;
+    },
+    [negativeKeywords, positiveKeywords],
+  );
+
   const serializeKeywords = useCallback(
     (keywords: Keyword[]) =>
       keywords.map((item) => ({
@@ -337,10 +409,12 @@ export default function PromptWorkbenchPage() {
       if (!keywordExists) {
         return;
       }
+      setActiveKeyword(findKeywordById(activeId));
       clearDropIndicator();
     },
     [
       clearDropIndicator,
+      findKeywordById,
       negativeKeywords,
       positiveKeywords,
     ],
@@ -429,13 +503,15 @@ export default function PromptWorkbenchPage() {
   const handleDragCancel = useCallback(
     (_event: DragCancelEvent) => {
       clearDropIndicator();
+      setActiveKeyword(null);
     },
-    [clearDropIndicator],
+    [clearDropIndicator, setActiveKeyword],
   );
 
   const handleDragEnd = useCallback(
     (event: DragEndEvent) => {
       clearDropIndicator();
+      setActiveKeyword(null);
       const { active, over } = event;
       if (!over) {
         return;
@@ -545,6 +621,7 @@ export default function PromptWorkbenchPage() {
       negativeKeywords,
       positiveIdSet,
       positiveKeywords,
+      setActiveKeyword,
       setCollections,
     ],
   );
@@ -1001,8 +1078,12 @@ export default function PromptWorkbenchPage() {
         const nextKeywords = [
           ...positiveKeywords,
           ...negativeKeywords,
-          ...(response.positive_keywords ?? []).map(mapKeywordResultToKeyword),
-          ...(response.negative_keywords ?? []).map(mapKeywordResultToKeyword),
+          ...(response.positive_keywords ?? []).map(
+            mapKeywordResultToKeyword,
+          ),
+          ...(response.negative_keywords ?? []).map(
+            mapKeywordResultToKeyword,
+          ),
         ];
         const deduped = dedupeKeywords(nextKeywords);
         const { limited, trimmedPositive, trimmedNegative } =
@@ -1059,6 +1140,7 @@ export default function PromptWorkbenchPage() {
         topic,
         body: prompt,
         model,
+        instructions: instructions.trim() || undefined,
         publish,
         status: publish ? "published" : "draft",
         tags: tags.map((tag) => tag.value),
@@ -1505,6 +1587,7 @@ export default function PromptWorkbenchPage() {
       <GlassCard className="flex flex-col gap-5">
         <DndContext
           sensors={sensors}
+          modifiers={[snapOverlayToCursor]}
           onDragStart={handleDragStart}
           onDragOver={handleDragOver}
           onDragEnd={handleDragEnd}
@@ -1553,6 +1636,11 @@ export default function PromptWorkbenchPage() {
             onWeightChange={handleWeightChange}
             onRemove={handleRemoveKeyword}
           />
+          <DragOverlay dropAnimation={null}>
+            {activeKeyword ? (
+              <KeywordDragPreview keyword={activeKeyword} />
+            ) : null}
+          </DragOverlay>
         </DndContext>
       </GlassCard>
 
@@ -1885,6 +1973,7 @@ function SortableKeywordChip({
     isDragging,
   } = useSortable({ id: keyword.id });
   const style = {
+    position: "relative" as const,
     transform: CSS.Transform.toString(transform),
     transition,
     zIndex: isDragging ? 30 : undefined,
@@ -1979,5 +2068,39 @@ function KeywordDropIndicator() {
       className="h-1 w-full rounded-full bg-primary/60 transition-all duration-150 dark:bg-primary/50"
       role="presentation"
     />
+  );
+}
+
+function KeywordDragPreview({ keyword }: { keyword: Keyword }) {
+  const { t } = useTranslation();
+  const isPositive = keyword.polarity === "positive";
+  const displayWord = formatOverflowLabel(keyword.word, keyword.overflow ?? 0);
+  return (
+    <div
+      className={cn(
+        "pointer-events-none flex w-[240px] items-center gap-3 rounded-2xl border px-3 py-2 text-sm shadow-lg",
+        isPositive
+          ? "border-primary/30 bg-primary/90 text-white"
+          : "border-secondary/30 bg-secondary/90 text-white",
+      )}
+    >
+      <GripVertical className="h-3.5 w-3.5 opacity-80" />
+      <div className="flex flex-1 flex-col gap-1 text-left">
+        <span className="text-sm font-medium" title={keyword.word}>
+          {displayWord}
+        </span>
+        <span className="text-xs opacity-80">
+          {t("promptWorkbench.weightDisplay", {
+            value: clampWeight(keyword.weight),
+            defaultValue: `权重 ${clampWeight(keyword.weight)}`,
+          })}
+        </span>
+      </div>
+      <span className="rounded-full bg-white/20 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide">
+        {t(`promptWorkbench.sourceLabels.${keyword.source ?? "model"}`, {
+          defaultValue: keyword.source ?? "model",
+        })}
+      </span>
+    </div>
   );
 }

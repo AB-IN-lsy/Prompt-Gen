@@ -11,10 +11,14 @@ export default defineConfig(function (_a) {
     var mode = _a.mode;
     var envDir = path.resolve(__dirname, "..");
     var env = loadEnv(mode, envDir, "");
+    var viteEnvForProcess = Object.fromEntries(Object.entries(env).filter(function (_a) {
+        var key = _a[0];
+        return key.startsWith("VITE_");
+    }));
     return {
         envDir: envDir,
         define: {
-            "process.env": env
+            "process.env": viteEnvForProcess
         },
         plugins: [react()],
         server: {

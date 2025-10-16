@@ -33,6 +33,7 @@ import {
 } from "../lib/api";
 import { usePromptWorkbench } from "../hooks/usePromptWorkbench";
 import type { Keyword, KeywordSource } from "../lib/api";
+import { nanoid } from "nanoid";
 import { clampTextWithOverflow, formatOverflowLabel, cn } from "../lib/utils";
 import { PageHeader } from "../components/layout/PageHeader";
 
@@ -172,11 +173,13 @@ export default function MyPromptsPage(): JSX.Element {
         item.word ?? "",
         PROMPT_KEYWORD_MAX_LENGTH,
       );
+      const keywordId =
+        item.keyword_id !== undefined && item.keyword_id !== null
+          ? Number(item.keyword_id)
+          : undefined;
       return {
-        id:
-          item.keyword_id !== undefined && item.keyword_id !== null
-            ? String(item.keyword_id)
-            : `${polarity}-${item.word}-${index}`,
+        id: nanoid(),
+        keywordId,
         word: value,
         polarity,
         source: fallbackSource(item.source),

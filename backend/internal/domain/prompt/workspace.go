@@ -38,6 +38,7 @@ type PersistenceTask struct {
 	Publish        bool      `json:"publish"`
 	Topic          string    `json:"topic"`
 	Body           string    `json:"body"`
+	Instructions   string    `json:"instructions"`
 	Model          string    `json:"model"`
 	Status         string    `json:"status"`
 	Tags           []string  `json:"tags,omitempty"`

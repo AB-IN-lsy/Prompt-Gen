@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"unicode"
 
 	promptdomain "electron-go-app/backend/internal/domain/prompt"
 
@@ -131,7 +132,12 @@ func (r *PromptRepository) ListByUser(ctx context.Context, userID uint, filter P
 	}
 	if q := strings.TrimSpace(filter.Query); q != "" {
 		if filter.UseFullText {
-			query = query.Where("MATCH(topic, tags) AGAINST (? IN BOOLEAN MODE)", q)
+			if booleanQuery, ok := buildBooleanQuery(q); ok {
+				query = query.Where("MATCH(topic, tags) AGAINST (? IN BOOLEAN MODE)", booleanQuery)
+			} else {
+				keyword := "%" + q + "%"
+				query = query.Where("(topic LIKE ? OR tags LIKE ?)", keyword, keyword)
+			}
 		} else {
 			keyword := "%" + q + "%"
 			query = query.Where("(topic LIKE ? OR tags LIKE ?)", keyword, keyword)
@@ -155,6 +161,48 @@ func (r *PromptRepository) ListByUser(ctx context.Context, userID uint, filter P
 		return nil, 0, fmt.Errorf("list prompts: %w", err)
 	}
 	return records, total, nil
+}
+
+func buildBooleanQuery(raw string) (string, bool) {
+	// buildBooleanQuery 将用户输入拆分为布尔模式查询，并追加通配符以实现前缀匹配。
+	// 若命中中文或非 ASCII 字符，则返回 false 交由 LIKE 兜底处理。
+	tokens := strings.Fields(raw)
+	if len(tokens) == 0 {
+		return "", false
+	}
+	clauses := make([]string, 0, len(tokens))
+	for _, token := range tokens {
+		cleaned := strings.Trim(token, "+-><()~*\"")
+		cleaned = strings.TrimSpace(cleaned)
+		if cleaned == "" {
+			continue
+		}
+		if !isASCIIAlphaNumeric(cleaned) {
+			return "", false
+		}
+		clause := "+" + cleaned
+		if len(cleaned) >= 3 {
+			clause += "*"
+		}
+		clauses = append(clauses, clause)
+	}
+	if len(clauses) == 0 {
+		return "", false
+	}
+	return strings.Join(clauses, " "), true
+}
+
+func isASCIIAlphaNumeric(s string) bool {
+	// isASCIIAlphaNumeric 判断字符串是否仅包含 ASCII 字母或数字，防止布尔查询遇到中文时报错。
+	for _, r := range s {
+		if r > unicode.MaxASCII {
+			return false
+		}
+		if !(unicode.IsLetter(r) || unicode.IsDigit(r)) {
+			return false
+		}
+	}
+	return true
 }
 
 // Delete 移除指定用户的 Prompt，并级联删除关联数据。

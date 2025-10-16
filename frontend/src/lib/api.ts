@@ -36,6 +36,7 @@ const clampKeywordWeight = (value?: number): number => {
  */
 export interface Keyword {
   id: string;
+  keywordId?: number;
   word: string;
   polarity: KeywordPolarity;
   source: KeywordSource;
@@ -113,6 +114,7 @@ export interface PromptDetailResponse {
   id: number;
   topic: string;
   body: string;
+  instructions?: string | null;
   model: string;
   status: "draft" | "published" | "archived";
   tags: string[];
@@ -314,6 +316,7 @@ export interface SavePromptRequest {
   topic?: string;
   body?: string;
   model?: string;
+  instructions?: string;
   publish?: boolean;
   status?: string;
   tags?: string[];
@@ -642,6 +645,7 @@ export async function savePrompt(
         topic: payload.topic,
         body: payload.body,
         model: payload.model,
+        instructions: payload.instructions,
         publish: payload.publish ?? false,
         status: payload.status,
         tags: payload.tags,

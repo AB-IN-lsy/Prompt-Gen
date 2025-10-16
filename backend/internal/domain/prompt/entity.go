@@ -36,6 +36,7 @@ type Prompt struct {
 	UserID           uint       `gorm:"index;not null"`                         // 关联的用户 ID。
 	Topic            string     `gorm:"size:255;not null"`                      // Prompt 主题，如“React 面试”。
 	Body             string     `gorm:"type:text;not null"`                     // Prompt 正文内容。
+	Instructions     string     `gorm:"type:text;not null"`                     // 补充要求，用于指导生成模型的额外说明。
 	PositiveKeywords string     `gorm:"type:text;not null"`                     // 正向关键词 JSON。
 	NegativeKeywords string     `gorm:"type:text;not null"`                     // 负向关键词 JSON。
 	Model            string     `gorm:"size:64;not null"`                       // 使用的大模型标识。
@@ -75,6 +76,7 @@ type PromptVersion struct {
 	PromptID         uint      `gorm:"not null;index;index:idx_prompt_versions,priority:1"` // 关联 Prompt。
 	VersionNo        int       `gorm:"not null;index:idx_prompt_versions,priority:2"`       // 版本号。
 	Body             string    `gorm:"type:text;not null"`                                  // Prompt 正文快照。
+	Instructions     string    `gorm:"type:text;not null"`                                  // 补充要求快照。
 	PositiveKeywords string    `gorm:"type:text;not null"`                                  // 正向关键词快照。
 	NegativeKeywords string    `gorm:"type:text;not null"`                                  // 负向关键词快照。
 	Model            string    `gorm:"size:64;not null"`                                    // 生成使用的模型。
