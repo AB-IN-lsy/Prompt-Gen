@@ -39,6 +39,7 @@ This repository combines an Electron shell, a Go HTTP backend, and a Vite/React 
   4. **Reading Project Info:** You can find project information and upcoming product requirements in both the backend and frontend README files.
   5. **Update Documentation:** When modifying both frontend and backend code, remember to update both the frontend and backend README files, especially with API details and project architecture changes.
   6. **i18n for Copy**: If frontend needs to add new copy or text, it should be loaded from the i18n system. The default language for text should be Chinese.
+  7. **Post-Answer Documentation**: After answering a question, always write a brief summary of what you’ve done in Chinese. If you ask me to write a git commit, it should be written in Chinese and ensure there are no quotation marks in the commit message.
 
 ---
 
