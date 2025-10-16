@@ -81,7 +81,7 @@ import {
 import { ApiError } from "../lib/errors";
 import { usePromptWorkbench } from "../hooks/usePromptWorkbench";
 import { useAuth } from "../hooks/useAuth";
-import { DEFAULT_KEYWORD_WEIGHT } from "../config/env";
+import { DEFAULT_KEYWORD_WEIGHT } from "../config/prompt";
 import { PageHeader } from "../components/layout/PageHeader";
 
 const clampWeight = (value?: number): number => {

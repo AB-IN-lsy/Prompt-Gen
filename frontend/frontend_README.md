@@ -5,7 +5,7 @@
 ## 近期前端调整
 
 - **窗口外壳**：Electron 渲染进程默认启动在 1100×720 的固定比例窗口中，禁用边框拖拽，仅保留最小化与最大化控制；网页模式下会自动隐藏桌面专属按钮并显示 “Web Preview” 提示。
-- **关键词配置**：新增 `frontend/.env.example`，可通过 `VITE_KEYWORD_ROW_LIMIT`（默认 3）与 `VITE_DEFAULT_KEYWORD_WEIGHT`（默认 5）覆写前端关键词展示与权重初值。
+- **关键词配置**：根目录 `.env(.local)` 支持 `VITE_KEYWORD_ROW_LIMIT`（默认 3）与 `VITE_DEFAULT_KEYWORD_WEIGHT`（默认 5）等字段，可快速调节前端关键词与权重默认值。
 - **Prompt 工作台布局**：补充要求与标签输入区改为纵向堆叠，标签按钮加宽并与输入框同列，避免小屏下换行。
 
 ## 已实现功能概览
@@ -53,9 +53,9 @@ npm run preview
 - `5173`：Vite 开发服务器默认端口。执行 `npm run dev` 时，浏览器或 Electron 渲染进程会从该端口加载最新的热更新页面。
 - `4173`：`npm run preview` 使用的预览端口，用于本地验证生产构建的效果。
 
-前端的 API 客户端（`src/lib/http.ts`）默认直接指向 `http://localhost:9090/api`（Go 后端监听端口）。若需要接入远程环境，可以在 `frontend/.env.local` 中设置 `VITE_API_BASE_URL` 覆盖默认地址，构建与运行都会读取该变量。上传成功的头像会返回 `/static/avatars/<文件名>` 路径，由后端静态资源路由托管。
+前端的 API 客户端（`src/lib/http.ts`）默认直接指向 `http://localhost:9090/api`（Go 后端监听端口）。若需要接入远程环境，可以在根目录 `.env.local` 中设置 `VITE_API_BASE_URL` 覆盖默认地址，构建与运行都会读取该变量。上传成功的头像会返回 `/static/avatars/<文件名>` 路径，由后端静态资源路由托管。
 
-关键词与标签的数量与长度上限均可通过环境变量调节：在 `frontend/.env.local` 中设置 `VITE_PROMPT_KEYWORD_LIMIT=10`、`VITE_PROMPT_KEYWORD_MAX_LENGTH=32`、`VITE_PROMPT_TAG_LIMIT=5`、`VITE_PROMPT_TAG_MAX_LENGTH=5`（需与后端的 `PROMPT_*` 对应项保持一致），即可同步约束提示词与标签的数量和字符长度，避免前后端配置漂移。
+关键词与标签的数量与长度上限均可通过环境变量调节：在根目录 `.env.local` 中设置 `VITE_PROMPT_KEYWORD_LIMIT=10`、`VITE_PROMPT_KEYWORD_MAX_LENGTH=32`、`VITE_PROMPT_TAG_LIMIT=5`、`VITE_PROMPT_TAG_MAX_LENGTH=5`（需与后端的 `PROMPT_*` 对应项保持一致），即可同步约束提示词与标签的数量和字符长度，避免前后端配置漂移。
 
 ## 接口请求流程一图梳理
 

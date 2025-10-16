@@ -9,7 +9,7 @@ import { PROMPT_KEYWORD_MAX_LENGTH } from "../config/prompt";
 import { ApiError } from "./errors";
 import { http, normaliseError } from "./http";
 import { clampTextWithOverflow } from "./utils";
-import { DEFAULT_KEYWORD_WEIGHT } from "../config/env";
+import { DEFAULT_KEYWORD_WEIGHT } from "../config/prompt";
 
 export type KeywordPolarity = "positive" | "negative";
 export type KeywordSource = "local" | "api" | "manual";

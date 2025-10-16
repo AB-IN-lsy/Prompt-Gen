@@ -14,7 +14,7 @@ import {
   PROMPT_TAG_MAX_LENGTH,
 } from "../config/prompt";
 import { clampTextWithOverflow } from "../lib/utils";
-import { DEFAULT_KEYWORD_WEIGHT } from "../config/env";
+import { DEFAULT_KEYWORD_WEIGHT } from "../config/prompt";
 
 interface TagEntry {
   value: string;

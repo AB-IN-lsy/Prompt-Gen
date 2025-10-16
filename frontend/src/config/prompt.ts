@@ -39,3 +39,23 @@ export const PROMPT_TAG_MAX_LENGTH =
   Number.isInteger(rawTagMaxLength) && rawTagMaxLength > 0
     ? rawTagMaxLength
     : 5;
+
+const rawKeywordRowLimit = Number.parseInt(
+  import.meta.env.VITE_KEYWORD_ROW_LIMIT ?? "",
+  10,
+);
+
+export const KEYWORD_ROW_LIMIT =
+  Number.isInteger(rawKeywordRowLimit) && rawKeywordRowLimit > 0
+    ? rawKeywordRowLimit
+    : 3;
+
+const rawDefaultKeywordWeight = Number.parseInt(
+  import.meta.env.VITE_DEFAULT_KEYWORD_WEIGHT ?? "",
+  10,
+);
+
+export const DEFAULT_KEYWORD_WEIGHT =
+  Number.isInteger(rawDefaultKeywordWeight) && rawDefaultKeywordWeight > 0
+    ? rawDefaultKeywordWeight
+    : 5;

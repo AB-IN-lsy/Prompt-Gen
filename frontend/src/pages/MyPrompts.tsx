@@ -20,7 +20,7 @@ import {
   PROMPT_KEYWORD_MAX_LENGTH,
   PROMPT_TAG_MAX_LENGTH,
 } from "../config/prompt";
-import { KEYWORD_ROW_LIMIT, DEFAULT_KEYWORD_WEIGHT } from "../config/env";
+import { KEYWORD_ROW_LIMIT, DEFAULT_KEYWORD_WEIGHT } from "../config/prompt";
 import {
   deletePrompt,
   fetchMyPrompts,

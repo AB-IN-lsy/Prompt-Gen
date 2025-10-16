@@ -11,6 +11,7 @@ This repository combines an Electron shell, a Go HTTP backend, and a Vite/React 
 * Automated coverage is split by intent: `backend/tests/unit`, `backend/tests/integration` (requires tagged build), and `backend/tests/e2e`.
 * `frontend/src` hosts React components, state stores, and Tailwind styles; helper scripts reside in `frontend/scripts`, and production bundles land in `frontend/dist`.
 * Design references and longer-form documentation are tracked in `design/` and `docs/`, respectively.
+* Environment Variable Loading: The root .env / .env.local files are read by the Electron main process, Go backend, and Vite frontend simultaneously; new fields should be added to .env.example as well.
 
 ---
 

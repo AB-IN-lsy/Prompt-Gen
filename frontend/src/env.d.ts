@@ -1,6 +1,10 @@
 /// <reference types="vite/client" />
 
 interface ImportMetaEnv {
+    readonly VITE_PROMPT_KEYWORD_LIMIT?: string;
+    readonly VITE_PROMPT_KEYWORD_MAX_LENGTH?: string;
+    readonly VITE_PROMPT_TAG_LIMIT?: string;
+    readonly VITE_PROMPT_TAG_MAX_LENGTH?: string;
     readonly VITE_KEYWORD_ROW_LIMIT?: string;
     readonly VITE_DEFAULT_KEYWORD_WEIGHT?: string;
 }
