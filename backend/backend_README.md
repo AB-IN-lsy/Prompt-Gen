@@ -968,14 +968,68 @@ backend/
 > 新方案：解析阶段不再直接写 MySQL，而是把 Prompt 工作区缓存在 Redis，降低接口耗时并支持高频编辑；最终保存/发布时再异步落库，确保主题与关键词仍旧持久化在 MySQL。
 
 1. **自然语言解析**：`POST /api/prompts/interpret` 调用模型返回 `topic` 及首批正/负关键词。服务端生成 `workspace_token`，将解析结果写入 Redis（详情见下文），并把 token、topic、keywords 返回给前端。  
-2. **关键词补足/手动维护**：`POST /api/prompts/keywords/augment` 和 `POST /api/prompts/keywords/manual` 统一操作 Redis 中的工作区数据：  
-   - 模型补词直接 `ZADD` 到对应关键词集合（按 `word` 去重，`score` 记录权重或插入时间）。  
-   - 手动增删改在 Redis 完成，响应即时返回。  
+2. **关键词补足/手动维护**：`POST /api/prompts/keywords/augment` 与 `POST /api/prompts/keywords/manual` 统一写入 Redis 工作区：  
+   - 模型补词直接 `ZADD` 到正/负关键词集合（按 `word` 去重，`score` 记录权重或插入时间）。  
+   - 手动录入根据是否带 `workspace_token` 分两种路径：  
+
+     | 调用场景 | 必需参数 | 后端行为 | 响应中的 `keyword_id` |
+     | --- | --- | --- | --- |
+     | 工作台实时编辑 | `workspace_token`（`prompt_id` 可选） | 仅写入 Redis 快照并刷新 TTL | `0`（表示仍是临时词条） |
+     | 离线维护 / 后台批量 | 不传 `workspace_token`，可选 `prompt_id` | 直接 `Upsert` 到 MySQL `keywords` 表；若附带 `prompt_id` 会同步写入关联表 | 返回真实的数据库 ID |
+
+     > **提示**：工作台里的“新关键词”在保存 Prompt 前都是临时态，只有在保存/发布时才会获得正式的 `keyword_id`。
 3. **生成 Prompt**：`POST /api/prompts/generate` 读取 Redis 中最新的 topic 与关键词，调用模型生成正文；生成结果同样写回工作区缓存，便于之后继续修改。  
-4. **保存草稿/发布**：`POST /api/prompts` 会从 Redis 工作区拉取快照，立即将 Prompt 正文、关键词字典及 `prompt_keywords` 关联一并写入 MySQL，并在发布时生成最新的 `prompt_versions`。若工作区或请求体中携带已有 `prompt_id`，则执行更新；否则创建新的草稿记录并将 `prompt_id` 与最新状态写回工作区，供后续发布复用。  
+4. **保存草稿/发布**：`POST /api/prompts` 会合并 Redis 快照与请求体，随后调用 `upsertPromptKeywords`：先对正/负关键词逐条 `Upsert`（已有 `keyword_id` 的更新记录；缺省的自动新建并生成 ID），再重建 `prompt_keywords` 关联表，最后把最新快照写回 Prompt 主表与 Redis。若携带 `prompt_id` 则走更新流程，否则创建新的草稿并把新 ID 回写到工作区，供后续继续编辑。  
 5. **关键词回收与回放**：后台 worker 在 MySQL 完成入库后，同步更新 Redis 补全缓存（若仍在有效期内），确保后续 interpret/augment 可以复用历史词条；用户重新打开工作台时，优先用 Redis 中的工作区数据，若不存在再回源查询 MySQL。
 
 > **说明**：仍保留 `PersistenceTask` 队列能力，用于后续扩展批量或重型任务；任务幂等关键字段为 `(user_id, prompt_id, workspace_token)`。
+
+### 页面跳转与数据回填
+
+1. **我的 Prompt 列表**：前端通过 `GET /api/prompts` 渲染 “我的 Prompt” 页面，接口会携带精简版的 `positive_keywords[]`、`negative_keywords[]`（仅包含 `word`、`weight`、`source`）。
+2. **进入编辑页**：点击“编辑”后调用 `GET /api/prompts/:id`。该接口返回完整的 Prompt 正文、标签以及一个新的 `workspace_token`。前端在 `frontend/src/pages/MyPrompts.tsx` 的 `populateWorkbench` 中，将返回的数据依次写入 `usePromptWorkbench` store：
+   - `setTopic` / `setPrompt` / `setModel` / `setPromptId` / `setWorkspaceToken`；
+   - `setCollections` 会把 `positive_keywords`、`negative_keywords` 传给工作台状态，并交给 `normaliseKeyword` 统一裁剪长度、去重、同步权重。
+3. **工作台渲染**：`PromptWorkbench` 组件读取 store 中的 `positiveKeywords`、`negativeKeywords`，实时展示在拖拽面板中；若 Redis 中仍保留同一个 `workspace_token`，后续的 interpret/augment/manual/sync 都会命中同一份快照，实现原子更新。
+
+### 关键词 ID 与前端拖拽
+
+- 前端为了配合 dnd-kit 的拖拽机制，每次加载关键词都会生成一个仅在当前会话有效的 `id`（见 `frontend/src/pages/PromptWorkbench.tsx` 与 `frontend/src/pages/MyPrompts.tsx` 中对 `nanoid()` 的调用）。这个 `id` 只用于 React 渲染与拖拽定位，不会回传给后端。
+- 后端真正识别的字段是 `keyword_id`：
+  - interpret / augment / manual（无 `workspace_token`）场景下会返回真实 `keyword_id`；
+  - manual（带 `workspace_token`）则返回 `0`，表示词条尚未持久化。
+- 当前端调用 `POST /api/prompts` 保存时，会把每个关键词的 `keywordId`（真实 ID 或 `undefined`）随 payload 一起提交。Service 层的 `keywords.Upsert` 会：
+  - 若收到合法的 `keyword_id`，更新对应记录的权重与极性；
+  - 若缺省，则创建新记录并生成新的 `keyword_id`，随后写入 `prompt_keywords` 关联表。生成后的 ID 也会被序列化到 Prompt 主表，下一次打开工作台时即可复用。
+
+> **小结**：前端 `id` ≠ 后端 `keyword_id`。前者服务于拖拽交互，后者才是数据库主键；在工作台临时阶段只产生前者，真正保存时才会生成或更新后者。
+
+### 关键词权重与删除
+
+#### 已发布 Prompt 再编辑：改权重 / 删除关键词时的流程
+
+- 页面上只是改了某个关键词的权重，然后点击“发布”：
+      1. 前端把最新的正向/负向关键词数组（含各自 keywordId）提交到 POST /api/prompts。
+      2. 后端在 updatePromptRecord → upsertPromptKeywords 中逐条执行 keywords.Upsert：
+          - 如果该词带着合法的 keyword_id，就更新 keywords 表里那条记录的权重、极性、来源；
+          - 如果缺少 keyword_id，会新建一条关键词记录并生成新的自增 ID。
+      3. 随后调用 ReplacePromptKeywords：它会先把 prompt_keywords 表里属于该 Prompt 的所有关联删掉，再用当前提交的数组重建关联。因此，如果你在工作台
+         删掉了某个词，它不会再写回关系表，相当于从这个 Prompt 的“正/负关键词列表”里彻底移除。关键词主表里的那条记录还保留（方便以后再次使用），但和
+         这条 Prompt 就不再有关联。
+      4. 若这次操作是“再次发布”，LatestVersionNo 会 +1，并把最新正文/关键词快照写入 prompt_versions，同时最多保留最近 3 个版本。于是新权重即刻生效，
+         历史版本也能回溯。
+- 删除关键词的动作本质上就是让前端不要把它包含在最终的数组里。ReplacePromptKeywords 清空旧关联后只插入当前数组，因此被删除的词会从关联表中消失；如
+    果后续完全没人引用，它只是留在 keywords 字典里，可以被其他 Prompt 复用。
+
+#### 已发布 Prompt 再新增关键词并发布
+
+- 新增的词在工作台阶段没有 keyword_id（前端带的是 undefined，Redis 中也是临时态）。
+- 工作台阶段的 keyword 的“唯一性”在 Redis 里靠的是 polarity + lowercase(word) 这对组合，既保证同一个词不会重复写入，又方便后续通过 polarity|word 直接定位和删除。等到你真正保存 Prompt 时，才会给这些词补上数据库里的 keyword_id。
+- 当你再次点击“发布”：
+      1. upsertPromptKeywords 发现该词缺少 keyword_id，调用 keywords.Upsert 后会新增一条记录，拿到新的自增 ID。
+      2. ReplacePromptKeywords 把新生成的 ID 与 Prompt 建立关联，原有词仍按当前顺序保留。
+      3. 若之前状态已是 published，LatestVersionNo 会递增，同时写入 prompt_versions，旧版本会被保留在历史记录里。
+      4. Redis 工作区与 Prompt 主表都会同步最新的关键词快照，下次打开工作台就能看到带着真实 keyword_id 的新词。
 
 ### 标签管理
 
