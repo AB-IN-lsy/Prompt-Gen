@@ -303,6 +303,11 @@
       "positive": "Pos",
       "negative": "Neg"
     },
+    "keywordOverflow": {
+      "title": "Remaining keywords ({{count}})",
+      "trigger": "Show the remaining {{count}} keywords",
+      "empty": "No additional keywords"
+    },
     "statusBadge": {
       "draft": "Draft",
       "published": "Published",
@@ -410,39 +415,66 @@
     "eyebrow": "Dashboard overview",
     "title": "Workspace dashboard",
     "welcome": "Welcome back, {{name}}",
-    "subtitle": "Here's what's happening across your prompt workspace today.",
+    "subtitle": "Here’s what’s happening across your prompt workspace today.",
+    "defaultName": "Creator",
     "createPrompt": "Create prompt",
     "openWorkbench": "Open workbench",
     "metrics": {
       "activePrompts": "Active prompts",
       "drafts": "Drafts awaiting review",
-      "successRate": "Average success rate"
+      "successRate": "Average success rate",
+      "noData": "No data",
+      "activeHint": "{{count}} items in total",
+      "draftHint": "{{count}} drafts pending",
+      "successRateHint": "Published share"
     },
     "trend": {
       "up": "+{{value}} vs last week",
       "down": "-{{value}} vs last week"
     },
-    "activity": {
-      "title": "Recent activity",
-      "empty": "No activity yet. Publish a prompt to see updates."
+    "search": {
+      "title": "Quick search",
+      "subtitle": "Find previous prompts or jump back into editing.",
+      "placeholder": "Type a topic or keyword…",
+      "submit": "Search",
+      "historyTitle": "Recent searches",
+      "historyEmpty": "No searches yet",
+      "clear": "Clear",
+      "removeHistory": "Remove this entry",
+      "resultsTitle": "Results",
+      "loading": "Searching…",
+      "noResults": "No prompt found for “{{query}}”.",
+      "awaiting": "Enter a topic or keyword to start searching."
     },
-    "activityItems": {
-      "promptPublished": "Published prompt “{{title}}”",
-      "promptUpdated": "Updated draft “{{title}}”",
-      "keywordAdded": "Added keyword “{{title}}”"
+    "drafts": {
+      "title": "Draft reminder",
+      "subtitle": "Pick up pending prompts and publish them.",
+      "updatedAt": "Last updated: {{date}}{{time}}",
+      "resume": "Continue editing",
+      "loading": "Loading drafts…",
+      "empty": "No drafts yet. Head to the workbench to create one.",
+      "viewAll": "View all drafts",
+      "count": "{{count}} drafts"
     },
-    "performance": {
-      "title": "Prompt performance",
-      "cta": "See all analytics",
-      "columns": {
-        "prompt": "Prompt",
-        "model": "Model",
-        "conversion": "Conversion"
-      }
+    "recent": {
+      "title": "Recently viewed",
+      "viewAll": "Open “My prompts”",
+      "loading": "Loading recent prompts…",
+      "empty": "No recent prompts yet.",
+      "open": "Open"
     },
-    "insights": {
-      "title": "Keyword spotlight",
-      "subtitle": "Top performing keywords this week"
+    "models": {
+      "title": "Model quota status",
+      "subtitle": "Enabled {{enabled}} / total {{total}}",
+      "loading": "Loading model status…",
+      "empty": "No model credentials configured yet.",
+      "manage": "Manage credentials",
+      "verifiedAt": "Last verified: {{date}}{{time}}",
+      "neverVerified": "Connectivity test not executed yet"
+    },
+    "toasts": {
+      "resumeLoading": "Loading prompt…",
+      "resumeSuccess": "Prompt ready. Redirecting to the workbench."
     }
   },
   "settings": {

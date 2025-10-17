@@ -303,6 +303,11 @@
       "positive": "正",
       "negative": "负"
     },
+    "keywordOverflow": {
+      "title": "剩余关键词（{{count}}）",
+      "trigger": "查看剩余 {{count}} 个关键词",
+      "empty": "暂无更多关键词"
+    },
     "statusBadge": {
       "draft": "草稿",
       "published": "已发布",
@@ -411,38 +416,65 @@
     "title": "工作台概览",
     "welcome": "欢迎回来，{{name}}",
     "subtitle": "了解今天 Prompt 工作台的关键动态。",
+    "defaultName": "创作者",
     "createPrompt": "创建 Prompt",
     "openWorkbench": "打开工作台",
     "metrics": {
       "activePrompts": "在线 Prompt",
       "drafts": "待审核草稿",
-      "successRate": "平均成功率"
+      "successRate": "平均成功率",
+      "noData": "暂无数据",
+      "activeHint": "共 {{count}} 条记录",
+      "draftHint": "待处理草稿 {{count}} 条",
+      "successRateHint": "发布成功占比"
     },
     "trend": {
       "up": "较上周提升 {{value}}",
       "down": "较上周下降 {{value}}"
     },
-    "activity": {
-      "title": "最新动态",
-      "empty": "暂时没有动态，发布一个 Prompt 吧。"
+    "search": {
+      "title": "快速搜索",
+      "subtitle": "查找历史 Prompt 或直接继续编辑。",
+      "placeholder": "输入主题或关键词…",
+      "submit": "搜索",
+      "historyTitle": "历史搜索",
+      "historyEmpty": "暂无搜索记录",
+      "clear": "清空",
+      "removeHistory": "删除该记录",
+      "resultsTitle": "搜索结果",
+      "loading": "正在搜索…",
+      "noResults": "未找到与“{{query}}”相关的 Prompt。",
+      "awaiting": "输入主题或关键词即可开始搜索。"
     },
-    "activityItems": {
-      "promptPublished": "发布了 Prompt「{{title}}」",
-      "promptUpdated": "更新了草稿「{{title}}」",
-      "keywordAdded": "新增关键词「{{title}}」"
+    "drafts": {
+      "title": "草稿提醒",
+      "subtitle": "继续完善待发布的 Prompt。",
+      "updatedAt": "最近更新：{{date}}{{time}}",
+      "resume": "继续编辑",
+      "loading": "正在加载草稿…",
+      "empty": "暂时没有草稿，去工作台开始创作吧。",
+      "viewAll": "查看全部草稿",
+      "count": "{{count}} 条草稿"
     },
-    "performance": {
-      "title": "Prompt 表现",
-      "cta": "查看全部分析",
-      "columns": {
-        "prompt": "Prompt",
-        "model": "模型",
-        "conversion": "转化率"
-      }
+    "recent": {
+      "title": "最近访问",
+      "viewAll": "打开“我的 Prompt”",
+      "loading": "正在加载最近记录…",
+      "empty": "还没有最近访问的 Prompt。",
+      "open": "打开"
     },
-    "insights": {
-      "title": "关键词聚焦",
-      "subtitle": "本周表现最佳的关键词"
+    "models": {
+      "title": "模型额度状态",
+      "subtitle": "启用 {{enabled}} / 总计 {{total}}",
+      "loading": "正在加载模型状态…",
+      "empty": "还没有配置任何模型凭据。",
+      "manage": "前往模型设置",
+      "verifiedAt": "最近验证：{{date}}{{time}}",
+      "neverVerified": "尚未执行连通性校验"
+    },
+    "toasts": {
+      "resumeLoading": "正在加载 Prompt …",
+      "resumeSuccess": "Prompt 已加载，正在跳转工作台。"
     }
   },
   "settings": {

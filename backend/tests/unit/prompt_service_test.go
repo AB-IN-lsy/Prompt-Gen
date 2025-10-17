@@ -516,3 +516,47 @@ func TestPromptServiceSaveTagNormalization(t *testing.T) {
 		t.Fatalf("unexpected tags: %#v, expected %#v", stored, expected)
 	}
 }
+
+// TestPromptServiceSaveMixedLanguageTopicSpacing 验证中英文 Topic 在保存时会自动插入分隔符，方便全文检索命中。
+func TestPromptServiceSaveMixedLanguageTopicSpacing(t *testing.T) {
+	service, promptRepo, _, db, _ := setupPromptService(t)
+	defer func() {
+		sqlDB, _ := db.DB()
+		sqlDB.Close()
+	}()
+
+	rawTopic := "Go后端工程师技术面试Prompt生成"
+	output, err := service.Save(context.Background(), promptsvc.SaveInput{
+		UserID:  1,
+		Topic:   rawTopic,
+		Body:    "Prompt 正文",
+		Model:   "deepseek-chat",
+		Status:  promptdomain.PromptStatusDraft,
+		Publish: false,
+		PositiveKeywords: []promptsvc.KeywordItem{
+			{Word: "Prompt", Polarity: promptdomain.KeywordPolarityPositive},
+		},
+		NegativeKeywords: []promptsvc.KeywordItem{},
+	})
+	if err != nil {
+		t.Fatalf("save prompt failed: %v", err)
+	}
+
+	record, err := promptRepo.FindByID(context.Background(), 1, output.PromptID)
+	if err != nil {
+		t.Fatalf("load prompt: %v", err)
+	}
+
+	expectedTopic := "Go 后端工程师技术面试 Prompt 生成"
+	if record.Topic != expectedTopic {
+		t.Fatalf("unexpected stored topic: %q, expected %q", record.Topic, expectedTopic)
+	}
+
+	found, err := promptRepo.FindByUserAndTopic(context.Background(), 1, expectedTopic)
+	if err != nil {
+		t.Fatalf("find by topic failed: %v", err)
+	}
+	if found.ID != output.PromptID {
+		t.Fatalf("unexpected prompt id, got %d expected %d", found.ID, output.PromptID)
+	}
+}

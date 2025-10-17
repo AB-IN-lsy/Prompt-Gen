@@ -1,4 +1,4 @@
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
@@ -539,14 +539,63 @@ function renderKeywordLine(
   polarity: "positive" | "negative",
   label: string,
 ) {
-  const samples = keywords?.slice(0, KEYWORD_ROW_LIMIT) ?? [];
-  const remaining = Math.max((keywords?.length ?? 0) - samples.length, 0);
+  return (
+    <KeywordLine keywords={keywords} polarity={polarity} label={label} />
+  );
+}
+
+interface KeywordLineProps {
+  keywords?: PromptListKeyword[];
+  polarity: "positive" | "negative";
+  label: string;
+}
+
+function KeywordLine({ keywords, polarity, label }: KeywordLineProps) {
+  const { t } = useTranslation();
+  const [open, setOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const list = keywords ?? [];
+  const visible = list.slice(0, KEYWORD_ROW_LIMIT);
+  const hidden = list.slice(visible.length);
+  const remaining = hidden.length;
   const badgeClass =
     polarity === "positive"
       ? "border-blue-200 text-blue-600 dark:border-blue-500/60 dark:text-blue-300"
       : "border-rose-200 text-rose-600 dark:border-rose-500/60 dark:text-rose-300";
+  const hasContent = visible.length > 0;
 
-  const hasContent = samples.length > 0;
+  useEffect(() => {
+    if (!open) return;
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        containerRef.current &&
+        !containerRef.current.contains(event.target as Node)
+      ) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setOpen(false);
+      }
+    };
+    document.addEventListener("keydown", handleEscape);
+    return () => {
+      document.removeEventListener("keydown", handleEscape);
+    };
+  }, [open]);
+
+  const triggerLabel = t("myPrompts.keywordOverflow.trigger", {
+    count: remaining,
+  });
 
   return (
     <div className="flex items-center gap-2">
@@ -556,7 +605,7 @@ function renderKeywordLine(
       <div className="flex flex-wrap items-center gap-1">
         {hasContent ? (
           <>
-            {samples.map((keyword, index) => {
+            {visible.map((keyword, index) => {
               const { value, overflow } = clampTextWithOverflow(
                 keyword.word ?? "",
                 PROMPT_KEYWORD_MAX_LENGTH,
@@ -573,12 +622,53 @@ function renderKeywordLine(
               );
             })}
             {remaining > 0 ? (
-              <Badge
-                variant="outline"
-                className="border-slate-200 text-slate-400 dark:border-slate-700 dark:text-slate-400 whitespace-nowrap"
-              >
-                +{remaining}
-              </Badge>
+              <div className="relative" ref={containerRef}>
+                <button
+                  type="button"
+                  className={cn(
+                    "inline-flex items-center rounded-full border border-slate-200 px-2.5 py-1 text-xs font-medium text-slate-400 transition-colors hover:border-slate-300 hover:text-slate-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:ring-offset-2 dark:border-slate-700 dark:text-slate-400 dark:hover:border-slate-500 dark:hover:text-slate-300 dark:focus-visible:ring-offset-slate-900",
+                  )}
+                  onClick={() => setOpen((prev) => !prev)}
+                  aria-expanded={open}
+                  aria-haspopup="dialog"
+                  aria-label={triggerLabel}
+                >
+                  +{remaining}
+                </button>
+                {open ? (
+                  <div className="absolute left-1/2 top-full z-30 mt-2 w-56 -translate-x-1/2 rounded-2xl border border-slate-200 bg-white/95 p-3 text-left shadow-xl backdrop-blur-md dark:border-slate-700 dark:bg-slate-900/95">
+                    <div className="text-xs font-semibold text-slate-500 dark:text-slate-400">
+                      {t("myPrompts.keywordOverflow.title", {
+                        count: remaining,
+                      })}
+                    </div>
+                    <div className="mt-2 flex flex-wrap gap-1">
+                      {hidden.length > 0 ? (
+                        hidden.map((keyword, index) => {
+                          const { value, overflow } = clampTextWithOverflow(
+                            keyword.word ?? "",
+                            PROMPT_KEYWORD_MAX_LENGTH,
+                          );
+                          return (
+                            <Badge
+                              key={`${polarity}-hidden-${keyword.word}-${index}`}
+                              variant="outline"
+                              className={`${badgeClass} whitespace-nowrap`}
+                              title={value}
+                            >
+                              {formatOverflowLabel(value, overflow)}
+                            </Badge>
+                          );
+                        })
+                      ) : (
+                        <span className="text-xs text-slate-400 dark:text-slate-500">
+                          {t("myPrompts.keywordOverflow.empty")}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                ) : null}
+              </div>
             ) : null}
           </>
         ) : (

@@ -8,19 +8,7 @@ import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import { ReactNode, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { cn } from "../../lib/utils";
-import {
-    Search,
-    Settings,
-    HelpCircle,
-    LayoutDashboard,
-    Sparkles,
-    LogOut,
-    ListChecks,
-    FileClock,
-    Rocket,
-    ShieldAlert,
-    ScrollText
-} from "lucide-react";
+import { Settings, HelpCircle, LayoutDashboard, Sparkles, LogOut, ListChecks, FileClock, Rocket, ShieldAlert, ScrollText } from "lucide-react";
 import { Button } from "../ui/button";
 import { useAuth } from "../../hooks/useAuth";
 import { TitleBar } from "./TitleBar";
@@ -173,18 +161,12 @@ export function AppShell({ children, rightSlot }: AppShellProps) {
                     </Button>
                 </aside>
                 <main className="flex flex-1 flex-col overflow-hidden">
-                    {/* 顶部工具栏：包含搜索框、全局操作按钮和头像占位 */}
+                    {/* 顶部工具栏：包含全局操作按钮和头像占位 */}
                     <header className="glass sticky top-0 z-10 flex h-16 items-center justify-between border-b border-white/60 bg-white/70 px-6 backdrop-blur-lg transition-colors dark:border-slate-800/70 dark:bg-slate-900/60">
-                        <div className="flex items-center gap-3 rounded-full border border-white/60 bg-white/80 px-4 py-2 transition-colors dark:border-slate-800 dark:bg-slate-900/60">
-                            <Search className="h-4 w-4 text-slate-500 dark:text-slate-400" />
-                            <input
-                                placeholder={t("appShell.searchPlaceholder")}
-                                className="w-64 bg-transparent text-sm text-slate-700 outline-none dark:text-slate-200"
-                                type="search"
-                            />
+                        <div className="flex items-center gap-3 text-sm text-slate-500 dark:text-slate-400">
+                            {rightSlot}
                         </div>
                         <div className="flex items-center gap-3">
-                            {rightSlot}
                             <Button size="sm" variant="secondary" className="dark:shadow-none">
                                 {t("appShell.syncNow")}
                             </Button>

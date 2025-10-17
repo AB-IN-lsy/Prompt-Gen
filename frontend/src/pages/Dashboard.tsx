@@ -4,57 +4,77 @@
  * @FilePath: \electron-go-app\frontend\src\pages\Dashboard.tsx
  * @LastEditTime: 2025-10-10 00:38:41
  */
-import { useMemo } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
+import { toast } from "sonner";
 import {
     ArrowUpRight,
     BarChart3,
     Clock,
     FileText,
+    History,
+    LoaderCircle,
     LucideIcon,
     Sparkles,
-    TrendingUp
+    TrendingUp,
+    X
 } from "lucide-react";
+import { nanoid } from "nanoid";
+
 import { Button } from "../components/ui/button";
 import { Badge } from "../components/ui/badge";
 import { GlassCard } from "../components/ui/glass-card";
+import { Input } from "../components/ui/input";
 import { useAuth } from "../hooks/useAuth";
+import { usePromptWorkbench } from "../hooks/usePromptWorkbench";
 import { PageHeader } from "../components/layout/PageHeader";
+import {
+    DEFAULT_KEYWORD_WEIGHT,
+    PROMPT_KEYWORD_MAX_LENGTH
+} from "../config/prompt";
+import {
+    fetchMyPrompts,
+    fetchPromptDetail,
+    fetchUserModels,
+    Keyword,
+    KeywordSource,
+    PromptListItem,
+    PromptListKeyword,
+    PromptListResponse
+} from "../lib/api";
+import { clampTextWithOverflow, cn } from "../lib/utils";
+
+const SEARCH_HISTORY_STORAGE_KEY = "promptgen/dashboard/search-history";
+const SEARCH_HISTORY_LIMIT = 5;
+const RECENT_PROMPT_LIMIT = 5;
+const RESUME_TOAST_ID = "dashboard-resume";
+
+type MetricTrend = "up" | "down" | "neutral";
 
 interface Metric {
     id: string;
     label: string;
     value: string;
-    delta: string;
+    hint: string;
     icon: LucideIcon;
-    trend: "up" | "down" | "neutral";
+    trend: MetricTrend;
 }
 
-interface ActivityItem {
-    id: number;
+interface FormattedDateTime {
+    date: string;
     time: string;
-    label: string;
-    note?: string;
-    tone: "positive" | "neutral";
 }
 
-interface PromptPerformanceRow {
-    id: number;
-    title: string;
-    model: string;
-    conversion: string;
-    movement: string;
-    improving: boolean;
-}
+function MetricCard({ icon: Icon, label, value, hint, trend }: Metric): JSX.Element {
+    const trendClass =
+        trend === "up"
+            ? "text-emerald-600"
+            : trend === "down"
+                ? "text-rose-500"
+                : "text-slate-500 dark:text-slate-400";
 
-interface KeywordInsight {
-    id: number;
-    keyword: string;
-    lift: string;
-}
-
-function MetricCard({ icon: Icon, label, value, delta, trend }: Metric): JSX.Element {
     return (
         <GlassCard className="relative overflow-hidden">
             <div className="flex items-start justify-between gap-4">
@@ -66,122 +86,398 @@ function MetricCard({ icon: Icon, label, value, delta, trend }: Metric): JSX.Ele
                     <Icon className="h-6 w-6" aria-hidden="true" />
                 </div>
             </div>
-            <p
-                className={
-                    "mt-4 text-xs font-medium " +
-                    (trend === "up" ? "text-emerald-600" : trend === "down" ? "text-rose-500" : "text-slate-500")
-                }
-            >
-                {delta}
-            </p>
+            <p className={cn("mt-4 text-xs font-medium", trendClass)}>{hint}</p>
         </GlassCard>
     );
 }
 
+const statusBadgeClass: Record<PromptListItem["status"], string> = {
+    published:
+        "border-emerald-300 text-emerald-600 dark:border-emerald-500 dark:text-emerald-300",
+    draft:
+        "border-slate-300 text-slate-500 dark:border-slate-600 dark:text-slate-300",
+    archived:
+        "border-amber-300 text-amber-600 dark:border-amber-500 dark:text-amber-300"
+};
+
+function formatDateTime(value?: string | null, locale?: string): FormattedDateTime {
+    if (!value) {
+        return { date: "—", time: "" };
+    }
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) {
+        return { date: value, time: "" };
+    }
+    const dateFormatter = new Intl.DateTimeFormat(locale ?? undefined, { dateStyle: "short" });
+    const timeFormatter = new Intl.DateTimeFormat(locale ?? undefined, { timeStyle: "short" });
+    return {
+        date: dateFormatter.format(date),
+        time: timeFormatter.format(date)
+    };
+}
+
+const clampWeight = (value?: number): number => {
+    if (typeof value !== "number" || Number.isNaN(value)) {
+        return DEFAULT_KEYWORD_WEIGHT;
+    }
+    if (value < 0) return 0;
+    if (value > DEFAULT_KEYWORD_WEIGHT) return DEFAULT_KEYWORD_WEIGHT;
+    return Math.round(value);
+};
+
+const mapKeywordsToWorkbench = (
+    keywords: PromptListKeyword[] | undefined,
+    polarity: Keyword["polarity"]
+): Keyword[] => {
+    if (!keywords || keywords.length === 0) {
+        return [];
+    }
+    return keywords.map((item) => {
+        const { value, overflow } = clampTextWithOverflow(
+            item.word ?? "",
+            PROMPT_KEYWORD_MAX_LENGTH
+        );
+        const keywordId =
+            typeof item.keyword_id === "number" ? Number(item.keyword_id) : undefined;
+        const source: KeywordSource =
+            (item.source as KeywordSource) ?? "manual";
+        return {
+            id: nanoid(),
+            keywordId,
+            word: value,
+            polarity,
+            source,
+            weight: clampWeight(item.weight),
+            overflow
+        };
+    });
+};
+
 export default function DashboardPage(): JSX.Element {
-    const { t } = useTranslation();
+    const { t, i18n } = useTranslation();
     const navigate = useNavigate();
     const profile = useAuth((state) => state.profile);
 
-    const displayName = profile?.user.username ?? profile?.user.email ?? "Creator";
+    const resetWorkbench = usePromptWorkbench((state) => state.reset);
+    const setTopic = usePromptWorkbench((state) => state.setTopic);
+    const setModel = usePromptWorkbench((state) => state.setModel);
+    const setPrompt = usePromptWorkbench((state) => state.setPrompt);
+    const setPromptId = usePromptWorkbench((state) => state.setPromptId);
+    const setWorkspaceToken = usePromptWorkbench((state) => state.setWorkspaceToken);
+    const setCollections = usePromptWorkbench((state) => state.setCollections);
+    const setTags = usePromptWorkbench((state) => state.setTags);
 
-    // TODO：指标卡当前使用本地 Mock 数据，等后端统计接口就绪后替换为实时数据。
+    const [searchInput, setSearchInput] = useState("");
+    const [searchHistory, setSearchHistory] = useState<string[]>(() => {
+        if (typeof window === "undefined") {
+            return [];
+        }
+        try {
+            const raw = window.localStorage.getItem(SEARCH_HISTORY_STORAGE_KEY);
+            if (!raw) {
+                return [];
+            }
+            const parsed = JSON.parse(raw) as unknown;
+            if (!Array.isArray(parsed)) {
+                return [];
+            }
+            return parsed.filter((item): item is string => typeof item === "string");
+        } catch (error) {
+            console.warn("Failed to parse search history", error);
+            return [];
+        }
+    });
+    const [searchResults, setSearchResults] = useState<PromptListItem[]>([]);
+    const [searchLoading, setSearchLoading] = useState(false);
+    const [searchError, setSearchError] = useState<string | null>(null);
+    const [activeSearch, setActiveSearch] = useState<string | null>(null);
+    const [openingPromptId, setOpeningPromptId] = useState<number | null>(null);
+
+    useEffect(() => {
+        if (typeof window === "undefined") {
+            return;
+        }
+        window.localStorage.setItem(
+            SEARCH_HISTORY_STORAGE_KEY,
+            JSON.stringify(searchHistory)
+        );
+    }, [searchHistory]);
+
+    const persistHistory = useCallback((term: string) => {
+        setSearchHistory((prev) => {
+            const next = [term, ...prev.filter((item) => item !== term)];
+            return next.slice(0, SEARCH_HISTORY_LIMIT);
+        });
+    }, []);
+
+    const handleRemoveHistory = useCallback((term: string) => {
+        setSearchHistory((prev) => prev.filter((item) => item !== term));
+    }, []);
+
+    const handleClearHistory = useCallback(() => {
+        setSearchHistory([]);
+    }, []);
+
+    const performSearch = useCallback(
+        async (term: string) => {
+            const value = term.trim();
+            setSearchError(null);
+            setActiveSearch(value || null);
+
+            if (!value) {
+                setSearchResults([]);
+                return;
+            }
+
+            setSearchLoading(true);
+            try {
+                const response: PromptListResponse = await fetchMyPrompts({
+                    query: value,
+                    page: 1,
+                    pageSize: RECENT_PROMPT_LIMIT
+                });
+                setSearchResults(response.items);
+                persistHistory(value);
+            } catch (error) {
+                setSearchResults([]);
+                const message =
+                    error instanceof Error ? error.message : t("errors.generic");
+                setSearchError(message);
+            } finally {
+                setSearchLoading(false);
+            }
+        },
+        [persistHistory, t]
+    );
+
+    const handleSearchSubmit = useCallback(
+        (event?: FormEvent<HTMLFormElement>) => {
+            event?.preventDefault();
+            void performSearch(searchInput);
+        },
+        [performSearch, searchInput]
+    );
+
+    const handleSelectHistory = useCallback(
+        (term: string) => {
+            setSearchInput(term);
+            void performSearch(term);
+        },
+        [performSearch]
+    );
+
+    const {
+        data: allPromptsData,
+        isLoading: allLoading,
+        error: allError
+    } = useQuery({
+        queryKey: ["dashboard", "prompts", "all"],
+        queryFn: () => fetchMyPrompts({ page: 1, pageSize: RECENT_PROMPT_LIMIT }),
+        staleTime: 60_000
+    });
+
+    const {
+        data: draftData,
+        isLoading: draftLoading,
+        error: draftError
+    } = useQuery({
+        queryKey: ["dashboard", "prompts", "drafts"],
+        queryFn: () => fetchMyPrompts({ status: "draft", page: 1, pageSize: RECENT_PROMPT_LIMIT }),
+        staleTime: 60_000
+    });
+
+    const {
+        data: publishedData
+    } = useQuery({
+        queryKey: ["dashboard", "prompts", "published"],
+        queryFn: () => fetchMyPrompts({ status: "published", page: 1, pageSize: 1 }),
+        staleTime: 60_000
+    });
+
+    const {
+        data: modelsData,
+        isLoading: modelsLoading,
+        error: modelsError
+    } = useQuery({
+        queryKey: ["dashboard", "models"],
+        queryFn: () => fetchUserModels(),
+        staleTime: 60_000
+    });
+
+    const totalPrompts = allPromptsData?.meta.total_items ?? 0;
+    const draftCount = draftData?.meta.total_items ?? 0;
+    const publishedCount = publishedData?.meta.total_items ?? 0;
+    const successRate =
+        totalPrompts > 0 ? Math.round((publishedCount / totalPrompts) * 100) : null;
+
     const metrics = useMemo<Metric[]>(
         () => [
             {
                 id: "active",
                 label: t("dashboard.metrics.activePrompts"),
-                value: "24",
-                delta: t("dashboard.trend.up", { value: "12%" }),
+                value: String(publishedCount),
+                hint: t("dashboard.metrics.activeHint", { count: totalPrompts }),
                 icon: Sparkles,
-                trend: "up"
+                trend: publishedCount > 0 ? "up" : "neutral"
             },
             {
                 id: "drafts",
                 label: t("dashboard.metrics.drafts"),
-                value: "9",
-                delta: t("dashboard.trend.down", { value: "5%" }),
+                value: String(draftCount),
+                hint: t("dashboard.metrics.draftHint", { count: draftCount }),
                 icon: FileText,
-                trend: "down"
+                trend: draftCount > 0 ? "down" : "neutral"
             },
             {
                 id: "successRate",
                 label: t("dashboard.metrics.successRate"),
-                value: "68%",
-                delta: t("dashboard.trend.up", { value: "4%" }),
+                value: successRate !== null ? `${successRate}%` : t("dashboard.metrics.noData"),
+                hint: t("dashboard.metrics.successRateHint"),
                 icon: BarChart3,
-                trend: "up"
+                trend: successRate !== null && successRate >= 60 ? "up" : "neutral"
             }
         ],
-        [t]
+        [draftCount, publishedCount, successRate, t, totalPrompts]
     );
 
-    // 最近动态时间线同样使用静态数据，后续对接活动流接口。
-    const activity = useMemo<ActivityItem[]>(
-        () => [
-            {
-                id: 1,
-                time: "09:24",
-                label: t("dashboard.activityItems.promptPublished", { title: "AI onboarding guide" }),
-                tone: "positive"
-            },
-            {
-                id: 2,
-                time: "08:47",
-                label: t("dashboard.activityItems.promptUpdated", { title: "Interview follow-up" }),
-                note: "GPT-4.1 mini",
-                tone: "neutral"
-            },
-            {
-                id: 3,
-                time: "Yesterday",
-                label: t("dashboard.activityItems.keywordAdded", { title: "product vision" }),
-                note: "+3% completion",
-                tone: "positive"
+    const recentPrompts = allPromptsData?.items ?? [];
+
+    const displayName =
+        profile?.user.username ?? profile?.user.email ?? t("dashboard.defaultName");
+
+    const handleOpenPrompt = useCallback(
+        async (promptId: number) => {
+            setOpeningPromptId(promptId);
+            toast.dismiss(RESUME_TOAST_ID);
+            toast.loading(t("dashboard.toasts.resumeLoading"), {
+                id: RESUME_TOAST_ID
+            });
+            try {
+                const detail = await fetchPromptDetail(promptId);
+                resetWorkbench();
+                setTopic(detail.topic);
+                setPrompt(detail.body);
+                setModel(detail.model);
+                setPromptId(String(detail.id));
+                setWorkspaceToken(detail.workspace_token ?? null);
+                const positive = mapKeywordsToWorkbench(
+                    detail.positive_keywords,
+                    "positive"
+                );
+                const negative = mapKeywordsToWorkbench(
+                    detail.negative_keywords,
+                    "negative"
+                );
+                setCollections(positive, negative);
+                setTags(detail.tags ?? []);
+                toast.dismiss(RESUME_TOAST_ID);
+                toast.success(t("dashboard.toasts.resumeSuccess"));
+                navigate("/prompt-workbench");
+            } catch (error) {
+                toast.dismiss(RESUME_TOAST_ID);
+                const message =
+                    error instanceof Error ? error.message : t("errors.generic");
+                toast.error(message);
+            } finally {
+                setOpeningPromptId(null);
             }
-        ],
-        [t]
+        },
+        [
+            navigate,
+            resetWorkbench,
+            setCollections,
+            setModel,
+            setPrompt,
+            setPromptId,
+            setTags,
+            setTopic,
+            setWorkspaceToken,
+            t
+        ]
     );
 
-    // 提示词表现列表用于展示未来的分析数据结构。
-    const promptPerformance = useMemo<PromptPerformanceRow[]>(
-        () => [
-            {
-                id: 1,
-                title: "Growth sync prep",
-                model: "GPT-4.1",
-                conversion: "74%",
-                movement: "+6%",
-                improving: true
-            },
-            {
-                id: 2,
-                title: "Candidate brief",
-                model: "o3-mini",
-                conversion: "62%",
-                movement: "+2%",
-                improving: true
-            },
-            {
-                id: 3,
-                title: "Retro facilitator",
-                model: "GPT-3.5",
-                conversion: "48%",
-                movement: "-3%",
-                improving: false
-            }
-        ],
-        []
-    );
+    const renderPromptRow = (item: PromptListItem) => {
+        const { date, time } = formatDateTime(item.updated_at, i18n.language);
+        const statusLabel = t(`myPrompts.statusBadge.${item.status}`);
+        const isLoadingRow = openingPromptId === item.id;
 
-    // 关键词洞察模块突出近期开启度最高的关键词，暂为示例数据。
-    const keywordInsights = useMemo<KeywordInsight[]>(
-        () => [
-            { id: 1, keyword: "user empathy", lift: "+18%" },
-            { id: 2, keyword: "product vision", lift: "+12%" },
-            { id: 3, keyword: "launch plan", lift: "+9%" }
-        ],
-        []
+        return (
+            <div
+                key={item.id}
+                className="flex items-start justify-between gap-3 rounded-2xl border border-white/60 bg-white/70 px-4 py-3 shadow-sm transition-colors hover:border-primary/30 hover:bg-white dark:border-slate-800/60 dark:bg-slate-900/50 dark:hover:border-primary/30 dark:hover:bg-slate-900"
+            >
+                <div className="space-y-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                        <span className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                            {item.topic}
+                        </span>
+                        <Badge
+                            variant="outline"
+                            className={cn("whitespace-nowrap text-xs", statusBadgeClass[item.status])}
+                        >
+                            {statusLabel}
+                        </Badge>
+                    </div>
+                    <div className="text-xs text-slate-500 dark:text-slate-400">
+                        {date}
+                        {time ? ` · ${time}` : ""}
+                    </div>
+                </div>
+                <Button
+                    variant="ghost"
+                    size="sm"
+                    className="gap-2 text-xs"
+                    onClick={() => handleOpenPrompt(item.id)}
+                    disabled={isLoadingRow}
+                >
+                    {isLoadingRow ? (
+                        <LoaderCircle className="h-4 w-4 animate-spin" />
+                    ) : (
+                        <ArrowUpRight className="h-4 w-4" aria-hidden="true" />
+                    )}
+                    {t("dashboard.recent.open")}
+                </Button>
+            </div>
+        );
+    };
+
+    const renderDraftRow = (item: PromptListItem) => {
+        const { date, time } = formatDateTime(item.updated_at, i18n.language);
+        const isLoadingRow = openingPromptId === item.id;
+        return (
+            <div
+                key={item.id}
+                className="flex items-start justify-between gap-3 rounded-2xl border border-dashed border-slate-200 bg-white/80 px-4 py-3 transition-colors hover:border-primary/40 hover:bg-white dark:border-slate-800/70 dark:bg-slate-900/60 dark:hover:border-primary/40"
+            >
+                <div className="space-y-1">
+                    <span className="text-sm font-medium text-slate-800 dark:text-slate-100">
+                        {item.topic}
+                    </span>
+                    <div className="text-xs text-slate-500 dark:text-slate-400">
+                        {t("dashboard.drafts.updatedAt", { date, time })}
+                    </div>
+                </div>
+                <Button
+                    variant="secondary"
+                    size="sm"
+                    className="gap-2 text-xs"
+                    onClick={() => handleOpenPrompt(item.id)}
+                    disabled={isLoadingRow}
+                >
+                    {isLoadingRow ? (
+                        <LoaderCircle className="h-4 w-4 animate-spin" />
+                    ) : (
+                        <Sparkles className="h-4 w-4" aria-hidden="true" />
+                    )}
+                    {t("dashboard.drafts.resume")}
+                </Button>
+            </div>
+        );
+    };
+
+    const draftItems = draftData?.items.slice(0, RECENT_PROMPT_LIMIT) ?? [];
+    const enabledModels = (modelsData ?? []).filter(
+        (entry) => entry.status === "enabled"
     );
 
     return (
@@ -191,172 +487,301 @@ export default function DashboardPage(): JSX.Element {
                 title={t("dashboard.welcome", { name: displayName })}
                 description={t("dashboard.subtitle")}
                 actions={
-                    <>
-                        <Button
-                            variant="secondary"
-                            size="sm"
-                            onClick={() => navigate("/prompt-workbench")}
-                            className="gap-2"
-                        >
-                            <Sparkles className="h-4 w-4" aria-hidden="true" />
-                            {t("dashboard.openWorkbench")}
-                        </Button>
-                        <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => navigate("/prompt-workbench?tab=create")}
-                            className="gap-2"
-                        >
-                            <ArrowUpRight className="h-4 w-4" aria-hidden="true" />
-                            {t("dashboard.createPrompt")}
-                        </Button>
-                    </>
+                    <Button
+                        variant="secondary"
+                        size="sm"
+                        onClick={() => navigate("/prompt-workbench")}
+                        className="gap-2"
+                    >
+                        <Sparkles className="h-4 w-4" aria-hidden="true" />
+                        {t("dashboard.openWorkbench")}
+                    </Button>
                 }
             />
+
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
                 {metrics.map((metric) => (
                     <MetricCard key={metric.id} {...metric} />
                 ))}
             </div>
 
-            <div className="grid gap-4 xl:grid-cols-5">
-                <GlassCard className="xl:col-span-3">
-                    <div className="flex items-center justify-between gap-4">
+            <div className="grid gap-4 lg:grid-cols-3">
+                <GlassCard className="lg:col-span-2 space-y-4">
+                    <div className="flex items-center justify-between gap-3">
                         <div>
-                            <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">{t("dashboard.activity.title")}</h2>
+                            <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
+                                {t("dashboard.search.title")}
+                            </h2>
                             <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-                                {t("dashboard.subtitle")}
+                                {t("dashboard.search.subtitle")}
                             </p>
                         </div>
-                        <Badge variant="outline" className="gap-1 text-xs">
-                            <Clock className="h-3.5 w-3.5" aria-hidden="true" />
-                            {t("common.loading")}
-                        </Badge>
                     </div>
-                    <div className="mt-6 space-y-4">
-                        {activity.length === 0 ? (
-                            <p className="text-sm text-slate-500 dark:text-slate-400">{t("dashboard.activity.empty")}</p>
+                    <form
+                        className="flex flex-col gap-3 md:flex-row md:items-center"
+                        onSubmit={handleSearchSubmit}
+                    >
+                        <Input
+                            value={searchInput}
+                            onChange={(event) => setSearchInput(event.target.value)}
+                            placeholder={t("dashboard.search.placeholder")}
+                            className="flex-1"
+                            name="dashboard-search"
+                        />
+                        <Button type="submit" size="sm" className="md:w-auto">
+                            {t("dashboard.search.submit")}
+                        </Button>
+                    </form>
+
+                    <div className="space-y-2">
+                        <div className="flex items-center justify-between text-xs font-medium uppercase tracking-[0.2em] text-slate-400 dark:text-slate-500">
+                            <span className="inline-flex items-center gap-1">
+                                <History className="h-3.5 w-3.5" />
+                                {t("dashboard.search.historyTitle")}
+                            </span>
+                            {searchHistory.length > 0 ? (
+                                <button
+                                    type="button"
+                                    onClick={handleClearHistory}
+                                    className="text-slate-400 transition-colors hover:text-primary dark:text-slate-500"
+                                >
+                                    {t("dashboard.search.clear")}
+                                </button>
+                            ) : null}
+                        </div>
+                        {searchHistory.length === 0 ? (
+                            <p className="text-xs text-slate-400 dark:text-slate-500">
+                                {t("dashboard.search.historyEmpty")}
+                            </p>
                         ) : (
-                            activity.map((item) => (
-                                <div key={item.id} className="flex items-start gap-3">
-                                    <div className="mt-1 h-2.5 w-2.5 rounded-full bg-gradient-to-br from-primary to-secondary" />
-                                    <div className="grow space-y-1">
-                                        <div className="flex flex-wrap items-center gap-2">
-                                            <span className="text-xs font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">
-                                                {item.time}
-                                            </span>
-                                            <span
-                                                className={
-                                                    "text-sm " +
-                                                    (item.tone === "positive"
-                                                        ? "text-slate-900 dark:text-slate-100"
-                                                        : "text-slate-600 dark:text-slate-400")
-                                                }
-                                            >
-                                                {item.label}
-                                            </span>
-                                        </div>
-                                        {item.note ? (
-                                            <span className="text-xs text-slate-500 dark:text-slate-400">{item.note}</span>
-                                        ) : null}
+                            <div className="flex flex-wrap gap-2">
+                                {searchHistory.map((item) => (
+                                    <div
+                                        key={item}
+                                        className="group inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-3 py-1 text-xs text-slate-600 transition-colors hover:border-primary/40 hover:text-primary dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-primary/40"
+                                    >
+                                        <button
+                                            type="button"
+                                            onClick={() => handleSelectHistory(item)}
+                                            className="font-medium"
+                                        >
+                                            {item}
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => handleRemoveHistory(item)}
+                                            className="rounded-full p-0.5 text-slate-300 transition-colors hover:text-rose-500 dark:text-slate-500 dark:hover:text-rose-400"
+                                            aria-label={t("dashboard.search.removeHistory")}
+                                        >
+                                            <X className="h-3 w-3" />
+                                        </button>
                                     </div>
-                                </div>
-                            ))
+                                ))}
+                            </div>
+                        )}
+                    </div>
+
+                    <div className="space-y-3">
+                        <div className="flex items-center justify-between text-xs font-medium uppercase tracking-[0.2em] text-slate-400 dark:text-slate-500">
+                            <span>{t("dashboard.search.resultsTitle")}</span>
+                            {activeSearch ? (
+                                <span className="text-[10px] font-semibold text-primary">
+                                    {activeSearch}
+                                </span>
+                            ) : null}
+                        </div>
+                        {searchLoading ? (
+                            <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+                                <LoaderCircle className="h-4 w-4 animate-spin" />
+                                {t("dashboard.search.loading")}
+                            </div>
+                        ) : searchError ? (
+                            <p className="text-xs text-rose-500 dark:text-rose-400">{searchError}</p>
+                        ) : searchResults.length === 0 ? (
+                            <p className="text-xs text-slate-400 dark:text-slate-500">
+                                {activeSearch
+                                    ? t("dashboard.search.noResults", { query: activeSearch })
+                                    : t("dashboard.search.awaiting")}
+                            </p>
+                        ) : (
+                            <div className="space-y-2">
+                                {searchResults.map((item) => renderPromptRow(item))}
+                            </div>
                         )}
                     </div>
                 </GlassCard>
 
-                <GlassCard className="xl:col-span-2">
+                <GlassCard className="space-y-4">
                     <div className="flex items-center justify-between">
-                        <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">{t("dashboard.performance.title")}</h2>
+                        <div>
+                            <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
+                                {t("dashboard.drafts.title")}
+                            </h2>
+                            <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+                                {t("dashboard.drafts.subtitle")}
+                            </p>
+                        </div>
+                        <Badge variant="outline" className="gap-1 text-xs">
+                            <Clock className="h-3.5 w-3.5" aria-hidden="true" />
+                            {t("dashboard.drafts.count", { count: draftCount })}
+                        </Badge>
+                    </div>
+                    {draftLoading ? (
+                        <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+                            <LoaderCircle className="h-4 w-4 animate-spin" />
+                            {t("dashboard.drafts.loading")}
+                        </div>
+                    ) : draftError ? (
+                        <p className="text-xs text-rose-500 dark:text-rose-400">
+                            {draftError instanceof Error
+                                ? draftError.message
+                                : t("errors.generic")}
+                        </p>
+                    ) : draftItems.length === 0 ? (
+                        <div className="rounded-2xl border border-dashed border-slate-200 p-6 text-center text-sm text-slate-400 dark:border-slate-700 dark:text-slate-500">
+                            {t("dashboard.drafts.empty")}
+                        </div>
+                    ) : (
+                        <div className="space-y-2">
+                            {draftItems.map((item) => renderDraftRow(item))}
+                        </div>
+                    )}
+                    <Button
+                        variant="ghost"
+                        size="sm"
+                        className="gap-2 text-xs"
+                        onClick={() => navigate("/prompts")}
+                    >
+                        {t("dashboard.drafts.viewAll")}
+                        <ArrowUpRight className="h-3 w-3" aria-hidden="true" />
+                    </Button>
+                </GlassCard>
+            </div>
+
+            <div className="grid gap-4 lg:grid-cols-3">
+                <GlassCard className="lg:col-span-2 space-y-3">
+                    <div className="flex items-center justify-between">
+                        <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
+                            {t("dashboard.recent.title")}
+                        </h2>
                         <Button
                             variant="ghost"
                             size="sm"
                             className="gap-2 text-xs"
                             onClick={() => navigate("/prompts")}
                         >
-                            {t("dashboard.performance.cta")}
+                            {t("dashboard.recent.viewAll")}
                             <ArrowUpRight className="h-3 w-3" aria-hidden="true" />
                         </Button>
                     </div>
-                    <div className="mt-5 overflow-hidden rounded-2xl border border-white/60 dark:border-slate-800">
-                        <table className="min-w-full divide-y divide-white/60 dark:divide-slate-800">
-                            <thead className="bg-white/30 text-left text-xs uppercase tracking-wide text-slate-500 dark:bg-slate-900/60 dark:text-slate-400">
-                                <tr>
-                                    <th className="px-4 py-3 font-medium">{t("dashboard.performance.columns.prompt")}</th>
-                                    <th className="px-4 py-3 font-medium">{t("dashboard.performance.columns.model")}</th>
-                                    <th className="px-4 py-3 font-medium text-right">{t("dashboard.performance.columns.conversion")}</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-white/50 text-sm text-slate-700 dark:divide-slate-800 dark:text-slate-300">
-                                {promptPerformance.map((row) => (
-                                    <tr key={row.id}>
-                                        <td className="px-4 py-3">
-                                            <div className="font-medium text-slate-900 dark:text-slate-100">{row.title}</div>
-                                            <div className="text-xs text-slate-500 dark:text-slate-400">{row.movement}</div>
-                                        </td>
-                                        <td className="px-4 py-3 text-slate-600 dark:text-slate-400">{row.model}</td>
-                                        <td className="px-4 py-3 text-right">
-                                            <span
-                                                className={
-                                                    "font-semibold " +
-                                                    (row.improving ? "text-emerald-600" : "text-rose-500")
-                                                }
-                                            >
-                                                {row.conversion}
-                                            </span>
-                                        </td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    </div>
+                    {allLoading ? (
+                        <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+                            <LoaderCircle className="h-4 w-4 animate-spin" />
+                            {t("dashboard.recent.loading")}
+                        </div>
+                    ) : allError ? (
+                        <p className="text-xs text-rose-500 dark:text-rose-400">
+                            {allError instanceof Error
+                                ? allError.message
+                                : t("errors.generic")}
+                        </p>
+                    ) : recentPrompts.length === 0 ? (
+                        <div className="rounded-2xl border border-dashed border-slate-200 p-6 text-center text-sm text-slate-400 dark:border-slate-700 dark:text-slate-500">
+                            {t("dashboard.recent.empty")}
+                        </div>
+                    ) : (
+                        <div className="space-y-2">
+                            {recentPrompts.map((item) => renderPromptRow(item))}
+                        </div>
+                    )}
                 </GlassCard>
-            </div>
 
-            <div className="grid gap-4 lg:grid-cols-2">
-                <GlassCard>
+                <GlassCard className="space-y-4">
                     <div className="flex items-center justify-between">
-                        <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">{t("dashboard.insights.title")}</h2>
+                        <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
+                            {t("dashboard.models.title")}
+                        </h2>
                         <TrendingUp className="h-5 w-5 text-primary" aria-hidden="true" />
                     </div>
-                    <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{t("dashboard.insights.subtitle")}</p>
-                    <div className="mt-5 space-y-3">
-                        {keywordInsights.map((insight) => (
-                            <div key={insight.id} className="flex items-center justify-between rounded-2xl bg-white/60 px-4 py-3 transition-colors dark:bg-slate-900/60">
-                                <span className="text-sm font-medium text-slate-700 dark:text-slate-300">{insight.keyword}</span>
-                                <Badge className="bg-emerald-50 text-emerald-600 dark:bg-emerald-500/20 dark:text-emerald-200">{insight.lift}</Badge>
-                            </div>
-                        ))}
-                    </div>
-                </GlassCard>
-
-                <GlassCard className="relative overflow-hidden">
-                    <div className="flex items-center justify-between">
-                        <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">{t("dashboard.metrics.successRate")}</h2>
-                        <div className="rounded-full bg-primary/10 p-3 text-primary">
-                            <TrendingUp className="h-5 w-5" aria-hidden="true" />
-                        </div>
-                    </div>
-                    <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-                        {t("dashboard.trend.up", { value: "4%" })}
+                    <p className="text-sm text-slate-500 dark:text-slate-400">
+                        {t("dashboard.models.subtitle", {
+                            enabled: enabledModels.length,
+                            total: modelsData?.length ?? 0
+                        })}
                     </p>
-                    <div className="mt-6 space-y-4">
-                        {[68, 72, 74].map((value, index) => (
-                            <div key={value} className="space-y-2">
-                                <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
-                                    <span>Week {index + 1}</span>
-                                    <span>{value}%</span>
-                                </div>
-                                <div className="h-2 overflow-hidden rounded-full bg-white/60 dark:bg-slate-800/80">
+                    {modelsLoading ? (
+                        <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+                            <LoaderCircle className="h-4 w-4 animate-spin" />
+                            {t("dashboard.models.loading")}
+                        </div>
+                    ) : modelsError ? (
+                        <p className="text-xs text-rose-500 dark:text-rose-400">
+                            {modelsError instanceof Error
+                                ? modelsError.message
+                                : t("errors.generic")}
+                        </p>
+                    ) : (modelsData ?? []).length === 0 ? (
+                        <div className="rounded-2xl border border-dashed border-slate-200 p-6 text-center text-sm text-slate-400 dark:border-slate-700 dark:text-slate-500">
+                            {t("dashboard.models.empty")}
+                        </div>
+                    ) : (
+                        <div className="space-y-3">
+                            {(modelsData ?? []).slice(0, RECENT_PROMPT_LIMIT).map((model) => {
+                                const statusLabel =
+                                    model.status === "enabled"
+                                        ? t("settings.modelCard.statusEnabled")
+                                        : t("settings.modelCard.statusDisabled");
+                                const { date, time } = formatDateTime(
+                                    model.last_verified_at,
+                                    i18n.language
+                                );
+                                return (
                                     <div
-                                        className="h-full rounded-full bg-gradient-to-r from-primary to-secondary"
-                                        style={{ width: `${value}%` }}
-                                    />
-                                </div>
-                            </div>
-                        ))}
-                    </div>
+                                        key={model.id}
+                                        className="rounded-2xl border border-white/60 bg-white/70 px-4 py-3 transition-colors hover:border-primary/40 hover:bg-white dark:border-slate-800/60 dark:bg-slate-900/60 dark:hover:border-primary/40"
+                                    >
+                                        <div className="flex items-center justify-between gap-2">
+                                            <div>
+                                                <div className="text-sm font-semibold text-slate-800 dark:text-slate-100">
+                                                    {model.display_name}
+                                                </div>
+                                                <div className="text-xs text-slate-500 dark:text-slate-400">
+                                                    {model.provider} · {model.model_key}
+                                                </div>
+                                            </div>
+                                            <Badge
+                                                className={cn(
+                                                    "text-xs",
+                                                    model.status === "enabled"
+                                                        ? "bg-emerald-50 text-emerald-600 dark:bg-emerald-500/20 dark:text-emerald-200"
+                                                        : "bg-slate-200 text-slate-600 dark:bg-slate-800 dark:text-slate-300"
+                                                )}
+                                            >
+                                                {statusLabel}
+                                            </Badge>
+                                        </div>
+                                        <div className="mt-2 text-xs text-slate-500 dark:text-slate-400">
+                                            {date !== "—"
+                                                ? t("dashboard.models.verifiedAt", {
+                                                      date,
+                                                      time: time ? ` ${time}` : ""
+                                                  })
+                                                : t("dashboard.models.neverVerified")}
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    )}
+                    <Button
+                        variant="ghost"
+                        size="sm"
+                        className="gap-2 text-xs"
+                        onClick={() => navigate("/settings")}
+                    >
+                        {t("dashboard.models.manage")}
+                        <ArrowUpRight className="h-3 w-3" aria-hidden="true" />
+                    </Button>
                 </GlassCard>
             </div>
         </div>

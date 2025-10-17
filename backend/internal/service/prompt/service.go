@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"strings"
 	"time"
+	"unicode"
 
 	promptdomain "electron-go-app/backend/internal/domain/prompt"
 	modeldomain "electron-go-app/backend/internal/infra/model/deepseek"
@@ -1017,8 +1018,9 @@ func (s *Service) Save(ctx context.Context, input SaveInput) (SaveOutput, error)
 		}
 	}
 
-	if input.PromptID == 0 && strings.TrimSpace(input.Topic) != "" {
-		if existing, err := s.prompts.FindByUserAndTopic(ctx, input.UserID, strings.TrimSpace(input.Topic)); err == nil {
+	topicLookup := normalizeMixedLanguageSpacing(strings.TrimSpace(input.Topic))
+	if input.PromptID == 0 && topicLookup != "" {
+		if existing, err := s.prompts.FindByUserAndTopic(ctx, input.UserID, topicLookup); err == nil {
 			input.PromptID = existing.ID
 		}
 	}
@@ -1068,9 +1070,10 @@ func (s *Service) Save(ctx context.Context, input SaveInput) (SaveOutput, error)
 
 // helper: 构造关键词实体。
 func toKeywordEntity(userID uint, topic string, item KeywordItem) *promptdomain.Keyword {
+	topicValue := normalizeMixedLanguageSpacing(strings.TrimSpace(topic))
 	return &promptdomain.Keyword{
 		UserID:   userID,
-		Topic:    strings.TrimSpace(topic),
+		Topic:    topicValue,
 		Word:     strings.TrimSpace(item.Word),
 		Polarity: normalizePolarity(item.Polarity),
 		Source:   sourceFallback(item.Source),
@@ -1234,9 +1237,10 @@ func workspaceHasKeyword(items []promptdomain.WorkspaceKeyword, polarity, word s
 
 // persistKeywords 将临时关键词落入数据库，便于后续复用。
 func (s *Service) persistKeywords(ctx context.Context, userID uint, topic string, items []KeywordItem) {
+	sanitizedTopic := normalizeMixedLanguageSpacing(strings.TrimSpace(topic))
 	for _, item := range items {
-		if _, err := s.keywords.Upsert(ctx, toKeywordEntity(userID, topic, item)); err != nil {
-			s.logger.Warnw("upsert keyword failed", "topic", topic, "word", item.Word, "error", err)
+		if _, err := s.keywords.Upsert(ctx, toKeywordEntity(userID, sanitizedTopic, item)); err != nil {
+			s.logger.Warnw("upsert keyword failed", "topic", sanitizedTopic, "word", item.Word, "error", err)
 		}
 	}
 }
@@ -1360,9 +1364,10 @@ func (s *Service) createPromptRecord(ctx context.Context, input SaveInput, statu
 	if err != nil {
 		return SaveOutput{}, fmt.Errorf("encode tags: %w", err)
 	}
+	topic := normalizeMixedLanguageSpacing(strings.TrimSpace(input.Topic))
 	entity := &promptdomain.Prompt{
 		UserID:           input.UserID,
-		Topic:            strings.TrimSpace(input.Topic),
+		Topic:            topic,
 		Body:             input.Body,
 		Instructions:     input.Instructions,
 		PositiveKeywords: string(encodedPos),
@@ -1397,10 +1402,11 @@ func (s *Service) createPromptRecord(ctx context.Context, input SaveInput, statu
 
 // updatePromptRecord 更新已有 Prompt，并在发布时生成新的版本快照。
 func (s *Service) updatePromptRecord(ctx context.Context, input SaveInput, status string) (SaveOutput, error) {
+	sanitizedTopic := normalizeMixedLanguageSpacing(strings.TrimSpace(input.Topic))
 	entity, err := s.prompts.FindByID(ctx, input.UserID, input.PromptID)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			if existing, findErr := s.prompts.FindByUserAndTopic(ctx, input.UserID, strings.TrimSpace(input.Topic)); findErr == nil {
+			if existing, findErr := s.prompts.FindByUserAndTopic(ctx, input.UserID, sanitizedTopic); findErr == nil {
 				entity = existing
 			} else {
 				return SaveOutput{}, fmt.Errorf("prompt not found")
@@ -1422,7 +1428,7 @@ func (s *Service) updatePromptRecord(ctx context.Context, input SaveInput, statu
 		return SaveOutput{}, fmt.Errorf("encode tags: %w", err)
 	}
 	wasPublished := entity.Status == promptdomain.PromptStatusPublished
-	entity.Topic = strings.TrimSpace(input.Topic)
+	entity.Topic = sanitizedTopic
 	entity.Body = input.Body
 	entity.Instructions = input.Instructions
 	entity.PositiveKeywords = string(encodedPos)
@@ -1717,6 +1723,79 @@ func trimToRuneLength(input string, limit int) string {
 	return string(runes[:limit])
 }
 
+// runeCategory 表示用于判断分隔符插入的字符类别。
+type runeCategory int
+
+const (
+	runeCategoryUnknown runeCategory = iota
+	runeCategoryHan
+	runeCategoryAlphaNumeric
+	runeCategorySpace
+	runeCategoryOther
+)
+
+// normalizeMixedLanguageSpacing 在中英文字符之间插入空格，便于后续分词与检索。
+func normalizeMixedLanguageSpacing(input string) string {
+	if input == "" {
+		return ""
+	}
+	var builder strings.Builder
+	builder.Grow(len(input) + len(input)/2)
+	prevCategory := runeCategoryUnknown
+	hasPrev := false
+	for _, r := range input {
+		currCategory := classifyRuneForSpacing(r)
+		if hasPrev && shouldInsertSpacing(prevCategory, currCategory) {
+			builder.WriteRune(' ')
+		}
+		builder.WriteRune(r)
+		if currCategory == runeCategorySpace {
+			hasPrev = false
+			prevCategory = runeCategoryUnknown
+			continue
+		}
+		if currCategory == runeCategoryOther {
+			prevCategory = runeCategoryOther
+			hasPrev = false
+			continue
+		}
+		prevCategory = currCategory
+		hasPrev = true
+	}
+	return builder.String()
+}
+
+// classifyRuneForSpacing 将字符分类，以便判断是否需要插入空格。
+func classifyRuneForSpacing(r rune) runeCategory {
+	switch {
+	case r == ' ' || unicode.IsSpace(r):
+		return runeCategorySpace
+	case unicode.Is(unicode.Han, r):
+		return runeCategoryHan
+	case r <= unicode.MaxASCII && (unicode.IsLetter(r) || unicode.IsDigit(r)):
+		return runeCategoryAlphaNumeric
+	case unicode.IsLetter(r) || unicode.IsDigit(r):
+		return runeCategoryAlphaNumeric
+	default:
+		return runeCategoryOther
+	}
+}
+
+// shouldInsertSpacing 判断前后两个字符类别是否需要插入空格。
+func shouldInsertSpacing(prev, curr runeCategory) bool {
+	if prev == runeCategorySpace || curr == runeCategorySpace {
+		return false
+	}
+	if prev == runeCategoryUnknown || curr == runeCategoryUnknown {
+		return false
+	}
+	if prev == runeCategoryOther || curr == runeCategoryOther {
+		return false
+	}
+	return (prev == runeCategoryHan && curr == runeCategoryAlphaNumeric) ||
+		(prev == runeCategoryAlphaNumeric && curr == runeCategoryHan)
+}
+
 // clampKeywordWord 裁剪单个关键词至最大长度。
 func (s *Service) clampKeywordWord(word string) string {
 	trimmed := strings.TrimSpace(word)
@@ -1737,6 +1816,10 @@ func (s *Service) clampKeywordList(items []KeywordItem) []KeywordItem {
 // truncateTags 裁剪标签列表至最大数量。
 func (s *Service) clampTagValue(tag string) string {
 	trimmed := strings.TrimSpace(tag)
+	if trimmed == "" {
+		return ""
+	}
+	trimmed = normalizeMixedLanguageSpacing(trimmed)
 	if s.tagMaxLength > 0 && len([]rune(trimmed)) > s.tagMaxLength {
 		trimmed = trimToRuneLength(trimmed, s.tagMaxLength)
 	}
