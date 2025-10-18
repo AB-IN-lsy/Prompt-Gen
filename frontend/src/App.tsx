@@ -23,6 +23,7 @@ import IpGuardPage from "./pages/IpGuard";
 import ChangelogAdminPage from "./pages/ChangelogAdmin";
 import PromptDetailPage from "./pages/PromptDetail";
 import { useAuth, useIsAuthenticated } from "./hooks/useAuth";
+import { isLocalMode } from "./lib/runtimeMode";
 
 // 占位页面组件：在对应功能尚未实现时保持路由完整。
 function Placeholder({ titleKey }: { titleKey: string }) {
@@ -44,6 +45,7 @@ export default function App() {
     const isAuthenticated = useIsAuthenticated();
     const { t } = useTranslation();
     const location = useLocation();
+    const localMode = isLocalMode();
 
     // 首次挂载时触发认证初始化：校验 Token 并尝试拉取用户资料。
     useEffect(() => {
@@ -68,8 +70,17 @@ export default function App() {
         return (
             <Routes>
                 <Route path="/login" element={<LoginPage />} />
-                <Route path="/register" element={<RegisterPage />} />
-                <Route path="/verify-email" element={<VerifyEmailPage />} />
+                {localMode ? (
+                    <>
+                        <Route path="/register" element={<Navigate to="/login" replace />} />
+                        <Route path="/verify-email" element={<Navigate to="/login" replace />} />
+                    </>
+                ) : (
+                    <>
+                        <Route path="/register" element={<RegisterPage />} />
+                        <Route path="/verify-email" element={<VerifyEmailPage />} />
+                    </>
+                )}
                 <Route path="/email/verified" element={<EmailVerificationCallbackPage />} />
                 <Route path="*" element={<Navigate to="/login" replace />} />
             </Routes>

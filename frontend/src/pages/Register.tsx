@@ -17,6 +17,7 @@ import { fetchCaptcha, register, type RegisterRequest } from "../lib/api";
 import { ApiError } from "../lib/errors";
 import { useAuth } from "../hooks/useAuth";
 import { toast } from "sonner";
+import { isLocalMode } from "../lib/runtimeMode";
 
 type CaptchaState = {
     id: string;
@@ -105,12 +106,19 @@ export default function RegisterPage() {
     );
 
     useEffect(() => {
+        if (isLocalMode()) {
+            toast.info(t("auth.offline.registerDisabled"));
+            navigate("/login", { replace: true });
+            return () => {
+                clearScheduledRetry();
+            };
+        }
         // 组件挂载时自动拉取一次验证码，并在卸载时清理定时器。
         void loadCaptcha();
         return () => {
             clearScheduledRetry();
         };
-    }, [clearScheduledRetry, loadCaptcha]);
+    }, [clearScheduledRetry, loadCaptcha, navigate, t]);
 
     // 负责提交注册请求，成功后调用 authenticate 写入令牌并导航。
     const mutation = useMutation({

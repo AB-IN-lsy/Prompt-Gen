@@ -54,6 +54,15 @@
           "Test connectivity directly from the card and view the last verification time."
         ]
       },
+      "backup": {
+        "title": "Data backup",
+        "description": "Keep your local prompt library safe and portable.",
+        "items": [
+          "Use the “Export Prompt” button in My Prompts to generate a JSON backup including keywords, tags, and metadata.",
+          "Schedule regular exports and store them securely, especially before upgrading or moving to a new machine.",
+          "Import support is planned in Settings—always back up your current data first to avoid accidental overwrites."
+        ]
+      },
       "troubleshooting": {
         "title": "Troubleshooting tips",
         "description": "What to try when something feels off.",
@@ -427,7 +436,9 @@
       "title": "Use offline mode",
       "description": "Explore the core experience locally without signing in. Data stays on this device.",
       "enter": "Enter offline mode",
-      "failed": "Failed to start offline mode. Make sure the backend is running."
+      "failed": "Failed to start offline mode. Make sure the backend is running.",
+      "registerNotice": "Local mode signs you in with the built-in account; registration isn’t required.",
+      "registerDisabled": "Local mode already enables the built-in account. Registration is disabled."
     }
   },
   "dashboard": {

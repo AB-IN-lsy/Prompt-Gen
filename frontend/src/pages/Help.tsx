@@ -6,7 +6,16 @@
  */
 import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
-import { ExternalLink, LifeBuoy, Mail, KeyRound, Rocket, ShieldCheck, Sparkles } from "lucide-react";
+import {
+    ExternalLink,
+    LifeBuoy,
+    Mail,
+    KeyRound,
+    Rocket,
+    ShieldCheck,
+    Sparkles,
+    HardDrive
+} from "lucide-react";
 
 import { GlassCard } from "../components/ui/glass-card";
 import { PageHeader } from "../components/layout/PageHeader";
@@ -22,7 +31,8 @@ const sectionIcons = {
     authentication: ShieldCheck,
     workbench: Sparkles,
     models: KeyRound,
-    troubleshooting: LifeBuoy
+    troubleshooting: LifeBuoy,
+    backup: HardDrive
 } as const;
 
 type SectionKey = keyof typeof sectionIcons;
@@ -37,7 +47,7 @@ export default function HelpPage() {
     const { t } = useTranslation();
 
     const sectionKeys = useMemo<SectionKey[]>(
-        () => ["gettingStarted", "authentication", "workbench", "models", "troubleshooting"],
+        () => ["gettingStarted", "authentication", "workbench", "models", "backup", "troubleshooting"],
         []
     );
 

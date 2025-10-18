@@ -124,6 +124,8 @@ var (
 	ErrPromptVersionNotFound = errors.New("prompt version not found")
 	// ErrTagLimitExceeded 表示标签数量超出上限。
 	ErrTagLimitExceeded = errors.New("tags exceed limit")
+	// ErrModelInvocationFailed 表示调用模型失败，通常由网络或凭据问题导致。
+	ErrModelInvocationFailed = errors.New("model invocation failed")
 )
 
 // Config 汇总 Prompt 服务的可配置参数。
@@ -793,7 +795,7 @@ func (s *Service) Interpret(ctx context.Context, input InterpretInput) (Interpre
 	defer cancel()
 	resp, err := s.model.InvokeChatCompletion(modelCtx, input.UserID, modelKey, req)
 	if err != nil {
-		return InterpretOutput{}, fmt.Errorf("invoke model: %w", err)
+		return InterpretOutput{}, fmt.Errorf("%w: %w", ErrModelInvocationFailed, err)
 	}
 
 	payload, err := parseInterpretationPayload(resp)
@@ -901,7 +903,7 @@ func (s *Service) AugmentKeywords(ctx context.Context, input AugmentInput) (Augm
 	defer cancel()
 	resp, err := s.model.InvokeChatCompletion(modelCtx, input.UserID, input.ModelKey, req)
 	if err != nil {
-		return AugmentOutput{}, fmt.Errorf("invoke model: %w", err)
+		return AugmentOutput{}, fmt.Errorf("%w: %w", ErrModelInvocationFailed, err)
 	}
 	payload, err := parseAugmentPayload(resp)
 	if err != nil {
@@ -1161,7 +1163,7 @@ func (s *Service) GeneratePrompt(ctx context.Context, input GenerateInput) (Gene
 	defer cancel()
 	resp, err := s.model.InvokeChatCompletion(modelCtx, input.UserID, input.ModelKey, req)
 	if err != nil {
-		return GenerateOutput{}, fmt.Errorf("invoke model: %w", err)
+		return GenerateOutput{}, fmt.Errorf("%w: %w", ErrModelInvocationFailed, err)
 	}
 	duration := time.Since(start)
 	promptText := extractPromptText(resp)

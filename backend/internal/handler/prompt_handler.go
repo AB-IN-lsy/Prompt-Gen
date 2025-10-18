@@ -444,6 +444,10 @@ func (h *PromptHandler) Interpret(c *gin.Context) {
 	})
 	if err != nil {
 		log.Errorw("interpret failed", "error", err, "user_id", userID)
+		if errors.Is(err, promptsvc.ErrModelInvocationFailed) {
+			response.Fail(c, http.StatusServiceUnavailable, response.ErrInternal, "调用模型失败，请检查网络连接或模型凭据。", nil)
+			return
+		}
 		response.Fail(c, http.StatusBadRequest, response.ErrBadRequest, err.Error(), nil)
 		return
 	}
@@ -497,6 +501,10 @@ func (h *PromptHandler) AugmentKeywords(c *gin.Context) {
 	})
 	if err != nil {
 		log.Errorw("augment keywords failed", "error", err, "user_id", userID)
+		if errors.Is(err, promptsvc.ErrModelInvocationFailed) {
+			response.Fail(c, http.StatusServiceUnavailable, response.ErrInternal, "调用模型失败，请检查网络连接或模型凭据。", nil)
+			return
+		}
 		response.Fail(c, http.StatusBadRequest, response.ErrBadRequest, err.Error(), nil)
 		return
 	}
@@ -663,6 +671,10 @@ func (h *PromptHandler) GeneratePrompt(c *gin.Context) {
 			return
 		}
 		log.Errorw("generate prompt failed", "error", err, "user_id", userID)
+		if errors.Is(err, promptsvc.ErrModelInvocationFailed) {
+			response.Fail(c, http.StatusServiceUnavailable, response.ErrInternal, "调用模型失败，请检查网络连接或模型凭据。", nil)
+			return
+		}
 		response.Fail(c, http.StatusBadRequest, response.ErrBadRequest, err.Error(), nil)
 		return
 	}
