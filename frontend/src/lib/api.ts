@@ -110,6 +110,12 @@ export interface PromptListResponse {
   meta: PromptListMeta;
 }
 
+export interface PromptExportResult {
+  filePath: string;
+  promptCount: number;
+  generatedAt: string;
+}
+
 export interface PromptDetailResponse {
   id: number;
   topic: string;
@@ -759,6 +765,28 @@ export async function fetchMyPrompts(params: {
     return {
       items: response.data?.items ?? [],
       meta: meta ?? fallbackMeta,
+    };
+  } catch (error) {
+    throw normaliseError(error);
+  }
+}
+
+/** 导出当前用户的 Prompt 并返回生成的本地文件路径。 */
+export async function exportPrompts(): Promise<PromptExportResult> {
+  try {
+    const response: AxiosResponse<{
+      file_path?: string;
+      prompt_count?: number;
+      generated_at?: string;
+    }> = await http.post("/prompts/export");
+    const data = response.data ?? {};
+    return {
+      filePath: data.file_path ?? "",
+      promptCount:
+        typeof data.prompt_count === "number" && Number.isFinite(data.prompt_count)
+          ? data.prompt_count
+          : 0,
+      generatedAt: data.generated_at ?? "",
     };
   } catch (error) {
     throw normaliseError(error);

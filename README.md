@@ -64,6 +64,8 @@ cd prompt-gen-desktop
 
 前端无须单独的 `frontend/.env.local`。同一个 `.env.local` 中可直接加入前端相关字段，Vite 会通过 `envDir` 自动读取：
 
+> 若需在完全离线的本地环境中体验功能，可将 `APP_MODE` 设为 `local`，并按需调整 `LOCAL_SQLITE_PATH` 等参数；此模式会跳过 MySQL / Redis / Nacos，仅使用本地 SQLite 与内置账号。
+
 ### 3. 安装依赖
 
 ```bash

@@ -11,11 +11,13 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
 	"electron-go-app/backend/internal/app"
 	"electron-go-app/backend/internal/bootstrap"
+	"electron-go-app/backend/internal/config"
 	"electron-go-app/backend/internal/infra/logger"
 
 	"go.uber.org/zap"
@@ -33,12 +35,14 @@ func main() {
 	resources := mustBootstrap(ctx, sugar)
 	defer closeResources(resources, sugar)
 
-	runtimeCfg := loadRuntimeConfig(sugar)
+	runtimeCfg := loadRuntimeConfig(resources, sugar)
 	app, err := bootstrap.BuildApplication(ctx, sugar, resources, bootstrap.RuntimeConfig{
 		Port:       runtimeCfg.port,
 		JWTSecret:  runtimeCfg.jwtSecret,
 		AccessTTL:  runtimeCfg.accessTTL,
 		RefreshTTL: runtimeCfg.refreshTTL,
+		Mode:       runtimeCfg.mode,
+		LocalUser:  runtimeCfg.local,
 	})
 	if err != nil {
 		sugar.Fatalw("build application failed", "error", err)
@@ -94,17 +98,23 @@ type runtimeConfig struct {
 	jwtSecret  string
 	accessTTL  time.Duration
 	refreshTTL time.Duration
+	mode       string
+	local      config.LocalRuntime
 }
 
-func loadRuntimeConfig(sugar *zap.SugaredLogger) runtimeConfig {
+func loadRuntimeConfig(resources *app.Resources, sugar *zap.SugaredLogger) runtimeConfig {
 	port := os.Getenv("SERVER_PORT")
 	if port == "" {
 		port = "9090"
 	}
 
 	jwtSecret := os.Getenv("JWT_SECRET")
-	if jwtSecret == "" {
+	mode := resources.Config.Mode
+	if jwtSecret == "" && !strings.EqualFold(mode, config.ModeLocal) {
 		sugar.Fatal("JWT_SECRET not configured")
+	}
+	if jwtSecret == "" {
+		jwtSecret = "local-mode-secret"
 	}
 
 	accessTTL := parseDurationWithDefault(os.Getenv("JWT_ACCESS_TTL"), 15*time.Minute)
@@ -115,6 +125,8 @@ func loadRuntimeConfig(sugar *zap.SugaredLogger) runtimeConfig {
 		jwtSecret:  jwtSecret,
 		accessTTL:  accessTTL,
 		refreshTTL: refreshTTL,
+		mode:       mode,
+		local:      resources.Config.Local,
 	}
 }
 

@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"electron-go-app/backend/internal/app"
+	"electron-go-app/backend/internal/config"
 	"electron-go-app/backend/internal/handler"
 	"electron-go-app/backend/internal/infra/captcha"
 	"electron-go-app/backend/internal/infra/email"
@@ -40,6 +41,8 @@ type RuntimeConfig struct {
 	JWTSecret  string
 	AccessTTL  time.Duration
 	RefreshTTL time.Duration
+	Mode       string
+	LocalUser  config.LocalRuntime
 }
 
 type Application struct {
@@ -63,6 +66,8 @@ func BuildApplication(ctx context.Context, logger *zap.SugaredLogger, resources 
 	changelogRepo := repository.NewChangelogRepository(resources.DBConn())
 	promptRepo := repository.NewPromptRepository(resources.DBConn())
 	keywordRepo := repository.NewKeywordRepository(resources.DBConn())
+
+	isLocalMode := strings.EqualFold(cfg.Mode, config.ModeLocal)
 
 	var (
 		workspaceStore   promptsvc.WorkspaceStore
@@ -161,6 +166,13 @@ func BuildApplication(ctx context.Context, logger *zap.SugaredLogger, resources 
 
 	// 构建路由与中间件。
 	authMiddleware := middleware.NewAuthMiddleware(cfg.JWTSecret)
+	if isLocalMode {
+		authMiddleware = nil
+	}
+	var offlineAuth middleware.Authenticator
+	if isLocalMode {
+		offlineAuth = middleware.NewOfflineAuthMiddleware(cfg.LocalUser.UserID, cfg.LocalUser.IsAdmin)
+	}
 
 	router := server.NewRouter(server.RouterOptions{
 		AuthHandler:      authHandler,
@@ -169,9 +181,14 @@ func BuildApplication(ctx context.Context, logger *zap.SugaredLogger, resources 
 		ModelHandler:     modelHandler,
 		ChangelogHandler: changelogHandler,
 		PromptHandler:    promptHandler,
-		AuthMW:           authMiddleware,
-		IPGuard:          ipGuard,
-		IPGuardHandler:   ipGuardHandler,
+		AuthMW: func() middleware.Authenticator {
+			if isLocalMode {
+				return offlineAuth
+			}
+			return authMiddleware
+		}(),
+		IPGuard:        ipGuard,
+		IPGuardHandler: ipGuardHandler,
 	})
 
 	return &Application{
@@ -304,6 +321,7 @@ func loadPromptConfig(logger *zap.SugaredLogger) promptsvc.Config {
 		DefaultListPageSize: parseIntEnv("PROMPT_LIST_PAGE_SIZE", 20, logger),
 		MaxListPageSize:     parseIntEnv("PROMPT_LIST_MAX_PAGE_SIZE", 100, logger),
 		UseFullTextSearch:   parseBoolEnv("PROMPT_USE_FULLTEXT", false),
+		ExportDirectory:     strings.TrimSpace(os.Getenv("PROMPT_EXPORT_DIR")),
 	}
 }
 

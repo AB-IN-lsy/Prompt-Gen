@@ -12,6 +12,7 @@ import {
   ChevronRight,
   RefreshCcw,
   Sparkles,
+  Download,
 } from "lucide-react";
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
@@ -23,6 +24,7 @@ import {
 import { KEYWORD_ROW_LIMIT, DEFAULT_KEYWORD_WEIGHT } from "../config/prompt";
 import {
   deletePrompt,
+  exportPrompts,
   fetchMyPrompts,
   fetchPromptDetail,
   PromptDetailResponse,
@@ -32,7 +34,7 @@ import {
   PromptListMeta,
 } from "../lib/api";
 import { usePromptWorkbench } from "../hooks/usePromptWorkbench";
-import type { Keyword, KeywordSource } from "../lib/api";
+import type { Keyword, KeywordSource, PromptExportResult } from "../lib/api";
 import { nanoid } from "nanoid";
 import { clampTextWithOverflow, formatOverflowLabel, cn } from "../lib/utils";
 import { PageHeader } from "../components/layout/PageHeader";
@@ -90,10 +92,32 @@ export default function MyPromptsPage(): JSX.Element {
   const setCollections = usePromptWorkbench((state) => state.setCollections);
   const setTags = usePromptWorkbench((state) => state.setTags);
 
+  const [lastExport, setLastExport] = useState<PromptExportResult | null>(null);
   const [status, setStatus] = useState<StatusFilter>("all");
   const [page, setPage] = useState(1);
   const [searchInput, setSearchInput] = useState("");
   const [committedSearch, setCommittedSearch] = useState("");
+
+  const exportMutation = useMutation({
+    mutationFn: exportPrompts,
+    onMutate: () => {
+      toast.dismiss("prompt-export");
+      toast.loading(t("myPrompts.export.loading"), { id: "prompt-export" });
+    },
+    onSuccess: (result) => {
+      toast.dismiss("prompt-export");
+      setLastExport(result);
+      const key =
+        result.promptCount > 0 ? "myPrompts.export.success" : "myPrompts.export.empty";
+      toast.success(t(key, { count: result.promptCount, path: result.filePath }));
+    },
+    onError: (error: unknown) => {
+      toast.dismiss("prompt-export");
+      toast.error(
+        error instanceof Error ? error.message : t("myPrompts.export.failed"),
+      );
+    },
+  });
 
   const listQuery = useQuery<PromptListResponse>({
     queryKey: ["my-prompts", { status, page, committedSearch }],
@@ -216,6 +240,10 @@ export default function MyPromptsPage(): JSX.Element {
     [t],
   );
 
+  const exportTimestamp = lastExport
+    ? formatDateTime(lastExport.generatedAt, i18n.language)
+    : null;
+
   return (
     <div className="flex h-full flex-col gap-6">
       <PageHeader
@@ -223,20 +251,69 @@ export default function MyPromptsPage(): JSX.Element {
         title={t("myPrompts.title")}
         description={t("myPrompts.subtitle")}
         actions={
-          <Button
-            variant="secondary"
-            size="sm"
-            className="shadow-sm dark:shadow-none"
-            onClick={() => {
-              resetWorkbench();
-              navigate("/prompt-workbench");
-            }}
-          >
-            <RefreshCcw className="mr-2 h-4 w-4" />
-            {t("myPrompts.openWorkbench")}
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={exportMutation.isPending}
+              onClick={() => exportMutation.mutate()}
+              className="shadow-sm dark:shadow-none"
+            >
+              {exportMutation.isPending ? (
+                <>
+                  <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
+                  {t("myPrompts.export.loading")}
+                </>
+              ) : (
+                <>
+                  <Download className="mr-2 h-4 w-4" />
+                  {t("myPrompts.export.button")}
+                </>
+              )}
+            </Button>
+            <Button
+              variant="secondary"
+              size="sm"
+              className="shadow-sm dark:shadow-none"
+              onClick={() => {
+                resetWorkbench();
+                navigate("/prompt-workbench");
+              }}
+            >
+              <RefreshCcw className="mr-2 h-4 w-4" />
+              {t("myPrompts.openWorkbench")}
+            </Button>
+          </div>
         }
       />
+      {lastExport ? (
+        <div className="rounded-3xl border border-primary/20 bg-white/80 px-4 py-3 text-sm text-slate-600 shadow-sm transition-colors dark:border-primary/30 dark:bg-slate-900/60 dark:text-slate-200">
+          <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+            <div className="space-y-1">
+              <span className="text-xs font-semibold uppercase tracking-[0.26em] text-primary">
+                {t("myPrompts.exportNotice.title")}
+              </span>
+              <p className="font-mono text-xs text-slate-500 dark:text-slate-400">
+                {t("myPrompts.exportNotice.pathLabel")}：
+                <span className="ml-1 break-all text-slate-700 dark:text-slate-200">
+                  {lastExport.filePath}
+                </span>
+              </p>
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                {t("myPrompts.exportNotice.timeLabel", {
+                  date: exportTimestamp?.date ?? "",
+                  time: exportTimestamp?.time ?? "",
+                })}
+              </p>
+            </div>
+            <Badge variant="outline" className="whitespace-nowrap text-xs">
+              {t("myPrompts.exportNotice.countLabel", {
+                count: lastExport.promptCount,
+              })}
+            </Badge>
+          </div>
+        </div>
+      ) : null}
       <form
           className="flex flex-col gap-3 rounded-3xl border border-white/60 bg-white/80 p-4 shadow-sm transition-colors dark:border-slate-800 dark:bg-slate-900/70 md:flex-row md:items-center md:justify-between"
           onSubmit={handleSearchSubmit}
@@ -341,6 +418,7 @@ export default function MyPromptsPage(): JSX.Element {
                     key={item.id}
                     item={item}
                     locale={i18n.language}
+                    onView={() => navigate(`/prompts/${item.id}`)}
                     onEdit={() => editMutation.mutate(item.id)}
                     onDelete={() => {
                       if (deleteMutation.isPending) {
@@ -400,6 +478,7 @@ export default function MyPromptsPage(): JSX.Element {
 interface PromptRowProps {
   item: PromptListItem;
   locale: string;
+  onView: () => void;
   onEdit: () => void;
   onDelete: () => void;
   isEditing: boolean;
@@ -409,6 +488,7 @@ interface PromptRowProps {
 function PromptRow({
   item,
   locale,
+  onView,
   onEdit,
   onDelete,
   isEditing,
@@ -421,9 +501,13 @@ function PromptRow({
     <tr className="bg-white/40 transition hover:bg-white/70 dark:bg-slate-900/40 dark:hover:bg-slate-900/60">
       <td className="px-6 py-4 align-top">
         <div className="flex flex-col gap-1">
-          <span className="text-sm font-semibold text-slate-800 dark:text-slate-100">
+          <button
+            type="button"
+            onClick={onView}
+            className="bg-transparent text-left text-sm font-semibold text-slate-800 transition-colors hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 dark:text-slate-100"
+          >
             {item.topic}
-          </span>
+          </button>
         </div>
       </td>
       <td className="px-4 py-4 align-top">

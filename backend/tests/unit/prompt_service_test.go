@@ -4,7 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"os"
+	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -234,6 +237,131 @@ func TestPromptServiceInterpretInstructionsArray(t *testing.T) {
 	}
 	if got := result.Instructions; got != "回答时附带示例代码；重点解释事件循环机制" {
 		t.Fatalf("unexpected instructions: %q", got)
+	}
+}
+
+// TestPromptServiceExportPrompts 验证导出接口会生成本地文件并包含完整 Prompt 记录。
+func TestPromptServiceExportPrompts(t *testing.T) {
+	tmpDir := t.TempDir()
+	cfg := promptsvc.Config{
+		KeywordLimit:        promptsvc.DefaultKeywordLimit,
+		KeywordMaxLength:    promptsvc.DefaultKeywordMaxLength,
+		TagLimit:            promptsvc.DefaultTagLimit,
+		TagMaxLength:        promptsvc.DefaultTagMaxLength,
+		DefaultListPageSize: 20,
+		MaxListPageSize:     100,
+		ExportDirectory:     tmpDir,
+	}
+	service, promptRepo, _, db, _ := setupPromptServiceWithConfig(t, cfg)
+	defer func() {
+		sqlDB, _ := db.DB()
+		sqlDB.Close()
+	}()
+
+	positiveJSON, err := json.Marshal([]promptdomain.PromptKeywordItem{
+		{
+			Word:   "示例关键词",
+			Source: promptdomain.KeywordSourceManual,
+			Weight: 3,
+		},
+	})
+	if err != nil {
+		t.Fatalf("marshal positive keywords: %v", err)
+	}
+	negativeJSON, err := json.Marshal([]promptdomain.PromptKeywordItem{
+		{
+			Word:   "无关词",
+			Source: promptdomain.KeywordSourceManual,
+			Weight: 1,
+		},
+	})
+	if err != nil {
+		t.Fatalf("marshal negative keywords: %v", err)
+	}
+	tagJSON, err := json.Marshal([]string{"导出"})
+	if err != nil {
+		t.Fatalf("marshal tags: %v", err)
+	}
+
+	prompt := promptdomain.Prompt{
+		UserID:           1,
+		Topic:            "导出功能自测",
+		Body:             "正文内容",
+		Instructions:     "附加说明",
+		PositiveKeywords: string(positiveJSON),
+		NegativeKeywords: string(negativeJSON),
+		Model:            "deepseek-chat",
+		Status:           promptdomain.PromptStatusDraft,
+		Tags:             string(tagJSON),
+	}
+	if err := promptRepo.Create(context.Background(), &prompt); err != nil {
+		t.Fatalf("create prompt: %v", err)
+	}
+
+	output, err := service.ExportPrompts(context.Background(), promptsvc.ExportPromptsInput{
+		UserID: 1,
+	})
+	if err != nil {
+		t.Fatalf("export prompts: %v", err)
+	}
+	if output.PromptCount != 1 {
+		t.Fatalf("expected prompt count 1, got %d", output.PromptCount)
+	}
+	if output.FilePath == "" {
+		t.Fatalf("expected non-empty file path")
+	}
+
+	absTmp, err := filepath.Abs(tmpDir)
+	if err != nil {
+		t.Fatalf("abs tmp dir: %v", err)
+	}
+	rel, err := filepath.Rel(absTmp, output.FilePath)
+	if err != nil {
+		t.Fatalf("relative path: %v", err)
+	}
+	if strings.HasPrefix(rel, "..") {
+		t.Fatalf("expected export file under %s, got %s", absTmp, output.FilePath)
+	}
+
+	info, err := os.Stat(output.FilePath)
+	if err != nil {
+		t.Fatalf("stat export file: %v", err)
+	}
+	if info.IsDir() {
+		t.Fatalf("expected export file, got directory")
+	}
+
+	data, err := os.ReadFile(output.FilePath)
+	if err != nil {
+		t.Fatalf("read export file: %v", err)
+	}
+
+	var exported struct {
+		PromptCount int `json:"prompt_count"`
+		Prompts     []struct {
+			Topic            string `json:"topic"`
+			PositiveKeywords []struct {
+				Word string `json:"word"`
+			} `json:"positive_keywords"`
+		} `json:"prompts"`
+	}
+	if err := json.Unmarshal(data, &exported); err != nil {
+		t.Fatalf("unmarshal export file: %v", err)
+	}
+	if exported.PromptCount != 1 {
+		t.Fatalf("unexpected prompt_count: %d", exported.PromptCount)
+	}
+	if len(exported.Prompts) != 1 {
+		t.Fatalf("unexpected prompt size: %d", len(exported.Prompts))
+	}
+	if exported.Prompts[0].Topic != "导出功能自测" {
+		t.Fatalf("unexpected topic: %s", exported.Prompts[0].Topic)
+	}
+	if len(exported.Prompts[0].PositiveKeywords) != 1 {
+		t.Fatalf("unexpected keyword length: %d", len(exported.Prompts[0].PositiveKeywords))
+	}
+	if exported.Prompts[0].PositiveKeywords[0].Word != "示例关键词" {
+		t.Fatalf("unexpected keyword word: %s", exported.Prompts[0].PositiveKeywords[0].Word)
 	}
 }
 

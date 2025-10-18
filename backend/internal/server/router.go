@@ -19,7 +19,7 @@ type RouterOptions struct {
 	ModelHandler     *handler.ModelHandler
 	ChangelogHandler *handler.ChangelogHandler
 	PromptHandler    *handler.PromptHandler
-	AuthMW           *middleware.AuthMiddleware
+	AuthMW           middleware.Authenticator
 	IPGuard          *middleware.IPGuardMiddleware
 	IPGuardHandler   *handler.IPGuardHandler
 }
@@ -126,6 +126,7 @@ func NewRouter(opts RouterOptions) *gin.Engine {
 				prompts.Use(opts.AuthMW.Handle())
 			}
 			prompts.GET("", opts.PromptHandler.ListPrompts)
+			prompts.POST("/export", opts.PromptHandler.ExportPrompts)
 			prompts.POST("/interpret", opts.PromptHandler.Interpret)
 			prompts.POST("/keywords/augment", opts.PromptHandler.AugmentKeywords)
 			prompts.POST("/keywords/manual", opts.PromptHandler.AddManualKeyword)

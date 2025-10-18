@@ -8,48 +8,37 @@ import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { toast } from "sonner";
 import {
     ArrowUpRight,
     BarChart3,
     Clock,
+    CheckCircle,
     FileText,
     History,
     LoaderCircle,
     LucideIcon,
     Sparkles,
     TrendingUp,
+    XCircle,
     X
 } from "lucide-react";
-import { nanoid } from "nanoid";
-
 import { Button } from "../components/ui/button";
 import { Badge } from "../components/ui/badge";
 import { GlassCard } from "../components/ui/glass-card";
 import { Input } from "../components/ui/input";
 import { useAuth } from "../hooks/useAuth";
-import { usePromptWorkbench } from "../hooks/usePromptWorkbench";
 import { PageHeader } from "../components/layout/PageHeader";
 import {
-    DEFAULT_KEYWORD_WEIGHT,
-    PROMPT_KEYWORD_MAX_LENGTH
-} from "../config/prompt";
-import {
     fetchMyPrompts,
-    fetchPromptDetail,
     fetchUserModels,
-    Keyword,
-    KeywordSource,
     PromptListItem,
-    PromptListKeyword,
     PromptListResponse
 } from "../lib/api";
-import { clampTextWithOverflow, cn } from "../lib/utils";
+import { cn } from "../lib/utils";
 
 const SEARCH_HISTORY_STORAGE_KEY = "promptgen/dashboard/search-history";
 const SEARCH_HISTORY_LIMIT = 5;
 const RECENT_PROMPT_LIMIT = 5;
-const RESUME_TOAST_ID = "dashboard-resume";
 
 type MetricTrend = "up" | "down" | "neutral";
 
@@ -116,56 +105,10 @@ function formatDateTime(value?: string | null, locale?: string): FormattedDateTi
     };
 }
 
-const clampWeight = (value?: number): number => {
-    if (typeof value !== "number" || Number.isNaN(value)) {
-        return DEFAULT_KEYWORD_WEIGHT;
-    }
-    if (value < 0) return 0;
-    if (value > DEFAULT_KEYWORD_WEIGHT) return DEFAULT_KEYWORD_WEIGHT;
-    return Math.round(value);
-};
-
-const mapKeywordsToWorkbench = (
-    keywords: PromptListKeyword[] | undefined,
-    polarity: Keyword["polarity"]
-): Keyword[] => {
-    if (!keywords || keywords.length === 0) {
-        return [];
-    }
-    return keywords.map((item) => {
-        const { value, overflow } = clampTextWithOverflow(
-            item.word ?? "",
-            PROMPT_KEYWORD_MAX_LENGTH
-        );
-        const keywordId =
-            typeof item.keyword_id === "number" ? Number(item.keyword_id) : undefined;
-        const source: KeywordSource =
-            (item.source as KeywordSource) ?? "manual";
-        return {
-            id: nanoid(),
-            keywordId,
-            word: value,
-            polarity,
-            source,
-            weight: clampWeight(item.weight),
-            overflow
-        };
-    });
-};
-
 export default function DashboardPage(): JSX.Element {
     const { t, i18n } = useTranslation();
     const navigate = useNavigate();
     const profile = useAuth((state) => state.profile);
-
-    const resetWorkbench = usePromptWorkbench((state) => state.reset);
-    const setTopic = usePromptWorkbench((state) => state.setTopic);
-    const setModel = usePromptWorkbench((state) => state.setModel);
-    const setPrompt = usePromptWorkbench((state) => state.setPrompt);
-    const setPromptId = usePromptWorkbench((state) => state.setPromptId);
-    const setWorkspaceToken = usePromptWorkbench((state) => state.setWorkspaceToken);
-    const setCollections = usePromptWorkbench((state) => state.setCollections);
-    const setTags = usePromptWorkbench((state) => state.setTags);
 
     const [searchInput, setSearchInput] = useState("");
     const [searchHistory, setSearchHistory] = useState<string[]>(() => {
@@ -191,7 +134,6 @@ export default function DashboardPage(): JSX.Element {
     const [searchLoading, setSearchLoading] = useState(false);
     const [searchError, setSearchError] = useState<string | null>(null);
     const [activeSearch, setActiveSearch] = useState<string | null>(null);
-    const [openingPromptId, setOpeningPromptId] = useState<number | null>(null);
 
     useEffect(() => {
         if (typeof window === "undefined") {
@@ -346,60 +288,15 @@ export default function DashboardPage(): JSX.Element {
         profile?.user.username ?? profile?.user.email ?? t("dashboard.defaultName");
 
     const handleOpenPrompt = useCallback(
-        async (promptId: number) => {
-            setOpeningPromptId(promptId);
-            toast.dismiss(RESUME_TOAST_ID);
-            toast.loading(t("dashboard.toasts.resumeLoading"), {
-                id: RESUME_TOAST_ID
-            });
-            try {
-                const detail = await fetchPromptDetail(promptId);
-                resetWorkbench();
-                setTopic(detail.topic);
-                setPrompt(detail.body);
-                setModel(detail.model);
-                setPromptId(String(detail.id));
-                setWorkspaceToken(detail.workspace_token ?? null);
-                const positive = mapKeywordsToWorkbench(
-                    detail.positive_keywords,
-                    "positive"
-                );
-                const negative = mapKeywordsToWorkbench(
-                    detail.negative_keywords,
-                    "negative"
-                );
-                setCollections(positive, negative);
-                setTags(detail.tags ?? []);
-                toast.dismiss(RESUME_TOAST_ID);
-                toast.success(t("dashboard.toasts.resumeSuccess"));
-                navigate("/prompt-workbench");
-            } catch (error) {
-                toast.dismiss(RESUME_TOAST_ID);
-                const message =
-                    error instanceof Error ? error.message : t("errors.generic");
-                toast.error(message);
-            } finally {
-                setOpeningPromptId(null);
-            }
+        (promptId: number) => {
+            navigate(`/prompts/${promptId}`);
         },
-        [
-            navigate,
-            resetWorkbench,
-            setCollections,
-            setModel,
-            setPrompt,
-            setPromptId,
-            setTags,
-            setTopic,
-            setWorkspaceToken,
-            t
-        ]
+        [navigate]
     );
 
     const renderPromptRow = (item: PromptListItem) => {
         const { date, time } = formatDateTime(item.updated_at, i18n.language);
         const statusLabel = t(`myPrompts.statusBadge.${item.status}`);
-        const isLoadingRow = openingPromptId === item.id;
 
         return (
             <div
@@ -408,9 +305,13 @@ export default function DashboardPage(): JSX.Element {
             >
                 <div className="space-y-1">
                     <div className="flex flex-wrap items-center gap-2">
-                        <span className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                        <button
+                            type="button"
+                            onClick={() => handleOpenPrompt(item.id)}
+                            className="bg-transparent text-left text-sm font-medium text-slate-900 transition-colors hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 dark:text-slate-100"
+                        >
                             {item.topic}
-                        </span>
+                        </button>
                         <Badge
                             variant="outline"
                             className={cn("whitespace-nowrap text-xs", statusBadgeClass[item.status])}
@@ -428,13 +329,8 @@ export default function DashboardPage(): JSX.Element {
                     size="sm"
                     className="gap-2 text-xs"
                     onClick={() => handleOpenPrompt(item.id)}
-                    disabled={isLoadingRow}
                 >
-                    {isLoadingRow ? (
-                        <LoaderCircle className="h-4 w-4 animate-spin" />
-                    ) : (
-                        <ArrowUpRight className="h-4 w-4" aria-hidden="true" />
-                    )}
+                    <ArrowUpRight className="h-4 w-4" aria-hidden="true" />
                     {t("dashboard.recent.open")}
                 </Button>
             </div>
@@ -443,16 +339,19 @@ export default function DashboardPage(): JSX.Element {
 
     const renderDraftRow = (item: PromptListItem) => {
         const { date, time } = formatDateTime(item.updated_at, i18n.language);
-        const isLoadingRow = openingPromptId === item.id;
         return (
             <div
                 key={item.id}
                 className="flex items-start justify-between gap-3 rounded-2xl border border-dashed border-slate-200 bg-white/80 px-4 py-3 transition-colors hover:border-primary/40 hover:bg-white dark:border-slate-800/70 dark:bg-slate-900/60 dark:hover:border-primary/40"
             >
                 <div className="space-y-1">
-                    <span className="text-sm font-medium text-slate-800 dark:text-slate-100">
+                    <button
+                        type="button"
+                        onClick={() => handleOpenPrompt(item.id)}
+                        className="bg-transparent text-left text-sm font-medium text-slate-800 transition-colors hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 dark:text-slate-100"
+                    >
                         {item.topic}
-                    </span>
+                    </button>
                     <div className="text-xs text-slate-500 dark:text-slate-400">
                         {t("dashboard.drafts.updatedAt", { date, time })}
                     </div>
@@ -462,13 +361,8 @@ export default function DashboardPage(): JSX.Element {
                     size="sm"
                     className="gap-2 text-xs"
                     onClick={() => handleOpenPrompt(item.id)}
-                    disabled={isLoadingRow}
                 >
-                    {isLoadingRow ? (
-                        <LoaderCircle className="h-4 w-4 animate-spin" />
-                    ) : (
-                        <Sparkles className="h-4 w-4" aria-hidden="true" />
-                    )}
+                    <Sparkles className="h-4 w-4" aria-hidden="true" />
                     {t("dashboard.drafts.resume")}
                 </Button>
             </div>
@@ -621,7 +515,7 @@ export default function DashboardPage(): JSX.Element {
                                 {t("dashboard.drafts.subtitle")}
                             </p>
                         </div>
-                        <Badge variant="outline" className="gap-1 text-xs">
+                        <Badge variant="outline" className="gap-1 whitespace-nowrap text-xs">
                             <Clock className="h-3.5 w-3.5" aria-hidden="true" />
                             {t("dashboard.drafts.count", { count: draftCount })}
                         </Badge>
@@ -749,16 +643,22 @@ export default function DashboardPage(): JSX.Element {
                                                     {model.provider} · {model.model_key}
                                                 </div>
                                             </div>
-                                            <Badge
+                                            <span
                                                 className={cn(
-                                                    "text-xs",
+                                                    "flex items-center gap-1 text-xs font-medium",
                                                     model.status === "enabled"
-                                                        ? "bg-emerald-50 text-emerald-600 dark:bg-emerald-500/20 dark:text-emerald-200"
-                                                        : "bg-slate-200 text-slate-600 dark:bg-slate-800 dark:text-slate-300"
+                                                        ? "text-emerald-600 dark:text-emerald-300"
+                                                        : "text-slate-500 dark:text-slate-400"
                                                 )}
+                                                title={statusLabel}
                                             >
-                                                {statusLabel}
-                                            </Badge>
+                                                {model.status === "enabled" ? (
+                                                    <CheckCircle className="h-4 w-4" aria-hidden="true" />
+                                                ) : (
+                                                    <XCircle className="h-4 w-4" aria-hidden="true" />
+                                                )}
+                                                <span className="sr-only">{statusLabel}</span>
+                                            </span>
                                         </div>
                                         <div className="mt-2 text-xs text-slate-500 dark:text-slate-400">
                                             {date !== "—"
@@ -777,7 +677,7 @@ export default function DashboardPage(): JSX.Element {
                         variant="ghost"
                         size="sm"
                         className="gap-2 text-xs"
-                        onClick={() => navigate("/settings")}
+                        onClick={() => navigate("/settings?tab=models")}
                     >
                         {t("dashboard.models.manage")}
                         <ArrowUpRight className="h-3 w-3" aria-hidden="true" />

@@ -13,6 +13,7 @@
     在于浏览器内存，用来喂给 dnd-kit。它不会写回数据库，也不进 Redis。
   - keywordId：保持后端原有的数字 ID，来自接口字段 keyword_id。同步到后端（保存、生成、同步排序等接口）时，只要这个字段有值，就带着它；如果是全新创
     建、后端还没分配 ID 的关键词，就带 keywordId: undefined，让后端按现有逻辑生成。
+- **Prompt 导出**：`MyPrompts.tsx` 新增“导出 Prompt”按钮，调用 `POST /api/prompts/export` 后会生成本地 JSON 文件，并在页面上展示导出路径与时间，方便离线模式用户快速定位存档。
 
 ## 已实现功能概览
 

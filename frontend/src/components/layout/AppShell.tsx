@@ -167,10 +167,12 @@ export function AppShell({ children, rightSlot }: AppShellProps) {
                             {rightSlot}
                         </div>
                         <div className="flex items-center gap-3">
-                            <Button size="sm" variant="secondary" className="dark:shadow-none">
-                                {t("appShell.syncNow")}
-                            </Button>
-                            <div className="flex h-9 items-center gap-3 rounded-full border border-white/60 bg-white/80 px-3 shadow-sm transition-colors dark:border-slate-800 dark:bg-slate-900/70 dark:shadow-none">
+                            <button
+                                type="button"
+                                onClick={() => navigate("/settings")}
+                                className="group flex h-9 items-center gap-3 rounded-full border border-white/60 bg-white/80 px-3 text-left shadow-sm transition-colors hover:border-primary/50 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 dark:border-slate-800 dark:bg-slate-900/70 dark:text-slate-300 dark:hover:border-primary/40"
+                                aria-label={t("nav.settings")}
+                            >
                                 {profile?.user.avatar_url ? (
                                     <img
                                         src={profile.user.avatar_url}
@@ -182,8 +184,10 @@ export function AppShell({ children, rightSlot }: AppShellProps) {
                                         {avatarInitial}
                                     </div>
                                 )}
-                                <span className="text-sm text-slate-600 dark:text-slate-300">{profile?.user.username}</span>
-                            </div>
+                                <span className="text-sm text-slate-600 transition-colors group-hover:text-primary dark:text-slate-300 dark:group-hover:text-primary">
+                                    {profile?.user.username}
+                                </span>
+                            </button>
                         </div>
                     </header>
                     {/* 主内容区域，通过 children 注入各业务页面 */}

@@ -17,6 +17,7 @@
 - 统一邮箱验证频控与验证码限流，实现 Redis/内存双实现的 `ratelimit.Limiter`，支持 `EMAIL_VERIFICATION_LIMIT`、`EMAIL_VERIFICATION_WINDOW` 自定义阈值。
 - 邮箱验证与图形验证码接口返回剩余尝试次数（`remaining_attempts`），被限流时附带冷却秒数（`retry_after_seconds`），便于前端展示剩余机会与等待时间。
 - 邮件发送新增阿里云 DirectMail 发信器，优先使用 DirectMail，未配置时自动回退到 SMTP。
+- 新增 Prompt 导出能力，调用 `POST /api/prompts/export` 会生成包含全部 Prompt 的 JSON 文件，并在响应中返回本地保存路径，目录通过 `PROMPT_EXPORT_DIR` 配置。
 - 启动流程拆分为 `internal/app.InitResources`（负责连接/迁移）与 `internal/bootstrap.BuildApplication`（负责装配依赖），提升职责清晰度。
 - 新增 `/api/models` 系列接口，支持模型凭据的创建、查看、更新与删除，API Key 会在入库前加密。
 - 引入 `MODEL_CREDENTIAL_MASTER_KEY` 环境变量，使用 AES-256-GCM 加解密用户提交的模型凭据。
@@ -45,6 +46,24 @@
 | `MYSQL_DATABASE` | 默认数据库名，未填时为 `prompt` |
 | `MYSQL_PARAMS` | 追加在 DSN 末尾的参数，默认 `charset=utf8mb4&parseTime=true&loc=Local` |
 | `MODEL_CREDENTIAL_MASTER_KEY` | 32 字节主密钥（需使用 Base64 编码后写入），用于加解密模型 API Key |
+
+### 本地离线模式
+
+- 设置 `APP_MODE=local` 即可启用离线模式，后端将自动跳过 MySQL、Redis、Nacos 连接并使用本地 SQLite 文件。
+- SQLite 路径通过 `LOCAL_SQLITE_PATH` 控制，支持 `~` 前缀，默认值写入 `data/promptgen-local.db`；首次启动会自动创建目录与数据库。
+- `LOCAL_USER_ID`、`LOCAL_USER_USERNAME`、`LOCAL_USER_EMAIL`、`LOCAL_USER_ADMIN` 控制离线模式下的默认账号信息；后端会在启动时写入/更新该账号，并在没有 JWT 的情况下直接注入该用户身份。
+- 离线模式仍然需要 `MODEL_CREDENTIAL_MASTER_KEY` 用于模型凭据加密；未配置 `JWT_SECRET` 时会自动回退到内置的本地密钥，避免开发时额外填写。
+
+#### 离线模式快速上手
+
+1. 在根目录复制 `.env.example` 为 `.env.local`，修改以下字段：
+   - `APP_MODE=local`
+   - `LOCAL_SQLITE_PATH=~/promptgen/promptgen-local.db`（按需调整路径）
+   - 如需管理员权限，可将 `LOCAL_USER_ADMIN=true`
+2. 启动后端：`go run ./backend/cmd/server`
+3. 启动前端：`npm run dev:frontend`（Electron 启动流程不变）
+4. 登录页点击“离线模式”按钮即可直接进入工作台；此时所有数据仅保存在上一步配置的 SQLite 文件中，云同步、邮箱验证等依赖在线服务的功能会自动禁用。
+5. 若要恢复在线模式，将 `APP_MODE` 改回 `online` 并按照原有方式配置数据库/Redis/Nacos。
 
 ### 验证码与 Redis
 
@@ -194,6 +213,7 @@ go run ./backend/cmd/sendmail -to you@example.com -name "测试账号"
 | `POST` | `/api/prompts/keywords/remove` | 从工作区移除关键词 | JSON：`word`、`polarity`、`workspace_token` |
 | `POST` | `/api/prompts/keywords/sync` | 同步排序与权重到工作区 | JSON：`workspace_token`、`positive_keywords[]`、`negative_keywords[]`（元素含 `word`、`polarity`、`weight`） |
 | `GET` | `/api/prompts` | 获取当前用户的 Prompt 列表 | Query：`status`（可选，draft/published）、`q`（模糊搜索 topic/tags）、`page`、`page_size` |
+| `POST` | `/api/prompts/export` | 导出当前用户的 Prompt 并返回本地保存路径 | 无 |
 | `GET` | `/api/prompts/:id` | 获取单条 Prompt 详情并返回最新工作区 token | 无 |
 | `POST` | `/api/prompts/generate` | 调模型生成 Prompt 正文 | JSON：`topic`、`model_key`、`positive_keywords[]`、`negative_keywords[]`、`workspace_token`（可选） |
 | `POST` | `/api/prompts` | 保存草稿或发布 Prompt | JSON：`prompt_id`、`topic`、`body`、`status`、`publish`、`positive_keywords[]`、`negative_keywords[]`、`workspace_token`（可选） |
@@ -704,6 +724,25 @@ ALTER TABLE prompts
   ```
 
 - **常见错误**：目标 Prompt 不存在或归属不同用户 → `404`。
+
+#### POST /api/prompts/export
+
+- **用途**：将当前用户的全部 Prompt 导出为本地 JSON 文件，并返回导出文件路径及导出时间。
+- **请求体**：无。
+- **成功响应**：`200`
+
+  ```json
+  {
+    "success": true,
+    "data": {
+      "file_path": "C:/Users/alice/AppData/Roaming/promptgen/exports/prompt-export-20251012-163045-1.json",
+      "prompt_count": 12,
+      "generated_at": "2025-10-12T08:30:45Z"
+    }
+  }
+  ```
+
+- **备注**：导出目录通过 `PROMPT_EXPORT_DIR` 配置，默认写入 `data/exports`，首次导出会自动创建目录。
 
 #### DELETE /api/prompts/:id
 

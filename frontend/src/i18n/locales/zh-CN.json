@@ -166,7 +166,6 @@
   },
   "appShell": {
     "searchPlaceholder": "搜索主题或关键词...",
-    "syncNow": "立即同步",
     "logout": "退出登录",
     "logoutSuccess": "已安全退出登录",
     "backToTop": "回到顶部"
@@ -281,6 +280,19 @@
     "title": "我的 Prompt",
     "subtitle": "快速筛选、检索并继续编辑草稿或已发布的 Prompt。",
     "openWorkbench": "打开工作台",
+    "export": {
+      "button": "导出 Prompt",
+      "loading": "正在导出",
+      "success": "已导出 {{count}} 条 Prompt，文件保存到 {{path}}。",
+      "empty": "暂无 Prompt 可导出，已生成空白文件：{{path}}。",
+      "failed": "导出 Prompt 时出现错误，请稍后重试。"
+    },
+    "exportNotice": {
+      "title": "最近一次导出",
+      "pathLabel": "文件路径",
+      "timeLabel": "导出时间：{{date}} {{time}}",
+      "countLabel": "包含条目：{{count}}"
+    },
     "listTitle": "Prompt 列表",
     "searchPlaceholder": "搜索主题或标签",
     "statusFilter": {
@@ -314,7 +326,8 @@
       "archived": "已归档"
     },
     "actions": {
-      "edit": "继续编辑",
+      "view": "查看详情",
+      "edit": "编辑",
       "delete": "删除"
     },
     "pagination": {
@@ -409,6 +422,12 @@
       "emailOnly": "重新发送验证邮件时需要填写邮箱地址。",
       "pageIntro": "请输入注册时使用的邮箱，我们会立即发送新的验证链接。",
       "pageSteps": "完成邮件中的验证后，可返回此页或直接登录继续使用。"
+    },
+    "offline": {
+      "title": "使用离线模式",
+      "description": "无需登录即可在本机体验核心流程（数据仅保存在本地）。",
+      "enter": "进入离线模式",
+      "failed": "离线模式初始化失败，请确认后端服务已启动。"
     }
   },
   "dashboard": {
@@ -434,7 +453,7 @@
     },
     "search": {
       "title": "快速搜索",
-      "subtitle": "查找历史 Prompt 或直接继续编辑。",
+      "subtitle": "查找历史 Prompt 并查看详情。",
       "placeholder": "输入主题或关键词…",
       "submit": "搜索",
       "historyTitle": "历史搜索",
@@ -448,9 +467,9 @@
     },
     "drafts": {
       "title": "草稿提醒",
-      "subtitle": "继续完善待发布的 Prompt。",
+      "subtitle": "查看草稿并决策后续动作。",
       "updatedAt": "最近更新：{{date}}{{time}}",
-      "resume": "继续编辑",
+      "resume": "查看详情",
       "loading": "正在加载草稿…",
       "empty": "暂时没有草稿，去工作台开始创作吧。",
       "viewAll": "查看全部草稿",
@@ -461,7 +480,7 @@
       "viewAll": "打开“我的 Prompt”",
       "loading": "正在加载最近记录…",
       "empty": "还没有最近访问的 Prompt。",
-      "open": "打开"
+      "open": "查看详情"
     },
     "models": {
       "title": "模型额度状态",
@@ -471,16 +490,55 @@
       "manage": "前往模型设置",
       "verifiedAt": "最近验证：{{date}}{{time}}",
       "neverVerified": "尚未执行连通性校验"
-    },
-    "toasts": {
-      "resumeLoading": "正在加载 Prompt …",
-      "resumeSuccess": "Prompt 已加载，正在跳转工作台。"
     }
+  },
+  "promptDetail": {
+    "eyebrow": "Prompt 详情",
+    "title": "查看 Prompt",
+    "subtitle": "查看已保存的 Prompt，支持复制或继续编辑。",
+    "sections": {
+      "meta": "基础信息",
+      "instructions": "补充要求",
+      "tags": "标签",
+      "keywords": "关键词",
+      "body": "Prompt 正文"
+    },
+    "bodyTitle": "生成结果",
+    "meta": {
+      "status": "状态",
+      "model": "模型",
+      "updatedAt": "更新时间",
+      "createdAt": "创建时间",
+      "publishedAt": "发布时间"
+    },
+    "keywords": {
+      "positive": "正向关键词",
+      "negative": "负向关键词"
+    },
+    "actions": {
+      "back": "返回上一页",
+      "edit": "继续编辑",
+      "copyBody": "复制正文",
+      "copyMarkdown": "复制 Markdown"
+    },
+    "copy": {
+      "empty": "暂无可复制的内容",
+      "bodySuccess": "Prompt 正文已复制",
+      "markdownSuccess": "Markdown 已复制",
+      "failed": "复制失败，请稍后再试"
+    },
+    "error": "加载 Prompt 详情失败。",
+    "empty": "暂无内容"
   },
   "settings": {
     "eyebrow": "账户与偏好",
     "title": "设置",
     "subtitle": "更新账户资料和界面偏好。",
+    "tabs": {
+      "profile": "个人资料",
+      "models": "模型凭据",
+      "app": "应用设置"
+    },
     "languageCardTitle": "界面语言",
     "languageCardDescription": "在英文与简体中文之间切换界面显示语言。",
     "languageSelectLabel": "显示语言",

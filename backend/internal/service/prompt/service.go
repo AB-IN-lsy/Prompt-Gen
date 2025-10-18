@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 	"unicode"
@@ -62,6 +64,7 @@ type Service struct {
 	listDefaultPageSize int
 	listMaxPageSize     int
 	useFullText         bool
+	exportDir           string
 }
 
 const (
@@ -95,6 +98,15 @@ const (
 	defaultKeywordWeight = 5
 )
 
+const (
+	// DefaultPromptExportDir 定义 Prompt 导出的默认保存路径（相对项目根目录）。
+	DefaultPromptExportDir = "data/exports"
+	// exportDirPermission 指定导出目录的权限。
+	exportDirPermission os.FileMode = 0o755
+	// exportFilePermission 指定导出文件的权限。
+	exportFilePermission os.FileMode = 0o600
+)
+
 var (
 	// ErrPositiveKeywordLimit 表示正向关键词数量超出上限。
 	ErrPositiveKeywordLimit = errors.New("positive keywords exceed limit")
@@ -117,6 +129,7 @@ type Config struct {
 	DefaultListPageSize int
 	MaxListPageSize     int
 	UseFullTextSearch   bool
+	ExportDirectory     string
 }
 
 // NewServiceWithConfig 构建 Service，并允许自定义分页等配置。
@@ -145,6 +158,20 @@ func NewServiceWithConfig(prompts *repository.PromptRepository, keywords *reposi
 	if cfg.DefaultListPageSize > cfg.MaxListPageSize {
 		cfg.DefaultListPageSize = cfg.MaxListPageSize
 	}
+	baseExportDir := strings.TrimSpace(cfg.ExportDirectory)
+	if baseExportDir == "" {
+		baseExportDir = DefaultPromptExportDir
+	}
+	normalisedExportDir, err := normaliseExportDir(baseExportDir)
+	if err != nil {
+		logger.Warnw("normalize prompt export directory failed, fallback to default", "path", baseExportDir, "error", err)
+		if fallback, fallbackErr := normaliseExportDir(DefaultPromptExportDir); fallbackErr == nil {
+			normalisedExportDir = fallback
+		} else {
+			normalisedExportDir = filepath.Clean(DefaultPromptExportDir)
+			logger.Warnw("fallback prompt export directory normalization failed", "error", fallbackErr)
+		}
+	}
 	return &Service{
 		prompts:             prompts,
 		keywords:            keywords,
@@ -159,6 +186,7 @@ func NewServiceWithConfig(prompts *repository.PromptRepository, keywords *reposi
 		listDefaultPageSize: cfg.DefaultListPageSize,
 		listMaxPageSize:     cfg.MaxListPageSize,
 		useFullText:         cfg.UseFullTextSearch,
+		exportDir:           normalisedExportDir,
 	}
 }
 
@@ -222,6 +250,101 @@ func (s *Service) ListPrompts(ctx context.Context, input ListPromptsInput) (List
 		Total:    total,
 		Page:     page,
 		PageSize: pageSize,
+	}, nil
+}
+
+// ExportPromptsInput 描述导出 Prompt 时所需的参数。
+type ExportPromptsInput struct {
+	UserID uint
+}
+
+// ExportPromptsOutput 返回导出文件的路径与摘要数据。
+type ExportPromptsOutput struct {
+	FilePath    string
+	PromptCount int
+	GeneratedAt time.Time
+}
+
+type promptExportRecord struct {
+	ID               uint                             `json:"id"`
+	Topic            string                           `json:"topic"`
+	Body             string                           `json:"body"`
+	Instructions     string                           `json:"instructions"`
+	Model            string                           `json:"model"`
+	Status           string                           `json:"status"`
+	Tags             []string                         `json:"tags"`
+	PositiveKeywords []promptdomain.PromptKeywordItem `json:"positive_keywords"`
+	NegativeKeywords []promptdomain.PromptKeywordItem `json:"negative_keywords"`
+	PublishedAt      *time.Time                       `json:"published_at,omitempty"`
+	CreatedAt        time.Time                        `json:"created_at"`
+	UpdatedAt        time.Time                        `json:"updated_at"`
+	LatestVersionNo  int                              `json:"latest_version_no"`
+}
+
+type promptExportEnvelope struct {
+	GeneratedAt time.Time            `json:"generated_at"`
+	PromptCount int                  `json:"prompt_count"`
+	Prompts     []promptExportRecord `json:"prompts"`
+}
+
+// ExportPrompts 将用户的 Prompt 序列化为本地 JSON 文件并返回保存结果。
+func (s *Service) ExportPrompts(ctx context.Context, input ExportPromptsInput) (ExportPromptsOutput, error) {
+	if input.UserID == 0 {
+		return ExportPromptsOutput{}, errors.New("user id is required")
+	}
+
+	records, _, err := s.prompts.ListByUser(ctx, input.UserID, repository.PromptListFilter{})
+	if err != nil {
+		return ExportPromptsOutput{}, fmt.Errorf("list prompts for export: %w", err)
+	}
+
+	exportItems := make([]promptExportRecord, 0, len(records))
+	for _, record := range records {
+		positive := keywordItemsToDomain(decodePromptKeywords(record.PositiveKeywords))
+		negative := keywordItemsToDomain(decodePromptKeywords(record.NegativeKeywords))
+		exportItems = append(exportItems, promptExportRecord{
+			ID:               record.ID,
+			Topic:            record.Topic,
+			Body:             record.Body,
+			Instructions:     record.Instructions,
+			Model:            record.Model,
+			Status:           record.Status,
+			Tags:             decodeTags(record.Tags),
+			PositiveKeywords: positive,
+			NegativeKeywords: negative,
+			PublishedAt:      record.PublishedAt,
+			CreatedAt:        record.CreatedAt,
+			UpdatedAt:        record.UpdatedAt,
+			LatestVersionNo:  record.LatestVersionNo,
+		})
+	}
+
+	payload := promptExportEnvelope{
+		GeneratedAt: time.Now().UTC(),
+		PromptCount: len(exportItems),
+		Prompts:     exportItems,
+	}
+
+	if err := os.MkdirAll(s.exportDir, exportDirPermission); err != nil {
+		return ExportPromptsOutput{}, fmt.Errorf("create export directory: %w", err)
+	}
+
+	fileName := fmt.Sprintf("prompt-export-%s-%d.json", payload.GeneratedAt.Format("20060102-150405"), input.UserID)
+	filePath := filepath.Join(s.exportDir, fileName)
+
+	encoded, err := json.MarshalIndent(payload, "", "  ")
+	if err != nil {
+		return ExportPromptsOutput{}, fmt.Errorf("marshal export payload: %w", err)
+	}
+
+	if err := os.WriteFile(filePath, encoded, exportFilePermission); err != nil {
+		return ExportPromptsOutput{}, fmt.Errorf("write export file: %w", err)
+	}
+
+	return ExportPromptsOutput{
+		FilePath:    filePath,
+		PromptCount: len(exportItems),
+		GeneratedAt: payload.GeneratedAt,
 	}, nil
 }
 
@@ -1897,6 +2020,23 @@ func buildGenerateRequest(input GenerateInput) modeldomain.ChatCompletionRequest
 	}
 }
 
+// keywordItemsToDomain 将 KeywordItem 列表转换为持久化使用的 PromptKeywordItem。
+func keywordItemsToDomain(items []KeywordItem) []promptdomain.PromptKeywordItem {
+	if len(items) == 0 {
+		return []promptdomain.PromptKeywordItem{}
+	}
+	result := make([]promptdomain.PromptKeywordItem, 0, len(items))
+	for _, item := range items {
+		result = append(result, promptdomain.PromptKeywordItem{
+			KeywordID: item.KeywordID,
+			Word:      item.Word,
+			Source:    item.Source,
+			Weight:    item.Weight,
+		})
+	}
+	return result
+}
+
 // decodePromptKeywords 将数据库中的关键词 JSON 字符串解析为 KeywordItem 列表，并做基础归一化。
 func decodePromptKeywords(raw string) []KeywordItem {
 	trimmed := strings.TrimSpace(raw)
@@ -2023,6 +2163,43 @@ func decodeTags(raw string) []string {
 		}
 	}
 	return cleaned
+}
+
+// normaliseExportDir 规范化导出目录路径，处理 ~ 前缀与相对路径。
+func normaliseExportDir(path string) (string, error) {
+	expanded, err := expandHomePath(path)
+	if err != nil {
+		return "", err
+	}
+	if expanded == "" {
+		expanded = DefaultPromptExportDir
+	}
+	abs, err := filepath.Abs(expanded)
+	if err != nil {
+		return "", err
+	}
+	return filepath.Clean(abs), nil
+}
+
+// expandHomePath 将以 ~ 开头的路径展开为用户主目录。
+func expandHomePath(path string) (string, error) {
+	trimmed := strings.TrimSpace(path)
+	if trimmed == "" {
+		return "", nil
+	}
+	if !strings.HasPrefix(trimmed, "~") {
+		return trimmed, nil
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", err
+	}
+	remainder := strings.TrimPrefix(trimmed, "~")
+	remainder = strings.TrimLeft(remainder, "/\\")
+	if remainder == "" {
+		return home, nil
+	}
+	return filepath.Join(home, remainder), nil
 }
 
 // languageOrDefault 若未指定语言则返回中文，供模型提示使用。

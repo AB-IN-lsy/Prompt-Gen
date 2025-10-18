@@ -9,9 +9,12 @@ package app
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
+	"time"
 
 	"electron-go-app/backend/internal/config"
 	changelog "electron-go-app/backend/internal/domain/changelog"
@@ -21,13 +24,17 @@ import (
 	appLogger "electron-go-app/backend/internal/infra/logger"
 
 	"github.com/redis/go-redis/v9"
+	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 // AppConfig 描述应用启动所需的核心配置（MySQL、Redis 等）。
 type AppConfig struct {
+	Mode  string
 	MySQL infra.MySQLConfig
 	Redis *infra.RedisOptions
+	Local config.LocalRuntime
 }
 
 // Resources 封装运行期共享资源，包括 ORM 实例与原始数据库连接。
@@ -42,6 +49,11 @@ type Resources struct {
 // 返回的 Resources 会交由业务层（`internal/bootstrap`）继续组装依赖。
 func InitResources(ctx context.Context) (*Resources, error) {
 	config.LoadEnvFiles()
+
+	runtimeFlags := config.LoadRuntimeFlags()
+	if strings.EqualFold(runtimeFlags.Mode, config.ModeLocal) {
+		return initLocalResources(ctx, runtimeFlags)
+	}
 
 	mysqlCfg, err := infra.LoadMySQLConfigFromEnv()
 	if err != nil {
@@ -90,13 +102,125 @@ func InitResources(ctx context.Context) (*Resources, error) {
 
 	return &Resources{
 		Config: AppConfig{
+			Mode:  runtimeFlags.Mode,
 			MySQL: mysqlCfg,
 			Redis: redisOpts,
+			Local: runtimeFlags.Local,
 		},
 		DB:    gormDB,
 		rawDB: rawDB,
 		Redis: redisClient,
 	}, nil
+}
+
+const (
+	localConnMaxLifetime = time.Hour
+	localMaxOpenConns    = 1
+	localMaxIdleConns    = 1
+)
+
+// initLocalResources 针对本地模式初始化 SQLite 连接，并确保默认用户存在。
+func initLocalResources(ctx context.Context, flags config.RuntimeFlags) (*Resources, error) {
+	dbPath := flags.Local.DBPath
+	if err := os.MkdirAll(filepath.Dir(dbPath), 0o755); err != nil {
+		return nil, fmt.Errorf("create sqlite directory: %w", err)
+	}
+
+	gormDB, err := gorm.Open(sqlite.Open(dbPath), &gorm.Config{
+		DisableForeignKeyConstraintWhenMigrating: false,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("open sqlite: %w", err)
+	}
+
+	sqlDB, err := gormDB.DB()
+	if err != nil {
+		return nil, fmt.Errorf("extract sqlite db: %w", err)
+	}
+	sqlDB.SetConnMaxLifetime(localConnMaxLifetime)
+	sqlDB.SetMaxOpenConns(localMaxOpenConns)
+	sqlDB.SetMaxIdleConns(localMaxIdleConns)
+
+	if err := gormDB.AutoMigrate(
+		&domain.User{},
+		&domain.EmailVerificationToken{},
+		&domain.UserModelCredential{},
+		&changelog.Entry{},
+		&promptdomain.Prompt{},
+		&promptdomain.Keyword{},
+		&promptdomain.PromptKeyword{},
+		&promptdomain.PromptVersion{},
+	); err != nil {
+		return nil, fmt.Errorf("auto migrate sqlite: %w", err)
+	}
+
+	if _, err := ensureLocalUser(ctx, gormDB, flags.Local); err != nil {
+		return nil, fmt.Errorf("ensure local user: %w", err)
+	}
+
+	appLogger.S().Infow("local mode enabled", "db_path", dbPath, "user_id", flags.Local.UserID)
+
+	return &Resources{
+		Config: AppConfig{
+			Mode:  config.ModeLocal,
+			Local: flags.Local,
+		},
+		DB:    gormDB,
+		rawDB: sqlDB,
+		Redis: nil,
+	}, nil
+}
+
+// ensureLocalUser 确保本地模式下存在默认用户，便于后续请求注入身份。
+func ensureLocalUser(ctx context.Context, db *gorm.DB, local config.LocalRuntime) (*domain.User, error) {
+	var user domain.User
+	err := db.WithContext(ctx).
+		Clauses(clause.Locking{Strength: "UPDATE"}).
+		Where("id = ?", local.UserID).
+		First(&user).Error
+	switch {
+	case err == nil:
+		needsUpdate := false
+		if user.Username != local.Username {
+			user.Username = local.Username
+			needsUpdate = true
+		}
+		if user.Email != local.Email {
+			user.Email = local.Email
+			needsUpdate = true
+		}
+		if user.IsAdmin != local.IsAdmin {
+			user.IsAdmin = local.IsAdmin
+			needsUpdate = true
+		}
+		if needsUpdate {
+			if saveErr := db.WithContext(ctx).Save(&user).Error; saveErr != nil {
+				return nil, saveErr
+			}
+		}
+		return &user, nil
+	case errors.Is(err, gorm.ErrRecordNotFound):
+		settingsJSON, serr := domain.SettingsJSON(domain.DefaultSettings())
+		if serr != nil {
+			return nil, serr
+		}
+		now := time.Now()
+		user = domain.User{
+			ID:              local.UserID,
+			Username:        local.Username,
+			Email:           local.Email,
+			PasswordHash:    "LOCAL_ONLY",
+			IsAdmin:         local.IsAdmin,
+			Settings:        settingsJSON,
+			EmailVerifiedAt: &now,
+		}
+		if createErr := db.WithContext(ctx).Create(&user).Error; createErr != nil {
+			return nil, createErr
+		}
+		return &user, nil
+	default:
+		return nil, err
+	}
 }
 
 // Close 释放底层数据库连接资源，供进程退出时调用。

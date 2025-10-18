@@ -166,7 +166,6 @@
   },
   "appShell": {
     "searchPlaceholder": "Search topics or keywords...",
-    "syncNow": "Sync now",
     "logout": "Sign out",
     "logoutSuccess": "Signed out successfully",
     "backToTop": "Back to top"
@@ -281,6 +280,19 @@
     "title": "My prompts",
     "subtitle": "Search, filter, and revisit drafts or published prompts at any time.",
     "openWorkbench": "Open workbench",
+    "export": {
+      "button": "Export prompts",
+      "loading": "Exporting...",
+      "success": "Exported {{count}} prompts to {{path}}.",
+      "empty": "No prompts available. Created an empty archive at {{path}}.",
+      "failed": "Failed to export prompts. Please try again later."
+    },
+    "exportNotice": {
+      "title": "Latest export",
+      "pathLabel": "File path",
+      "timeLabel": "Exported at {{date}} {{time}}",
+      "countLabel": "Entries: {{count}}"
+    },
     "listTitle": "Saved prompts",
     "searchPlaceholder": "Search topics or tags",
     "statusFilter": {
@@ -314,7 +326,8 @@
       "archived": "Archived"
     },
     "actions": {
-      "edit": "Continue editing",
+      "view": "View details",
+      "edit": "Edit",
       "delete": "Delete"
     },
     "pagination": {
@@ -409,6 +422,12 @@
       "emailOnly": "Please enter an email address to resend the verification message.",
       "pageIntro": "Enter the email you registered with and we’ll send a fresh verification link.",
       "pageSteps": "After verifying via the email link, return here or sign in to continue."
+    },
+    "offline": {
+      "title": "Use offline mode",
+      "description": "Explore the core experience locally without signing in. Data stays on this device.",
+      "enter": "Enter offline mode",
+      "failed": "Failed to start offline mode. Make sure the backend is running."
     }
   },
   "dashboard": {
@@ -434,7 +453,7 @@
     },
     "search": {
       "title": "Quick search",
-      "subtitle": "Find previous prompts or jump back into editing.",
+      "subtitle": "Find saved prompts and view their details.",
       "placeholder": "Type a topic or keyword…",
       "submit": "Search",
       "historyTitle": "Recent searches",
@@ -448,9 +467,9 @@
     },
     "drafts": {
       "title": "Draft reminder",
-      "subtitle": "Pick up pending prompts and publish them.",
+      "subtitle": "Review drafts before deciding the next step.",
       "updatedAt": "Last updated: {{date}}{{time}}",
-      "resume": "Continue editing",
+      "resume": "View details",
       "loading": "Loading drafts…",
       "empty": "No drafts yet. Head to the workbench to create one.",
       "viewAll": "View all drafts",
@@ -461,7 +480,7 @@
       "viewAll": "Open “My prompts”",
       "loading": "Loading recent prompts…",
       "empty": "No recent prompts yet.",
-      "open": "Open"
+      "open": "View details"
     },
     "models": {
       "title": "Model quota status",
@@ -471,16 +490,55 @@
       "manage": "Manage credentials",
       "verifiedAt": "Last verified: {{date}}{{time}}",
       "neverVerified": "Connectivity test not executed yet"
-    },
-    "toasts": {
-      "resumeLoading": "Loading prompt…",
-      "resumeSuccess": "Prompt ready. Redirecting to the workbench."
     }
+  },
+  "promptDetail": {
+    "eyebrow": "Prompt detail",
+    "title": "View prompt",
+    "subtitle": "Review a saved prompt, copy or jump back into editing.",
+    "sections": {
+      "meta": "Metadata",
+      "instructions": "Additional instructions",
+      "tags": "Tags",
+      "keywords": "Keywords",
+      "body": "Prompt body"
+    },
+    "bodyTitle": "Generated content",
+    "meta": {
+      "status": "Status",
+      "model": "Model",
+      "updatedAt": "Updated at",
+      "createdAt": "Created at",
+      "publishedAt": "Published at"
+    },
+    "keywords": {
+      "positive": "Positive keywords",
+      "negative": "Negative keywords"
+    },
+    "actions": {
+      "back": "Go back",
+      "edit": "Continue editing",
+      "copyBody": "Copy body",
+      "copyMarkdown": "Copy Markdown"
+    },
+    "copy": {
+      "empty": "Nothing to copy yet",
+      "bodySuccess": "Prompt body copied",
+      "markdownSuccess": "Markdown copied",
+      "failed": "Copy failed, please try again"
+    },
+    "error": "Failed to load prompt detail.",
+    "empty": "No content"
   },
   "settings": {
     "eyebrow": "Profile & workspace",
     "title": "Settings",
     "subtitle": "Update your profile and workspace preferences.",
+    "tabs": {
+      "profile": "Profile",
+      "models": "Model credentials",
+      "app": "App preferences"
+    },
     "languageCardTitle": "Language",
     "languageCardDescription": "Switch the interface language between English and Simplified Chinese.",
     "languageSelectLabel": "Display language",

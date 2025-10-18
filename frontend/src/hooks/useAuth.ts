@@ -11,6 +11,7 @@ import { normaliseError } from "../lib/http";
 import { ApiError } from "../lib/errors";
 import { toast } from "sonner";
 import i18n from "../i18n";
+import { getStoredMode, isLocalMode, LOCAL_MODE, resetStoredMode, setStoredMode } from "../lib/runtimeMode";
 
 interface AuthState {
   profile: AuthProfile | null;
@@ -20,6 +21,7 @@ interface AuthState {
   authenticate: (tokens: AuthTokens) => Promise<void>;
   initialize: () => Promise<void>;
   logout: () => Promise<void>;
+  enterOffline: () => Promise<void>;
 }
 
 export const useAuth = create<AuthState>((set, get) => ({
@@ -48,6 +50,21 @@ export const useAuth = create<AuthState>((set, get) => ({
     if (isInitialized || initializing) {
       return;
     }
+    const mode = getStoredMode();
+    if (mode === LOCAL_MODE) {
+      set({ initializing: true });
+      clearTokenPair();
+      try {
+        const profile = await fetchCurrentUser();
+        set({ profile, initializing: false, isInitialized: true });
+      } catch (error) {
+        const normalised = normaliseError(error);
+        console.error("Failed to bootstrap offline profile", normalised);
+        resetStoredMode();
+        set({ profile: null, initializing: false, isInitialized: true });
+      }
+      return;
+    }
     if (!getTokenPair()) {
       set({ profile: null, isInitialized: true });
       return;
@@ -69,6 +86,14 @@ export const useAuth = create<AuthState>((set, get) => ({
     }
   },
   logout: async () => {
+    const localMode = isLocalMode();
+    if (localMode) {
+      clearTokenPair();
+      resetStoredMode();
+      set({ profile: null, isInitialized: true });
+      toast.success(i18n.t("appShell.logoutSuccess"));
+      return;
+    }
     const tokens = getTokenPair();
     try {
       if (tokens?.refreshToken) {
@@ -82,9 +107,25 @@ export const useAuth = create<AuthState>((set, get) => ({
       toast.success(i18n.t("appShell.logoutSuccess"));
     }
   },
+  enterOffline: async () => {
+    set({ initializing: true });
+    clearTokenPair();
+    setStoredMode(LOCAL_MODE);
+    try {
+      const profile = await fetchCurrentUser();
+      set({ profile, initializing: false, isInitialized: true });
+    } catch (error) {
+      resetStoredMode();
+      set({ profile: null, initializing: false, isInitialized: true });
+      throw normaliseError(error);
+    }
+  },
 }));
 
 export function useIsAuthenticated(): boolean {
   const profile = useAuth((state) => state.profile);
+  if (isLocalMode()) {
+    return Boolean(profile);
+  }
   return Boolean(profile && getTokenPair());
 }

@@ -12,6 +12,7 @@ import {
   useMemo,
   useState,
 } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -50,6 +51,23 @@ type VerificationFeedback = {
   message: string;
   remaining?: number;
   retryAfter?: number;
+};
+
+type SettingsTab = "profile" | "models" | "app";
+
+const TAB_QUERY_KEY = "tab";
+
+const resolveTabFromParam = (value: string | null): SettingsTab => {
+  switch ((value ?? "").toLowerCase()) {
+    case "models":
+      return "models";
+    case "app":
+      return "app";
+    case "profile":
+      return "profile";
+    default:
+      return "profile";
+  }
 };
 
 export default function SettingsPage() {
@@ -121,6 +139,19 @@ export default function SettingsPage() {
   );
   const [verificationFeedback, setVerificationFeedback] =
     useState<VerificationFeedback | null>(null);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [activeTab, setActiveTab] = useState<SettingsTab>(() =>
+    resolveTabFromParam(searchParams.get(TAB_QUERY_KEY)),
+  );
+  const tabParam = searchParams.get(TAB_QUERY_KEY);
+  const tabItems = useMemo(
+    () => [
+      { id: "profile" as SettingsTab, label: t("settings.tabs.profile") },
+      { id: "models" as SettingsTab, label: t("settings.tabs.models") },
+      { id: "app" as SettingsTab, label: t("settings.tabs.app") },
+    ],
+    [t],
+  );
 
   useEffect(() => {
     setProfileForm({
@@ -134,6 +165,27 @@ export default function SettingsPage() {
     setVerificationTargetEmail(profile?.user.email ?? "");
     setVerificationFeedback(null);
   }, [profile]);
+
+  useEffect(() => {
+    const paramTab = resolveTabFromParam(tabParam);
+    if (paramTab !== activeTab) {
+      setActiveTab(paramTab);
+    }
+  }, [activeTab, tabParam]);
+
+  const handleTabChange = useCallback(
+    (next: SettingsTab) => {
+      const nextParams = new URLSearchParams(searchParams);
+      if (next === "profile") {
+        nextParams.delete(TAB_QUERY_KEY);
+      } else {
+        nextParams.set(TAB_QUERY_KEY, next);
+      }
+      setSearchParams(nextParams, { replace: true });
+      setActiveTab(next);
+    },
+    [searchParams, setSearchParams],
+  );
 
   const handleModelRequestError = useCallback(
     (error: unknown) => {
@@ -749,64 +801,86 @@ export default function SettingsPage() {
         description={t("settings.subtitle")}
       />
 
-      {isEmailVerified ? null : (
-        <div className="rounded-xl border border-amber-200 bg-amber-50/80 p-4 text-sm leading-relaxed text-amber-800 transition-colors dark:border-amber-400/50 dark:bg-amber-500/10 dark:text-amber-100">
-          <p>
-            {t(
-              "settings.verificationPending.notice",
-              "邮箱尚未完成验证，请尽快前往验证以解锁全部功能。",
-            )}
-          </p>
-          {verificationTargetEmail ? (
-            <p className="mt-2 text-xs text-amber-700 dark:text-amber-200">
-              {t("settings.verificationPending.emailLabel", {
-                email: verificationTargetEmail,
-              })}
-            </p>
-          ) : null}
-          <div className="mt-3 flex flex-wrap gap-2">
-            <Button
+      <div className="flex overflow-x-auto rounded-2xl border border-white/60 bg-white/70 p-1 text-sm shadow-sm dark:border-slate-800 dark:bg-slate-900/60">
+        {tabItems.map((item) => {
+          const isActive = activeTab === item.id;
+          return (
+            <button
+              key={item.id}
               type="button"
-              disabled={verificationMutation.isPending}
-              onClick={() => verificationMutation.mutate()}
-            >
-              {verificationMutation.isPending
-                ? t("common.loading")
-                : t("settings.verificationPending.send", "发送验证邮件")}
-            </Button>
-          </div>
-          {verificationFeedback ? (
-            <div
-              className={`mt-3 rounded-lg border px-3 py-2 text-xs transition-colors ${
-                verificationFeedback.tone === "success"
-                  ? "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-400/40 dark:bg-emerald-500/10 dark:text-emerald-200"
-                  : verificationFeedback.tone === "error"
-                    ? "border-red-200 bg-red-50 text-red-700 dark:border-red-400/50 dark:bg-red-500/10 dark:text-red-200"
-                    : "border-slate-200 bg-white/70 text-slate-600 dark:border-slate-700 dark:bg-slate-900/60 dark:text-slate-200"
+              onClick={() => handleTabChange(item.id)}
+              className={`relative min-w-[120px] flex-1 whitespace-nowrap rounded-xl px-4 py-2 font-medium transition ${
+                isActive
+                  ? "bg-primary text-white shadow-glow"
+                  : "text-slate-600 hover:bg-white/80 dark:text-slate-300 dark:hover:bg-slate-800/70"
               }`}
             >
-              <p>{verificationFeedback.message}</p>
-              {typeof verificationFeedback.remaining === "number" ? (
-                <p className="mt-1">
-                  {t("settings.verificationPending.remaining", {
-                    count: verificationFeedback.remaining,
+              {item.label}
+            </button>
+          );
+        })}
+      </div>
+
+      {activeTab === "profile" ? (
+        <>
+          {isEmailVerified ? null : (
+            <div className="rounded-xl border border-amber-200 bg-amber-50/80 p-4 text-sm leading-relaxed text-amber-800 transition-colors dark:border-amber-400/50 dark:bg-amber-500/10 dark:text-amber-100">
+              <p>
+                {t(
+                  "settings.verificationPending.notice",
+                  "邮箱尚未完成验证，请尽快前往验证以解锁全部功能。",
+                )}
+              </p>
+              {verificationTargetEmail ? (
+                <p className="mt-2 text-xs text-amber-700 dark:text-amber-200">
+                  {t("settings.verificationPending.emailLabel", {
+                    email: verificationTargetEmail,
                   })}
                 </p>
               ) : null}
-              {typeof verificationFeedback.retryAfter === "number" ? (
-                <p className="mt-1">
-                  {t("settings.verificationPending.rateLimit", {
-                    seconds: verificationFeedback.retryAfter,
-                  })}
-                </p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  disabled={verificationMutation.isPending}
+                  onClick={() => verificationMutation.mutate()}
+                >
+                  {verificationMutation.isPending
+                    ? t("common.loading")
+                    : t("settings.verificationPending.send", "发送验证邮件")}
+                </Button>
+              </div>
+              {verificationFeedback ? (
+                <div
+                  className={`mt-3 rounded-lg border px-3 py-2 text-xs transition-colors ${
+                    verificationFeedback.tone === "success"
+                      ? "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-400/40 dark:bg-emerald-500/10 dark:text-emerald-200"
+                      : verificationFeedback.tone === "error"
+                        ? "border-red-200 bg-red-50 text-red-700 dark:border-red-400/50 dark:bg-red-500/10 dark:text-red-200"
+                        : "border-slate-200 bg-white/70 text-slate-600 dark:border-slate-700 dark:bg-slate-900/60 dark:text-slate-200"
+                  }`}
+                >
+                  <p>{verificationFeedback.message}</p>
+                  {typeof verificationFeedback.remaining === "number" ? (
+                    <p className="mt-1">
+                      {t("settings.verificationPending.remaining", {
+                        count: verificationFeedback.remaining,
+                      })}
+                    </p>
+                  ) : null}
+                  {typeof verificationFeedback.retryAfter === "number" ? (
+                    <p className="mt-1">
+                      {t("settings.verificationPending.rateLimit", {
+                        seconds: verificationFeedback.retryAfter,
+                      })}
+                    </p>
+                  ) : null}
+                </div>
               ) : null}
             </div>
-          ) : null}
-        </div>
-      )}
+          )}
 
-      <GlassCard className="space-y-6">
-        <form onSubmit={handleProfileSubmit} className="space-y-6">
+          <GlassCard className="space-y-6">
+            <form onSubmit={handleProfileSubmit} className="space-y-6">
           <div>
             <h2 className="text-lg font-medium text-slate-800 dark:text-slate-100">
               {t("settings.profileCard.title")}
@@ -950,7 +1024,10 @@ export default function SettingsPage() {
           </div>
         </form>
       </GlassCard>
+        </>
+      ) : null}
 
+      {activeTab === "models" ? (
       <GlassCard className="space-y-6">
         <div>
           <h2 className="text-lg font-medium text-slate-800 dark:text-slate-100">
@@ -1325,7 +1402,10 @@ export default function SettingsPage() {
           </form>
         </div>
       </GlassCard>
+      ) : null}
 
+      {activeTab === "app" ? (
+      <>
       <GlassCard className="space-y-4">
         <div>
           <h2 className="text-lg font-medium text-slate-800 dark:text-slate-100">
@@ -1398,6 +1478,8 @@ export default function SettingsPage() {
           </select>
         </div>
       </GlassCard>
+      </>
+      ) : null}
     </div>
   );
 }

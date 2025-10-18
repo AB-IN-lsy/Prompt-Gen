@@ -225,6 +225,31 @@ func (h *PromptHandler) ListPrompts(c *gin.Context) {
 	)
 }
 
+// ExportPrompts 将当前用户的 Prompt 导出为本地文件并返回保存路径。
+func (h *PromptHandler) ExportPrompts(c *gin.Context) {
+	log := h.scope("export")
+	userID, ok := extractUserID(c)
+	if !ok {
+		response.Fail(c, http.StatusUnauthorized, response.ErrUnauthorized, "missing user id", nil)
+		return
+	}
+
+	result, err := h.service.ExportPrompts(c.Request.Context(), promptsvc.ExportPromptsInput{
+		UserID: userID,
+	})
+	if err != nil {
+		log.Errorw("export prompts failed", "error", err, "user_id", userID)
+		response.Fail(c, http.StatusInternalServerError, response.ErrInternal, "导出 Prompt 失败", nil)
+		return
+	}
+
+	response.Success(c, http.StatusOK, gin.H{
+		"file_path":    result.FilePath,
+		"prompt_count": result.PromptCount,
+		"generated_at": result.GeneratedAt,
+	}, nil)
+}
+
 // GetPrompt 返回指定 Prompt 的详情，并附带最新的工作区 token。
 func (h *PromptHandler) GetPrompt(c *gin.Context) {
 	log := h.scope("detail")
