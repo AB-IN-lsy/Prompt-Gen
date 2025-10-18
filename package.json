@@ -1,19 +1,61 @@
 {
-  "name": "electron-go-app",
+  "name": "prompt-gen",
   "version": "1.0.0",
-  "description": "",
+  "description": "Electron + Go 一体化的 AI Prompt 工作台，集成关键词治理、模型管理与运营后台能力。",
+  "author": "AB-IN <ab-in-liusy@outlook.com>",
+  "license": "ISC",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
     "test": "echo \"Error: no test specified\" && exit 1",
     "build": "npm --prefix frontend run build",
     "dev:frontend": "npm --prefix frontend run dev",
-    "build:frontend": "npm --prefix frontend run build"
+    "build:frontend": "npm --prefix frontend run build",
+    "build:backend": "go build -o backend/bin/server ./backend/cmd/server && go build -o backend/bin/server.exe ./backend/cmd/server",
+    "prepare:offline": "npm run build:frontend && npm run build:backend",
+    "dist:mac": "npm run prepare:offline && electron-builder --mac",
+    "dist:win": "npm run prepare:offline && electron-builder --win",
+    "dist:all": "npm run prepare:offline && electron-builder --mac --win"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
   "devDependencies": {
-    "electron": "^38.2.1"
+    "electron": "^38.2.1",
+    "electron-builder": "^25.1.8",
+    "to-ico": "^1.0.1"
+  },
+  "dependencies": {
+    "dotenv": "^16.6.1"
+  },
+  "build": {
+    "appId": "com.ab-in.promptgen",
+    "productName": "PromptGen",
+    "electronDownload": {
+      "mirror": "https://npmmirror.com/mirrors/electron/"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "frontend/dist/**",
+      "backend/bin/**",
+      ".env",
+      "!**/.env.local",
+      "!backend/tests/**",
+      "!frontend/tests/**"
+    ],
+    "extraResources": [
+      {
+        "from": "backend/bin/",
+        "to": "server"
+      }
+    ],
+    "asar": false,
+    "win": {
+      "target": "nsis",
+      "icon": "build/favicon-256x256.ico",
+      "sign": "scripts/sign-win.js"
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false
+    }
   }
 }

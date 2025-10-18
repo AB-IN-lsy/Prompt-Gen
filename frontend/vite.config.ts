@@ -22,6 +22,7 @@ export default defineConfig(({ mode }) => {
       "process.env": viteEnvForProcess
     },
     plugins: [react()],
+    base: "./",
     server: {
       port: 5173
     },

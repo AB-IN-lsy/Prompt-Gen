@@ -24,8 +24,6 @@ import { ApiError } from "../lib/errors";
 import { useAuth } from "../hooks/useAuth";
 import { useVerificationToken } from "../hooks/useVerificationToken";
 import { EMAIL_VERIFIED_EVENT_KEY } from "../lib/verification";
-import { normaliseError } from "../lib/http";
-import { isLocalMode } from "../lib/runtimeMode";
 
 const IDENTIFIER_STORAGE_KEY = "promptgen:last-identifier";
 
@@ -46,11 +44,8 @@ export default function LoginPage() {
     const [shouldRetryLogin, setShouldRetryLogin] = useState(false);
     const [verificationFeedback, setVerificationFeedback] = useState<VerificationFeedback | null>(null);
     const authenticate = useAuth((state) => state.authenticate);
-    const enterOfflineMode = useAuth((state) => state.enterOffline);
     const verificationToken = useVerificationToken();
     const [rememberIdentifier, setRememberIdentifier] = useState(false);
-    const [offlineLoading, setOfflineLoading] = useState(false);
-    const localMode = isLocalMode();
 
     // 单字段校验逻辑：在输入过程与提交前复用，确保提示一致。
     const validateField = (field: keyof LoginRequest, value: string): string | undefined => {
@@ -311,24 +306,6 @@ export default function LoginPage() {
         !credentials.identifier.trim() ||
         !credentials.password.trim();
 
-    const handleOfflineMode = useCallback(() => {
-        if (offlineLoading) {
-            return;
-        }
-        setOfflineLoading(true);
-        void enterOfflineMode()
-            .then(() => {
-                toast.success(t("auth.login.success"));
-                navigate("/prompt-workbench", { replace: true });
-            })
-            .catch((error: unknown) => {
-                const normalised = normaliseError(error);
-                const message = normalised.message ?? t("auth.offline.failed");
-                toast.error(message);
-            })
-            .finally(() => setOfflineLoading(false));
-    }, [enterOfflineMode, navigate, offlineLoading, t]);
-
     return (
         <AuthLayout title={t("auth.login.title") ?? ""} subtitle={t("auth.login.subtitle") ?? undefined}>
             <form className="space-y-5" onSubmit={handleSubmit}>
@@ -445,38 +422,12 @@ export default function LoginPage() {
                     {mutation.isPending ? t("common.loading") : t("auth.login.cta")}
                 </Button>
             </form>
-            <div className="mt-6 rounded-xl border border-slate-200 bg-white/70 p-4 text-left shadow-sm transition-colors dark:border-slate-700 dark:bg-slate-900/70">
-                <div className="space-y-1">
-                    <p className="text-sm font-semibold text-slate-700 dark:text-slate-200">
-                        {t("auth.offline.title")}
-                    </p>
-                    <p className="text-xs text-slate-500 dark:text-slate-400">
-                        {t("auth.offline.description")}
-                    </p>
-                    {localMode ? (
-                        <p className="text-xs text-slate-500 dark:text-slate-400">
-                            {t("auth.offline.registerNotice")}
-                        </p>
-                    ) : null}
-                </div>
-                <Button
-                    type="button"
-                    variant="outline"
-                    className="mt-4 w-full"
-                    disabled={offlineLoading}
-                    onClick={handleOfflineMode}
-                >
-                    {offlineLoading ? t("common.loading") : t("auth.offline.enter")}
-                </Button>
+            <div className="text-center text-sm text-slate-500 dark:text-slate-400">
+                {t("auth.login.switch")}{" "}
+                <Link to="/register" className="font-medium text-primary hover:underline">
+                    {t("auth.login.switchCta")}
+                </Link>
             </div>
-            {localMode ? null : (
-                <div className="text-center text-sm text-slate-500 dark:text-slate-400">
-                    {t("auth.login.switch")}{" "}
-                    <Link to="/register" className="font-medium text-primary hover:underline">
-                        {t("auth.login.switchCta")}
-                    </Link>
-                </div>
-            )}
         </AuthLayout>
     );
 }

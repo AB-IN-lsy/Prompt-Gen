@@ -1004,10 +1004,13 @@ export async function confirmEmailVerification(token: string): Promise<void> {
 
 /** 获取当前登录用户资料及设置。 */
 export async function fetchCurrentUser(): Promise<AuthProfile> {
+  console.info("[frontend] fetchCurrentUser called");
   try {
     const response: AxiosResponse<AuthProfile> = await http.get("/users/me");
+    console.info("[frontend] fetchCurrentUser success", response.status);
     return response.data;
   } catch (error) {
+    console.error("[frontend] fetchCurrentUser failed", error);
     throw normaliseError(error);
   }
 }

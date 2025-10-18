@@ -1,6 +1,10 @@
 package middleware
 
-import "github.com/gin-gonic/gin"
+import (
+	"fmt"
+
+	"github.com/gin-gonic/gin"
+)
 
 // OfflineAuthMiddleware 在本地模式下注入固定用户，绕过 JWT 校验流程。
 type OfflineAuthMiddleware struct {
@@ -19,6 +23,7 @@ func NewOfflineAuthMiddleware(userID uint, isAdmin bool) *OfflineAuthMiddleware 
 // Handle 将固定用户写入上下文，使后续 Handler 可以读取 userID/isAdmin。
 func (m *OfflineAuthMiddleware) Handle() gin.HandlerFunc {
 	return func(c *gin.Context) {
+		fmt.Printf("[offline-auth] injecting local user (id=%d admin=%v)\n", m.userID, m.isAdmin)
 		c.Set("userID", m.userID)
 		c.Set("isAdmin", m.isAdmin)
 		c.Next()

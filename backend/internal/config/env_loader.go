@@ -33,6 +33,7 @@ func LoadEnvFiles() {
 			if path, ok := findEnvFile(name); ok {
 				if err := godotenv.Overload(path); err == nil {
 					log.Printf("[config] loaded environment file: %s", path)
+					break
 				}
 			}
 		}

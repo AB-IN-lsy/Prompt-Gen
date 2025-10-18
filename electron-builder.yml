@@ -1,0 +1,26 @@
+appId: com.promptgen.desktop
+productName: PromptGen
+directories:
+  output: release
+  buildResources: build
+files:
+  - main.js
+  - preload.js
+  - frontend/dist/**
+  - backend/bin/**
+  - .env
+  - "!**/.env.local"
+  - "!backend/tests/**"
+  - "!frontend/tests/**"
+extraResources:
+  - from: backend/bin/
+    to: server
+mac:
+  target:
+    - dmg
+  artifactName: "${productName}-${version}-${arch}.${ext}"
+win:
+  target:
+    - nsis
+  artifactName: "${productName}-${version}-${arch}.${ext}"
+asar: false

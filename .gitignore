@@ -22,7 +22,7 @@ pids
 node_modules/
 
 # Build output
-build/
+# build/
 dist/
 out/
 release/
@@ -80,3 +80,6 @@ Thumbs.db
 backend/public/avatars/*
 !backend/public/avatars/.gitkeep
 /docs
+
+# certificate files
+mycert.pfx

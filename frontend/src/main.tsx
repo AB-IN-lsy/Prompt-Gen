@@ -7,7 +7,7 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter } from "react-router-dom";
+import { BrowserRouter, HashRouter } from "react-router-dom";
 import { Toaster } from "sonner";
 
 import App from "./App";
@@ -23,13 +23,19 @@ if (!rootElement) {
     throw new Error("Root element not found");
 }
 
+console.info("[frontend] mounting React application");
+
+const shouldUseHashRouter =
+    typeof window !== "undefined" && window.location.protocol === "file:";
+const RouterComponent = shouldUseHashRouter ? HashRouter : BrowserRouter;
+
 ReactDOM.createRoot(rootElement).render(
     <React.StrictMode>
         <QueryClientProvider client={queryClient}>
             {/* BrowserRouter 负责提供路由上下文 */}
-            <BrowserRouter>
+            <RouterComponent>
                 <App />
-            </BrowserRouter>
+            </RouterComponent>
             {/* Toaster 用于全局提示通知 */}
             <Toaster position="top-right" richColors closeButton />
         </QueryClientProvider>

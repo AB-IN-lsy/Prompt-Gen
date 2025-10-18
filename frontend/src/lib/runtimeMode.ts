@@ -1,9 +1,24 @@
 export type RuntimeMode = "online" | "local";
 
 const MODE_STORAGE_KEY = "promptgen:app-mode";
-
 export const LOCAL_MODE: RuntimeMode = "local";
 export const ONLINE_MODE: RuntimeMode = "online";
+
+const envDefaultMode =
+  (import.meta.env?.VITE_DEFAULT_RUNTIME_MODE ?? "").toString().toLowerCase() ===
+  LOCAL_MODE
+    ? LOCAL_MODE
+    : ONLINE_MODE;
+
+function inferFallbackMode(): RuntimeMode {
+  if (
+    typeof window !== "undefined" &&
+    window.location?.protocol === "file:"
+  ) {
+    return LOCAL_MODE;
+  }
+  return envDefaultMode === LOCAL_MODE ? LOCAL_MODE : ONLINE_MODE;
+}
 
 function accessStorage(): Storage | null {
   if (typeof window === "undefined") {
@@ -15,10 +30,15 @@ function accessStorage(): Storage | null {
 export function getStoredMode(): RuntimeMode {
   const storage = accessStorage();
   if (!storage) {
-    return ONLINE_MODE;
+    return inferFallbackMode();
   }
   const raw = storage.getItem(MODE_STORAGE_KEY);
-  return raw === LOCAL_MODE ? LOCAL_MODE : ONLINE_MODE;
+  if (raw === LOCAL_MODE || raw === ONLINE_MODE) {
+    return raw;
+  }
+  const fallback = inferFallbackMode();
+  storage.setItem(MODE_STORAGE_KEY, fallback);
+  return fallback;
 }
 
 export function setStoredMode(mode: RuntimeMode): void {

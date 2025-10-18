@@ -98,11 +98,10 @@ func NewRouter(opts RouterOptions) *gin.Engine {
 		}
 
 		// /api/users 下的路由需要登录才能访问，所以单独分组，再挂载 JWT 鉴权中间件。
-		userGroup := api.Group("/users")
-		if opts.AuthMW != nil {
-			// Use 会把 AuthMiddleware.Handle() 返回的中间件插入到请求链中，确保先校验 JWT。
-			userGroup.Use(opts.AuthMW.Handle())
-		}
+	userGroup := api.Group("/users")
+	if opts.AuthMW != nil {
+		userGroup.Use(opts.AuthMW.Handle())
+	}
 		if opts.UserHandler != nil {
 			userGroup.GET("/me", opts.UserHandler.GetMe)
 			userGroup.PUT("/me", opts.UserHandler.UpdateMe)
@@ -110,9 +109,9 @@ func NewRouter(opts RouterOptions) *gin.Engine {
 
 		if opts.ModelHandler != nil {
 			models := api.Group("/models")
-			if opts.AuthMW != nil {
-				models.Use(opts.AuthMW.Handle())
-			}
+		if opts.AuthMW != nil {
+  			models.Use(opts.AuthMW.Handle())
+		}
 			models.GET("", opts.ModelHandler.List)
 			models.POST("", opts.ModelHandler.Create)
 			models.POST("/:id/test", opts.ModelHandler.TestConnection)
@@ -122,9 +121,9 @@ func NewRouter(opts RouterOptions) *gin.Engine {
 
 		if opts.PromptHandler != nil {
 			prompts := api.Group("/prompts")
-			if opts.AuthMW != nil {
-				prompts.Use(opts.AuthMW.Handle())
-			}
+		if opts.AuthMW != nil {
+			prompts.Use(opts.AuthMW.Handle())
+		}
 			prompts.GET("", opts.PromptHandler.ListPrompts)
 			prompts.GET("/:id/versions", opts.PromptHandler.ListPromptVersions)
 			prompts.GET("/:id/versions/:version", opts.PromptHandler.GetPromptVersion)
@@ -142,9 +141,9 @@ func NewRouter(opts RouterOptions) *gin.Engine {
 
 		if opts.IPGuardHandler != nil {
 			ipguard := api.Group("/ip-guard")
-			if opts.AuthMW != nil {
-				ipguard.Use(opts.AuthMW.Handle())
-			}
+				if opts.AuthMW != nil {
+					ipguard.Use(opts.AuthMW.Handle())
+				}
 			// 管理员可在此查看并解除封禁的 IP 黑名单。
 			ipguard.GET("/bans", opts.IPGuardHandler.ListBans)
 			ipguard.DELETE("/bans/:ip", opts.IPGuardHandler.RemoveBan)

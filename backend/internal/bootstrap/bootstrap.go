@@ -165,15 +165,14 @@ func BuildApplication(ctx context.Context, logger *zap.SugaredLogger, resources 
 	uploadHandler := handler.NewUploadHandler(uploadStorage)
 
 	// 构建路由与中间件。
-	authMiddleware := middleware.NewAuthMiddleware(cfg.JWTSecret)
+	var authenticator middleware.Authenticator
 	if isLocalMode {
-		authMiddleware = nil
+		logger.Infow("initialising offline auth middleware", "user_id", cfg.LocalUser.UserID, "is_admin", cfg.LocalUser.IsAdmin)
+		authenticator = middleware.NewOfflineAuthMiddleware(cfg.LocalUser.UserID, cfg.LocalUser.IsAdmin)
+	} else {
+		logger.Infow("initialising jwt auth middleware")
+		authenticator = middleware.NewAuthMiddleware(cfg.JWTSecret)
 	}
-	var offlineAuth middleware.Authenticator
-	if isLocalMode {
-		offlineAuth = middleware.NewOfflineAuthMiddleware(cfg.LocalUser.UserID, cfg.LocalUser.IsAdmin)
-	}
-
 	router := server.NewRouter(server.RouterOptions{
 		AuthHandler:      authHandler,
 		UserHandler:      userHandler,
@@ -181,14 +180,9 @@ func BuildApplication(ctx context.Context, logger *zap.SugaredLogger, resources 
 		ModelHandler:     modelHandler,
 		ChangelogHandler: changelogHandler,
 		PromptHandler:    promptHandler,
-		AuthMW: func() middleware.Authenticator {
-			if isLocalMode {
-				return offlineAuth
-			}
-			return authMiddleware
-		}(),
-		IPGuard:        ipGuard,
-		IPGuardHandler: ipGuardHandler,
+		AuthMW:           authenticator,
+		IPGuard:          ipGuard,
+		IPGuardHandler:   ipGuardHandler,
 	})
 
 	return &Application{

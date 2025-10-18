@@ -9,6 +9,7 @@ package middleware
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -35,6 +36,7 @@ func (m *AuthMiddleware) Handle() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		authHeader := c.GetHeader("Authorization")
 		if authHeader == "" || !strings.HasPrefix(strings.ToLower(authHeader), "bearer ") {
+			fmt.Println("[auth-middleware] missing authorization header, rejecting request")
 			response.Fail(c, http.StatusUnauthorized, response.ErrUnauthorized, "missing authorization header", nil)
 			c.Abort()
 			return
