@@ -101,6 +101,17 @@ func (r *PromptRepository) ListVersions(ctx context.Context, promptID uint, limi
 	return versions, nil
 }
 
+// FindVersion 根据 Prompt ID 与版本号查询历史版本详情。
+func (r *PromptRepository) FindVersion(ctx context.Context, promptID uint, versionNo int) (*promptdomain.PromptVersion, error) {
+	var version promptdomain.PromptVersion
+	if err := r.db.WithContext(ctx).
+		Where("prompt_id = ? AND version_no = ?", promptID, versionNo).
+		First(&version).Error; err != nil {
+		return nil, err
+	}
+	return &version, nil
+}
+
 // DeleteOldVersions 超出保留数量的旧版本会被删除，避免无限增长。
 func (r *PromptRepository) DeleteOldVersions(ctx context.Context, promptID uint, keep int) error {
 	if keep <= 0 {

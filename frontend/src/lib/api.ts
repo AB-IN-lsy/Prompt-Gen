@@ -116,6 +116,22 @@ export interface PromptExportResult {
   generatedAt: string;
 }
 
+export interface PromptVersionSummary {
+  versionNo: number;
+  model: string;
+  createdAt: string;
+}
+
+export interface PromptVersionDetail {
+  versionNo: number;
+  model: string;
+  body: string;
+  instructions?: string | null;
+  positive_keywords: PromptListKeyword[];
+  negative_keywords: PromptListKeyword[];
+  created_at: string;
+}
+
 export interface PromptDetailResponse {
   id: number;
   topic: string;
@@ -805,6 +821,63 @@ export async function fetchPromptDetail(
       `/prompts/${id}`,
     );
     return response.data;
+  } catch (error) {
+    throw normaliseError(error);
+  }
+}
+
+/** 获取指定 Prompt 的历史版本列表。 */
+export async function fetchPromptVersions(
+  promptId: number,
+  limit?: number,
+): Promise<PromptVersionSummary[]> {
+  if (!promptId) {
+    throw new ApiError({ message: "Prompt id is required" });
+  }
+  try {
+    const response: AxiosResponse<{ versions: Array<{ version_no: number; model: string; created_at: string }> }> =
+      await http.get(`/prompts/${promptId}/versions`, {
+        params: typeof limit === "number" && Number.isFinite(limit) ? { limit } : undefined,
+      });
+    const entries = response.data?.versions ?? [];
+    return entries.map((item) => ({
+      versionNo: item.version_no,
+      model: item.model,
+      createdAt: item.created_at,
+    }));
+  } catch (error) {
+    throw normaliseError(error);
+  }
+}
+
+/** 获取 Prompt 指定版本的详细内容。 */
+export async function fetchPromptVersion(
+  promptId: number,
+  versionNo: number,
+): Promise<PromptVersionDetail> {
+  if (!promptId || !versionNo) {
+    throw new ApiError({ message: "Prompt id and version are required" });
+  }
+  try {
+    const response: AxiosResponse<{
+      version_no: number;
+      model: string;
+      body: string;
+      instructions?: string | null;
+      positive_keywords: PromptListKeyword[];
+      negative_keywords: PromptListKeyword[];
+      created_at: string;
+    }> = await http.get(`/prompts/${promptId}/versions/${versionNo}`);
+    const data = response.data;
+    return {
+      versionNo: data.version_no,
+      model: data.model,
+      body: data.body,
+      instructions: data.instructions,
+      positive_keywords: data.positive_keywords ?? [],
+      negative_keywords: data.negative_keywords ?? [],
+      created_at: data.created_at,
+    };
   } catch (error) {
     throw normaliseError(error);
   }

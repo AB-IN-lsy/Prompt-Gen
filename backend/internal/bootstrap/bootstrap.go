@@ -322,6 +322,7 @@ func loadPromptConfig(logger *zap.SugaredLogger) promptsvc.Config {
 		MaxListPageSize:     parseIntEnv("PROMPT_LIST_MAX_PAGE_SIZE", 100, logger),
 		UseFullTextSearch:   parseBoolEnv("PROMPT_USE_FULLTEXT", false),
 		ExportDirectory:     strings.TrimSpace(os.Getenv("PROMPT_EXPORT_DIR")),
+		VersionRetention:    parseIntEnv("PROMPT_VERSION_KEEP_LIMIT", promptsvc.DefaultVersionRetentionLimit, logger),
 	}
 }
 

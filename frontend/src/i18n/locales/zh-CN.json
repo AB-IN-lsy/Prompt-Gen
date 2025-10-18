@@ -24,7 +24,7 @@
         "items": [
           "注册时填写图形验证码，完成邮箱验证后即可激活账号。",
           "邮箱验证完成后登录，仪表盘会展示实时账户状态。",
-          "进入设置上传头像、选择偏好模型并开启或关闭云同步。"
+          "进入设置上传头像、选择偏好模型，并配置本地数据库路径或导出备份。"
         ]
       },
       "authentication": {
@@ -42,7 +42,7 @@
         "items": [
           "按当前主题获取 AI 推荐关键词，并可随时重新生成。",
           "分离正向与负向关键词，调整权重并自动保存草稿。",
-          "在 DeepSeek 与 火山引擎模型之间切换，若模型被禁用会自动回退并提示。"
+          "默认使用 DeepSeek 模型生成 Prompt，若模型被禁用会自动回退并提示。"
         ]
       },
       "models": {
@@ -60,7 +60,7 @@
         "items": [
           "验证码多次失败？刷新图片或刷新页面重新获取新的验证码。",
           "没有收到验证邮件？等待冷却结束后重发，并检查垃圾箱。",
-          "模型调用超时？在设置页确认 API Key 状态。"
+          "生成超时？确认网络可用，并在设置页检查 API Key 状态或适当降低调用频次。"
         ]
       }
     },
@@ -507,6 +507,8 @@
     "meta": {
       "status": "状态",
       "model": "模型",
+      "version": "版本",
+      "versionCreatedAt": "版本创建时间",
       "updatedAt": "更新时间",
       "createdAt": "创建时间",
       "publishedAt": "发布时间"
@@ -520,6 +522,30 @@
       "edit": "继续编辑",
       "copyBody": "复制正文",
       "copyMarkdown": "复制 Markdown"
+    },
+    "versions": {
+      "title": "版本历史",
+      "subtitle": "查看并回溯历史版本内容。",
+      "empty": "暂无历史版本记录。",
+      "versionLabel": "版本 {{version}}",
+      "latestLabel": "最新版本",
+      "selectorLabel": "切换历史版本",
+      "optionLatest": "最新版本",
+      "versionOption": "版本 {{version}} · {{time}}",
+      "noTimestamp": "暂无时间",
+      "selectPrompt": "请选择左侧版本以查看详情。",
+      "load": "加载工作台",
+      "loadFailed": "历史版本加载失败，请稍后重试。",
+      "loadSuccess": "版本 {{version}} 已加载到工作台，请确认后保存。",
+      "previewTitle": "版本 {{version}}",
+      "createdLabel": "创建时间：{{time}}",
+      "modelLabel": "模型：{{model}}",
+      "instructions": "补充说明",
+      "keywords": "关键词预览",
+      "previewLatest": "当前展示最新版本的内容。",
+      "loadError": "历史版本加载失败，请稍后重试。",
+      "expand": "展开",
+      "collapse": "收起"
     },
     "copy": {
       "empty": "暂无可复制的内容",

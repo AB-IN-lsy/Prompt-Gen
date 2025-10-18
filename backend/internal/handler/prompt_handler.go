@@ -250,6 +250,97 @@ func (h *PromptHandler) ExportPrompts(c *gin.Context) {
 	}, nil)
 }
 
+// ListPromptVersions 返回指定 Prompt 的历史版本列表。
+func (h *PromptHandler) ListPromptVersions(c *gin.Context) {
+	log := h.scope("list_versions")
+	userID, ok := extractUserID(c)
+	if !ok {
+		response.Fail(c, http.StatusUnauthorized, response.ErrUnauthorized, "missing user id", nil)
+		return
+	}
+	promptID, err := strconv.ParseUint(strings.TrimSpace(c.Param("id")), 10, 64)
+	if err != nil || promptID == 0 {
+		response.Fail(c, http.StatusBadRequest, response.ErrBadRequest, "invalid prompt id", nil)
+		return
+	}
+	limit := 0
+	if rawLimit := strings.TrimSpace(c.Query("limit")); rawLimit != "" {
+		if parsed, parseErr := strconv.Atoi(rawLimit); parseErr == nil && parsed > 0 {
+			limit = parsed
+		}
+	}
+	result, err := h.service.ListPromptVersions(c.Request.Context(), promptsvc.ListVersionsInput{
+		UserID:   userID,
+		PromptID: uint(promptID),
+		Limit:    limit,
+	})
+	if err != nil {
+		if errors.Is(err, promptsvc.ErrPromptNotFound) {
+			response.Fail(c, http.StatusNotFound, response.ErrNotFound, "prompt not found", nil)
+			return
+		}
+		log.Errorw("list prompt versions failed", "error", err, "user_id", userID, "prompt_id", promptID)
+		response.Fail(c, http.StatusInternalServerError, response.ErrInternal, "获取历史版本失败", nil)
+		return
+	}
+	items := make([]gin.H, 0, len(result.Versions))
+	for _, version := range result.Versions {
+		items = append(items, gin.H{
+			"version_no": version.VersionNo,
+			"model":      version.Model,
+			"created_at": version.CreatedAt,
+		})
+	}
+	response.Success(c, http.StatusOK, gin.H{"versions": items}, nil)
+}
+
+// GetPromptVersion 返回指定历史版本的详细内容。
+func (h *PromptHandler) GetPromptVersion(c *gin.Context) {
+	log := h.scope("get_version")
+	userID, ok := extractUserID(c)
+	if !ok {
+		response.Fail(c, http.StatusUnauthorized, response.ErrUnauthorized, "missing user id", nil)
+		return
+	}
+	promptID, err := strconv.ParseUint(strings.TrimSpace(c.Param("id")), 10, 64)
+	if err != nil || promptID == 0 {
+		response.Fail(c, http.StatusBadRequest, response.ErrBadRequest, "invalid prompt id", nil)
+		return
+	}
+	versionNo, err := strconv.Atoi(strings.TrimSpace(c.Param("version")))
+	if err != nil || versionNo <= 0 {
+		response.Fail(c, http.StatusBadRequest, response.ErrBadRequest, "invalid version", nil)
+		return
+	}
+	detail, err := h.service.GetPromptVersionDetail(c.Request.Context(), promptsvc.GetVersionDetailInput{
+		UserID:    userID,
+		PromptID:  uint(promptID),
+		VersionNo: versionNo,
+	})
+	if err != nil {
+		if errors.Is(err, promptsvc.ErrPromptNotFound) {
+			response.Fail(c, http.StatusNotFound, response.ErrNotFound, "prompt not found", nil)
+			return
+		}
+		if errors.Is(err, promptsvc.ErrPromptVersionNotFound) {
+			response.Fail(c, http.StatusNotFound, response.ErrNotFound, "prompt version not found", nil)
+			return
+		}
+		log.Errorw("get prompt version failed", "error", err, "user_id", userID, "prompt_id", promptID, "version", versionNo)
+		response.Fail(c, http.StatusInternalServerError, response.ErrInternal, "获取历史版本详情失败", nil)
+		return
+	}
+	response.Success(c, http.StatusOK, gin.H{
+		"version_no":        detail.VersionNo,
+		"model":             detail.Model,
+		"body":              detail.Body,
+		"instructions":      detail.Instructions,
+		"positive_keywords": toKeywordResponse(detail.PositiveKeywords),
+		"negative_keywords": toKeywordResponse(detail.NegativeKeywords),
+		"created_at":        detail.CreatedAt,
+	}, nil)
+}
+
 // GetPrompt 返回指定 Prompt 的详情，并附带最新的工作区 token。
 func (h *PromptHandler) GetPrompt(c *gin.Context) {
 	log := h.scope("detail")

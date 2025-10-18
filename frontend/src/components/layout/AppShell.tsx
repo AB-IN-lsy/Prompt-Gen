@@ -221,7 +221,7 @@ export function AppShell({ children, rightSlot }: AppShellProps) {
                             type="button"
                             size="sm"
                             variant="secondary"
-                            className="fixed bottom-6 right-6 z-20 shadow-lg"
+                            className="fixed bottom-6 right-6 z-20 shadow-lg transition-transform hover:-translate-y-0.5"
                             onClick={scrollToTop}
                         >
                             <Rocket className="mr-2 h-4 w-4" />

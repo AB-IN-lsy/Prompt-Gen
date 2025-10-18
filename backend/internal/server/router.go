@@ -126,6 +126,8 @@ func NewRouter(opts RouterOptions) *gin.Engine {
 				prompts.Use(opts.AuthMW.Handle())
 			}
 			prompts.GET("", opts.PromptHandler.ListPrompts)
+			prompts.GET("/:id/versions", opts.PromptHandler.ListPromptVersions)
+			prompts.GET("/:id/versions/:version", opts.PromptHandler.GetPromptVersion)
 			prompts.POST("/export", opts.PromptHandler.ExportPrompts)
 			prompts.POST("/interpret", opts.PromptHandler.Interpret)
 			prompts.POST("/keywords/augment", opts.PromptHandler.AugmentKeywords)

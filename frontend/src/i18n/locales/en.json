@@ -24,7 +24,7 @@
         "items": [
           "Register with captcha protection, then verify your email using the one-time link we send.",
           "After verification, sign in and the dashboard will greet you with realtime account status.",
-          "Open Settings to upload an avatar, pick your preferred model, and toggle cloud sync."
+          "Open Settings to upload an avatar, pick your preferred model, and configure export/backups for your local database."
         ]
       },
       "authentication": {
@@ -42,7 +42,7 @@
         "items": [
           "Fetch AI-assisted keyword suggestions tied to your current topic.",
           "Separate positive and negative keywords, adjust weights, and auto-save drafts.",
-          "Switch between DeepSeek and Volcano Engine models; the UI gracefully falls back when a model is disabled."
+          "Use the built-in DeepSeek model for generation; if a model becomes unavailable the UI gracefully falls back and notifies you."
         ]
       },
       "models": {
@@ -60,7 +60,7 @@
         "items": [
           "Captcha failing repeatedly? Refresh the image or reload the page to fetch a new captcha.",
           "Verification email missing? Wait for the cooldown timer, then resend or check the spam folder.",
-          "Model calls timing out? Confirm the API key status in Settings."
+          "Generation timing out? Confirm network connectivity, check the API key in Settings, or reduce request frequency."
         ]
       }
     },
@@ -507,6 +507,8 @@
     "meta": {
       "status": "Status",
       "model": "Model",
+      "version": "Version",
+      "versionCreatedAt": "Version created at",
       "updatedAt": "Updated at",
       "createdAt": "Created at",
       "publishedAt": "Published at"
@@ -520,6 +522,30 @@
       "edit": "Continue editing",
       "copyBody": "Copy body",
       "copyMarkdown": "Copy Markdown"
+    },
+    "versions": {
+      "title": "Version history",
+      "subtitle": "Browse and reuse previous versions of this prompt.",
+      "empty": "No historical versions yet.",
+      "versionLabel": "Version {{version}}",
+      "latestLabel": "Latest version",
+      "selectorLabel": "Switch version",
+      "optionLatest": "Latest version",
+      "versionOption": "Version {{version}} · {{time}}",
+      "noTimestamp": "N/A",
+      "selectPrompt": "Select a version on the left to see its details.",
+      "load": "Load workspace",
+      "loadFailed": "Failed to load this version. Please try again later.",
+      "loadSuccess": "Version {{version}} is ready in the workbench.",
+      "previewTitle": "Version {{version}}",
+      "createdLabel": "Created at {{time}}",
+      "modelLabel": "Model: {{model}}",
+      "instructions": "Instructions",
+      "keywords": "Keyword snapshot",
+      "previewLatest": "You are viewing the latest version.",
+      "loadError": "Failed to load version history. Please try again later.",
+      "expand": "Expand",
+      "collapse": "Collapse"
     },
     "copy": {
       "empty": "Nothing to copy yet",

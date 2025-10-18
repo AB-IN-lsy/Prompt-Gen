@@ -18,6 +18,7 @@
 - 邮箱验证与图形验证码接口返回剩余尝试次数（`remaining_attempts`），被限流时附带冷却秒数（`retry_after_seconds`），便于前端展示剩余机会与等待时间。
 - 邮件发送新增阿里云 DirectMail 发信器，优先使用 DirectMail，未配置时自动回退到 SMTP。
 - 新增 Prompt 导出能力，调用 `POST /api/prompts/export` 会生成包含全部 Prompt 的 JSON 文件，并在响应中返回本地保存路径，目录通过 `PROMPT_EXPORT_DIR` 配置。
+- Prompt 历史版本接口可用：新增 `GET /api/prompts/:id/versions` 与 `GET /api/prompts/:id/versions/:version`，支持查看历史版本详情，保留数量由 `PROMPT_VERSION_KEEP_LIMIT` 控制。
 - 启动流程拆分为 `internal/app.InitResources`（负责连接/迁移）与 `internal/bootstrap.BuildApplication`（负责装配依赖），提升职责清晰度。
 - 新增 `/api/models` 系列接口，支持模型凭据的创建、查看、更新与删除，API Key 会在入库前加密。
 - 引入 `MODEL_CREDENTIAL_MASTER_KEY` 环境变量，使用 AES-256-GCM 加解密用户提交的模型凭据。
@@ -215,6 +216,8 @@ go run ./backend/cmd/sendmail -to you@example.com -name "测试账号"
 | `GET` | `/api/prompts` | 获取当前用户的 Prompt 列表 | Query：`status`（可选，draft/published）、`q`（模糊搜索 topic/tags）、`page`、`page_size` |
 | `POST` | `/api/prompts/export` | 导出当前用户的 Prompt 并返回本地保存路径 | 无 |
 | `GET` | `/api/prompts/:id` | 获取单条 Prompt 详情并返回最新工作区 token | 无 |
+| `GET` | `/api/prompts/:id/versions` | 列出指定 Prompt 的历史版本 | Query：`limit`（可选，默认保留配置中的数量） |
+| `GET` | `/api/prompts/:id/versions/:version` | 获取指定版本的完整内容 | 无 |
 | `POST` | `/api/prompts/generate` | 调模型生成 Prompt 正文 | JSON：`topic`、`model_key`、`positive_keywords[]`、`negative_keywords[]`、`workspace_token`（可选） |
 | `POST` | `/api/prompts` | 保存草稿或发布 Prompt | JSON：`prompt_id`、`topic`、`body`、`status`、`publish`、`positive_keywords[]`、`negative_keywords[]`、`workspace_token`（可选） |
 | `DELETE` | `/api/prompts/:id` | 删除指定 Prompt 及其历史版本/关键词关联 | 无 |
@@ -724,6 +727,48 @@ ALTER TABLE prompts
   ```
 
 - **常见错误**：目标 Prompt 不存在或归属不同用户 → `404`。
+
+#### GET /api/prompts/:id/versions
+
+- **用途**：返回 Prompt 的历史版本列表，默认按照版本号倒序排列。
+- **查询参数**：`limit`（可选）控制返回数量，未指定时采用 `PROMPT_VERSION_KEEP_LIMIT` 配置值。
+- **成功响应**：`200`
+
+  ```json
+  {
+    "success": true,
+    "data": {
+      "versions": [
+        { "version_no": 3, "model": "deepseek-chat", "created_at": "2025-10-12T08:30:45Z" },
+        { "version_no": 2, "model": "deepseek-chat", "created_at": "2025-10-10T10:22:11Z" }
+      ]
+    }
+  }
+  ```
+
+- **常见错误**：Prompt 不存在或无权访问 → `404`。
+
+#### GET /api/prompts/:id/versions/:version
+
+- **用途**：获取指定历史版本的完整内容，包括正文、补充说明及关键词快照。
+- **成功响应**：`200`
+
+  ```json
+  {
+    "success": true,
+    "data": {
+      "version_no": 3,
+      "model": "deepseek-chat",
+      "body": "历史正文",
+      "instructions": "历史补充说明",
+      "positive_keywords": [{"word": "示例", "weight": 4}],
+      "negative_keywords": [],
+      "created_at": "2025-10-12T08:30:45Z"
+    }
+  }
+  ```
+
+- **常见错误**：指定版本不存在 → `404`。
 
 #### POST /api/prompts/export
 

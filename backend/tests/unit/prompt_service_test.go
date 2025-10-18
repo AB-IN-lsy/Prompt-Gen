@@ -90,6 +90,7 @@ func setupPromptService(t *testing.T) (*promptsvc.Service, *repository.PromptRep
 		TagMaxLength:        promptsvc.DefaultTagMaxLength,
 		DefaultListPageSize: 20,
 		MaxListPageSize:     100,
+		VersionRetention:    promptsvc.DefaultVersionRetentionLimit,
 	}
 	return setupPromptServiceWithConfig(t, defaultCfg)
 }
@@ -362,6 +363,126 @@ func TestPromptServiceExportPrompts(t *testing.T) {
 	}
 	if exported.Prompts[0].PositiveKeywords[0].Word != "示例关键词" {
 		t.Fatalf("unexpected keyword word: %s", exported.Prompts[0].PositiveKeywords[0].Word)
+	}
+}
+
+func TestPromptServiceListPromptVersions(t *testing.T) {
+	service, promptRepo, _, db, _ := setupPromptService(t)
+	defer func() {
+		sqlDB, _ := db.DB()
+		sqlDB.Close()
+	}()
+
+	prompt := promptdomain.Prompt{
+		UserID:           1,
+		Topic:            "版本测试",
+		Body:             "正文 v1",
+		Instructions:     "说明 v1",
+		PositiveKeywords: `[ {"word":"示例","weight":3} ]`,
+		NegativeKeywords: `[]`,
+		Model:            "deepseek-chat",
+		Status:           promptdomain.PromptStatusPublished,
+		Tags:             "[]",
+		LatestVersionNo:  2,
+	}
+	if err := promptRepo.Create(context.Background(), &prompt); err != nil {
+		t.Fatalf("create prompt: %v", err)
+	}
+
+	versions := []promptdomain.PromptVersion{
+		{
+			PromptID:         prompt.ID,
+			VersionNo:        1,
+			Body:             "正文 v1",
+			Instructions:     "说明 v1",
+			PositiveKeywords: `[ {"word":"示例","weight":3} ]`,
+			NegativeKeywords: `[]`,
+			Model:            "deepseek-chat",
+		},
+		{
+			PromptID:         prompt.ID,
+			VersionNo:        2,
+			Body:             "正文 v2",
+			Instructions:     "说明 v2",
+			PositiveKeywords: `[ {"word":"升级","weight":4} ]`,
+			NegativeKeywords: `[]`,
+			Model:            "deepseek-chat",
+		},
+	}
+	for _, version := range versions {
+		if err := promptRepo.CreateVersion(context.Background(), &version); err != nil {
+			t.Fatalf("create version: %v", err)
+		}
+	}
+
+	out, err := service.ListPromptVersions(context.Background(), promptsvc.ListVersionsInput{
+		UserID:   1,
+		PromptID: prompt.ID,
+		Limit:    10,
+	})
+	if err != nil {
+		t.Fatalf("ListPromptVersions: %v", err)
+	}
+	if len(out.Versions) != 2 {
+		t.Fatalf("expected 2 versions, got %d", len(out.Versions))
+	}
+	if out.Versions[0].VersionNo != 2 {
+		t.Fatalf("expected latest version first, got %d", out.Versions[0].VersionNo)
+	}
+}
+
+func TestPromptServiceGetPromptVersionDetail(t *testing.T) {
+	service, promptRepo, _, db, _ := setupPromptService(t)
+	defer func() {
+		sqlDB, _ := db.DB()
+		sqlDB.Close()
+	}()
+
+	prompt := promptdomain.Prompt{
+		UserID:           1,
+		Topic:            "回溯测试",
+		Body:             "最新正文",
+		Instructions:     "最新说明",
+		PositiveKeywords: `[ {"word":"当前","weight":5} ]`,
+		NegativeKeywords: `[]`,
+		Model:            "deepseek-chat",
+		Status:           promptdomain.PromptStatusPublished,
+		Tags:             "[]",
+		LatestVersionNo:  2,
+	}
+	if err := promptRepo.Create(context.Background(), &prompt); err != nil {
+		t.Fatalf("create prompt: %v", err)
+	}
+
+	version := promptdomain.PromptVersion{
+		PromptID:         prompt.ID,
+		VersionNo:        2,
+		Body:             "历史正文",
+		Instructions:     "历史说明",
+		PositiveKeywords: `[ {"word":"历史","weight":4} ]`,
+		NegativeKeywords: `[ {"word":"弃用","weight":1} ]`,
+		Model:            "deepseek-chat",
+	}
+	if err := promptRepo.CreateVersion(context.Background(), &version); err != nil {
+		t.Fatalf("create version: %v", err)
+	}
+
+	detail, err := service.GetPromptVersionDetail(context.Background(), promptsvc.GetVersionDetailInput{
+		UserID:    1,
+		PromptID:  prompt.ID,
+		VersionNo: 2,
+	})
+	if err != nil {
+		t.Fatalf("GetPromptVersionDetail: %v", err)
+	}
+	if detail.Body != "历史正文" {
+		t.Fatalf("unexpected body: %s", detail.Body)
+	}
+	if len(detail.PositiveKeywords) != 1 || detail.PositiveKeywords[0].Word != "历史" {
+		t.Fatalf("unexpected positive keywords: %+v", detail.PositiveKeywords)
+	}
+	if len(detail.NegativeKeywords) != 1 || detail.NegativeKeywords[0].Word != "弃用" {
+		t.Fatalf("unexpected negative keywords: %+v", detail.NegativeKeywords)
 	}
 }
 

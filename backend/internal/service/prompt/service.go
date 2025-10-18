@@ -65,6 +65,7 @@ type Service struct {
 	listMaxPageSize     int
 	useFullText         bool
 	exportDir           string
+	versionKeepLimit    int
 }
 
 const (
@@ -84,6 +85,9 @@ const DefaultTagLimit = 3
 
 // DefaultTagMaxLength 限制标签字符数，默认 5 个字符。
 const DefaultTagMaxLength = 5
+
+// DefaultVersionRetentionLimit 默认保留的 Prompt 历史版本数量。
+const DefaultVersionRetentionLimit = 5
 
 const (
 	workspaceAttrInstructions = "instructions"
@@ -116,6 +120,8 @@ var (
 	ErrDuplicateKeyword = errors.New("keyword already exists")
 	// ErrPromptNotFound 表示指定 Prompt 不存在或无访问权限。
 	ErrPromptNotFound = errors.New("prompt not found")
+	// ErrPromptVersionNotFound 表示请求的历史版本不存在。
+	ErrPromptVersionNotFound = errors.New("prompt version not found")
 	// ErrTagLimitExceeded 表示标签数量超出上限。
 	ErrTagLimitExceeded = errors.New("tags exceed limit")
 )
@@ -130,6 +136,7 @@ type Config struct {
 	MaxListPageSize     int
 	UseFullTextSearch   bool
 	ExportDirectory     string
+	VersionRetention    int
 }
 
 // NewServiceWithConfig 构建 Service，并允许自定义分页等配置。
@@ -157,6 +164,9 @@ func NewServiceWithConfig(prompts *repository.PromptRepository, keywords *reposi
 	}
 	if cfg.DefaultListPageSize > cfg.MaxListPageSize {
 		cfg.DefaultListPageSize = cfg.MaxListPageSize
+	}
+	if cfg.VersionRetention <= 0 {
+		cfg.VersionRetention = DefaultVersionRetentionLimit
 	}
 	baseExportDir := strings.TrimSpace(cfg.ExportDirectory)
 	if baseExportDir == "" {
@@ -187,6 +197,7 @@ func NewServiceWithConfig(prompts *repository.PromptRepository, keywords *reposi
 		listMaxPageSize:     cfg.MaxListPageSize,
 		useFullText:         cfg.UseFullTextSearch,
 		exportDir:           normalisedExportDir,
+		versionKeepLimit:    cfg.VersionRetention,
 	}
 }
 
@@ -250,6 +261,67 @@ func (s *Service) ListPrompts(ctx context.Context, input ListPromptsInput) (List
 		Total:    total,
 		Page:     page,
 		PageSize: pageSize,
+	}, nil
+}
+
+// ListPromptVersions 列出指定 Prompt 的历史版本概览，便于用户选择回溯。
+func (s *Service) ListPromptVersions(ctx context.Context, input ListVersionsInput) (ListVersionsOutput, error) {
+	if input.UserID == 0 || input.PromptID == 0 {
+		return ListVersionsOutput{}, errors.New("user id and prompt id are required")
+	}
+	if _, err := s.prompts.FindByID(ctx, input.UserID, input.PromptID); err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return ListVersionsOutput{}, ErrPromptNotFound
+		}
+		return ListVersionsOutput{}, err
+	}
+	limit := input.Limit
+	if limit <= 0 {
+		limit = s.versionKeepLimit
+	}
+	versions, err := s.prompts.ListVersions(ctx, input.PromptID, limit)
+	if err != nil {
+		return ListVersionsOutput{}, err
+	}
+	summaries := make([]PromptVersionSummary, 0, len(versions))
+	for _, version := range versions {
+		summaries = append(summaries, PromptVersionSummary{
+			VersionNo: version.VersionNo,
+			Model:     version.Model,
+			CreatedAt: version.CreatedAt,
+		})
+	}
+	return ListVersionsOutput{Versions: summaries}, nil
+}
+
+// GetPromptVersionDetail 返回指定 Prompt 版本的完整内容，用于历史查看与回溯。
+func (s *Service) GetPromptVersionDetail(ctx context.Context, input GetVersionDetailInput) (PromptVersionDetail, error) {
+	if input.UserID == 0 || input.PromptID == 0 || input.VersionNo <= 0 {
+		return PromptVersionDetail{}, errors.New("invalid version query parameters")
+	}
+	if _, err := s.prompts.FindByID(ctx, input.UserID, input.PromptID); err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return PromptVersionDetail{}, ErrPromptNotFound
+		}
+		return PromptVersionDetail{}, err
+	}
+	version, err := s.prompts.FindVersion(ctx, input.PromptID, input.VersionNo)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return PromptVersionDetail{}, ErrPromptVersionNotFound
+		}
+		return PromptVersionDetail{}, err
+	}
+	positive := s.clampKeywordList(decodePromptKeywords(version.PositiveKeywords))
+	negative := s.clampKeywordList(decodePromptKeywords(version.NegativeKeywords))
+	return PromptVersionDetail{
+		VersionNo:        version.VersionNo,
+		Body:             version.Body,
+		Instructions:     version.Instructions,
+		Model:            version.Model,
+		PositiveKeywords: positive,
+		NegativeKeywords: negative,
+		CreatedAt:        version.CreatedAt,
 	}, nil
 }
 
@@ -496,6 +568,13 @@ type ListPromptsInput struct {
 	PageSize int
 }
 
+// ListVersionsInput 描述查询 Prompt 历史版本所需的参数。
+type ListVersionsInput struct {
+	UserID   uint
+	PromptID uint
+	Limit    int
+}
+
 // PromptSummary 返回给前端的 Prompt 概览信息。
 type PromptSummary struct {
 	ID               uint
@@ -517,10 +596,29 @@ type ListPromptsOutput struct {
 	PageSize int
 }
 
+// PromptVersionSummary 返回版本列表中的概要信息。
+type PromptVersionSummary struct {
+	VersionNo int
+	Model     string
+	CreatedAt time.Time
+}
+
+// ListVersionsOutput 携带 Prompt 历史版本的集合。
+type ListVersionsOutput struct {
+	Versions []PromptVersionSummary
+}
+
 // GetPromptInput 描述查询单条 Prompt 详情所需参数。
 type GetPromptInput struct {
 	UserID   uint
 	PromptID uint
+}
+
+// GetVersionDetailInput 描述获取指定版本内容的参数。
+type GetVersionDetailInput struct {
+	UserID    uint
+	PromptID  uint
+	VersionNo int
 }
 
 // PromptDetail 为工作台回填准备的完整 Prompt 信息。
@@ -538,6 +636,17 @@ type PromptDetail struct {
 	CreatedAt        time.Time
 	UpdatedAt        time.Time
 	PublishedAt      *time.Time
+}
+
+// PromptVersionDetail 包含历史版本的完整内容。
+type PromptVersionDetail struct {
+	VersionNo        int
+	Body             string
+	Instructions     string
+	Model            string
+	PositiveKeywords []KeywordItem
+	NegativeKeywords []KeywordItem
+	CreatedAt        time.Time
 }
 
 // DeletePromptInput 描述删除 Prompt 所需参数。
@@ -1582,8 +1691,10 @@ func (s *Service) updatePromptRecord(ctx context.Context, input SaveInput, statu
 		if err := s.recordPromptVersion(ctx, entity); err != nil {
 			return SaveOutput{}, err
 		}
-		if err := s.prompts.DeleteOldVersions(ctx, entity.ID, 3); err != nil {
-			s.logger.Warnw("delete old versions failed", "promptID", entity.ID, "error", err)
+		if s.versionKeepLimit > 0 {
+			if err := s.prompts.DeleteOldVersions(ctx, entity.ID, s.versionKeepLimit); err != nil {
+				s.logger.Warnw("delete old versions failed", "promptID", entity.ID, "error", err)
+			}
 		}
 	}
 	return SaveOutput{PromptID: entity.ID, Status: entity.Status, Version: entity.LatestVersionNo}, nil
