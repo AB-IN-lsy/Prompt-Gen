@@ -11,7 +11,7 @@
     "build": "npm --prefix frontend run build",
     "dev:frontend": "npm --prefix frontend run dev",
     "build:frontend": "npm --prefix frontend run build",
-    "build:backend": "go build -o backend/bin/server ./backend/cmd/server && go build -o backend/bin/server.exe ./backend/cmd/server",
+    "build:backend": "node scripts/build-backend.mjs",
     "prepare:offline": "npm run build:frontend && npm run build:backend",
     "dist:mac": "npm run prepare:offline && electron-builder --mac",
     "dist:win": "npm run prepare:offline && electron-builder --win",
@@ -54,8 +54,16 @@
       "sign": "scripts/sign-win.js"
     },
     "nsis": {
-      "oneClick": true,
-      "perMachine": false
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": false,
+      "createStartMenuShortcut": false,
+      "shortcutName": "PromptGen",
+      "menuCategory": true,
+      "unicode": true,
+      "license": "build/installer-license.txt",
+      "include": "build/installerCustomization.nsh"
     }
   }
 }

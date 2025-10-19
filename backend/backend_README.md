@@ -969,83 +969,53 @@ go test -tags integration ./tests/integration
 ```text
 backend/
 ├─ cmd/
-│  ├─ server/
-│  │  └─ main.go                 # 后端入口，负责加载配置与启动 HTTP Server
-│  └─ sendmail/
-│     └─ main.go                 # 阿里云 DirectMail 调试命令
+│  ├─ server/            # 运行入口：加载配置、初始化依赖并启动 HTTP 服务
+│  └─ sendmail/          # 邮件调试脚本，可快速验证 DirectMail / SMTP 配置
 ├─ internal/
-│  ├─ app/
-│  │  └─ app.go                  # 资源生命周期管理（数据库、缓存等）
-│  ├─ bootstrap/
-│  │  └─ bootstrap.go            # 组装仓储、服务、Handler、Router
-│  ├─ config/
-│  │  └─ env_loader.go           # 加载 .env / 环境变量
-│  ├─ domain/
-│  │  ├─ prompt/
-│  │  │  └─ entity.go            # Prompt / Keyword / 版本实体定义
-│  │  └─ user/
-│  │     └─ entity.go            # User 实体与 Settings 结构
-│  ├─ handler/
-│  │  ├─ auth_handler.go         # /api/auth/* 接口
-│  │  ├─ user_handler.go         # /api/users/me 查询与更新
-│  │  ├─ prompt_handler.go       # /api/prompts/* 工作台接口
-│  │  └─ upload_handler.go       # /api/uploads/avatar 上传
-│  ├─ infra/
-│  │  ├─ captcha/
-│  │  │  ├─ config.go            # 验证码配置读取
-│  │  │  └─ manager.go           # 验证码生成、验证、限流
-│  │  ├─ client/
-│  │  │  ├─ mysql_client.go      # MySQL 连接初始化
-│  │  │  ├─ nacos_client.go      # Nacos 客户端
-│  │  │  └─ redis_client.go      # Redis 客户端
-│  │  ├─ common/response.go      # 统一响应体封装
-│  │  ├─ logger/logger.go        # Zap 日志初始化
-│  │  ├─ security/cipher.go      # AES-256-GCM 加解密工具
-│  │  └─ token/
-│  │     ├─ jwt_manager.go       # Access Token 签发
-│  │     └─ refresh_store.go     # 刷新令牌存储（Redis/内存）
-│  ├─ middleware/
-│  │  └─ auth_middleware.go      # Bearer Token 鉴权
-│  ├─ repository/
-│  │  ├─ user_repository.go      # User GORM 操作与唯一性检查
-│  │  ├─ model_credential_repository.go # 模型凭据持久化
-│  │  └─ prompt_repository.go    # Prompt / Keyword / 版本存储
-│  ├─ server/
-│  │  └─ router.go               # Gin 路由、CORS、静态资源配置
-│  └─ service/
-│     ├─ auth/service.go         # 注册、登录、刷新、登出逻辑
-│     ├─ user/service.go         # 用户资料、设置更新
-│     ├─ model/service.go        # 模型凭据加密与业务逻辑
-│     └─ prompt/service.go       # Prompt 工作台核心流程
-├─ tests/
-│  ├─ unit/
-│  │  ├─ auth_service_test.go
-│  │  ├─ user_service_test.go
-│  │  ├─ captcha_manager_test.go
-│  │  └─ response_helper_test.go
-│  ├─ integration/
-│  │  ├─ auth_flow_integration_test.go
-│  │  ├─ mysql_integration_test.go
-│  │  ├─ nacos_integration_test.go
-│  │  └─ redis_integration_test.go
-│  └─ e2e/
-│     └─ auth_remote_e2e_test.go
-├─ public/
-│  └─ avatars/
-│     └─ .gitkeep                # 占位文件，运行时头像保存在此目录
-└─ design/                       # PRD、流程图等文档
+│  ├─ app/               # 数据库/缓存等资源的初始化与回收
+│  ├─ bootstrap/         # 注入 Repository / Service / Handler / Router
+│  ├─ config/            # 环境变量加载、配置解析工具
+│  ├─ domain/            # 领域模型（User、Prompt、Keyword、Settings…）
+│  ├─ handler/           # HTTP Handler，负责参数绑定、日志、统一响应
+│  ├─ infra/             # 基础设施封装（数据库、Redis、Nacos、验证码、加密、邮箱、限流、日志等）
+│  ├─ middleware/        # Gin 中间件（JWT 鉴权、离线模式注入、IP Guard …）
+│  ├─ repository/        # 数据访问层，对 GORM 做集中封装
+│  ├─ server/            # Gin Engine 构建、CORS、静态资源托管
+│  └─ service/           # 业务编排：Auth / User / Model / Prompt / Changelog 等
+├─ public/               # 静态资源目录（头像等）
+├─ tests/                # 单元、集成、E2E 测试用例
+├─ logs/                 # 默认日志输出目录
+├─ data/                 # 离线模式 SQLite、Prompt 导出文件等
+├─ scripts/              # 构建、打包、签名、CI 辅助脚本
+└─ design/               # 需求文档、流程/原型等设计资料
 ```
 
-在此结构下，核心分层职责如下，保持“请求适配 → 业务编排 → 数据访问 → 基础设施”单向依赖：
+### 模块职责与协作关系
 
-- `internal/handler` 聚焦 HTTP 适配：绑定/校验请求参数、统一记录访问日志并捕获所有错误，借助 `infra/common/response` 生成一致的响应体。Handler 负责补充 request 上下文（用户信息、限流窗口等）并把业务调用透传到 Service，仅在这里做日志落盘。
-- `internal/service` 承担业务规则，尽量保持无状态（stateless），从上下文中读取信息，只依赖接口型组件（仓储、限流器、邮件发送器等）。Service 返回领域对象和语义化错误，不直接写日志，方便被 handler、任务或测试复用。
-- `internal/repository` 屏蔽 GORM 细节，专注读写实体；Service 通过这些仓储组合持久化与查询。与之配套的 `internal/domain` 定义业务实体与值对象，保障类型内聚。
-- `internal/infra` 提供外围能力（数据库/Redis 客户端、加密、令牌、验证码、日志、限流等），供 bootstrap 注入到 Service 与 Repository。
-- `internal/middleware`、`internal/server`、`internal/bootstrap` 分别负责 Gin 中间件、路由/静态资源以及依赖装配；`internal/app` 则统一管理资源生命周期，保障启动与关闭过程的对称。
-- `tests/` 保持与业务层对应的单元/集成/E2E 覆盖，优先针对 Service 层编写用例，结合模拟仓储或真实依赖验证边界条件。
+| 模块 | 职责 | 备注 |
+| --- | --- | --- |
+| `cmd/server` | 唯一运行入口。读取 `.env`，调用 `internal/app.InitResources` 初始化数据库/Redis/SQLite，再交给 `bootstrap.BuildApplication` 组装依赖并启动 HTTP Server。 | 打包后对应 `server.exe`，Electron 启动时也会调用它。 |
+| `internal/app` | 统一管理资源生命周期：连接 MySQL 或 SQLite、自动迁移模型、创建离线模式默认用户、初始化 Redis。 | 离线模式 (`APP_MODE=local`) 会自动创建 `promptgen-local.db` 并 Skip MySQL。 |
+| `internal/bootstrap` | 把 Repository、Service、限流器、验证码、邮件、日志等依赖注入 Handler 和 Router。根据 `APP_MODE` 决定使用 `AuthMiddleware`（JWT）还是 `OfflineAuthMiddleware`。 | 这里也是切换在线/离线鉴权的核心。 |
+| `internal/domain` | 领域实体与常量，如 `User`、`Prompt`、`Keyword`、`PromptVersion`、`Settings`、各种错误定义等。保持 ORM 模型与业务模型一致，便于 Repository/Service 复用。 | |
+| `internal/repository` | 对 GORM 操作做集中封装，提供 User/Prompt/Keyword/ModelCredential 等仓储接口；Service 层只通过接口交互，不直接操控 ORM。 | |
+| `internal/service` | 业务规则执行者。负责注册登录、邮箱验证、Prompt 工作台工作流、模型凭据安全存储、更新日志等核心逻辑，返回领域对象或语义化错误。 承担业务规则，尽量保持无状态（stateless），从上下文中读取信息，只依赖接口型组件（仓储、限流器、邮件发送器等）。Service 返回领域对象和语义化错误，不直接写日志，方便被 handler、任务或测试复用。 | Service 不写日志，方便测试与复用。 |
+| `internal/handler` | HTTP 适配层。负责请求绑定、校验、访问日志、异常捕获，并调用 Service。统一使用 `infra/common/response` 输出标准响应体。 | Handler 是唯一触达日志的地方。 |
+| `internal/infra` | 基础设施适配：MySQL/Nacos/Redis 客户端，加密/解密、验证码、令牌、限流、邮件、日志等。Service/Repository 通过接口依赖这些组件，便于替换与 Mock。 | |
+| `internal/middleware` | 提供 Gin 中间件：JWT 鉴权、离线模式注入、IP Guard、防刷等。在 `router.go` 中按需挂载。 | |
+| `internal/server` | 负责构建 Gin Engine：配置 CORS、日志格式、静态目录 `/static`、路由分组等。所有 Handler 与中间件的装配都在这里完成。 | |
+| `tests` | 覆盖单元/集成/E2E：<br>• `tests/unit` 使用内存 SQLite/假实现，验证业务规则；<br>• `tests/integration` 依赖真实 MySQL/Redis/Nacos，需通过 build tag `integration` 启动；<br>• `tests/e2e` 用于模拟真实部署流程。 | |
+| `scripts` | 构建、打包、签名、CI 辅助脚本。Electron 打包命令（`npm run prepare:offline`、`npm run dist:win` 等）会调用这里的工具完成前后端编译。 | |
 
-需要新增模块时，推荐按照上述分层模式扩展，保持 Handler、Service、Repository 等职责清晰，并优先在 `tests/` 中补充对应的单元/集成测试。
+### 分层原则与建模建议
+
+后端按照“**请求适配 → 业务编排 → 数据访问 → 基础设施**”单向依赖构建，保持各层职责清晰：
+
+- Handler 只做 HTTP 交互与日志；Service 聚焦业务规则；Repository 处理数据库读写；Infra 提供外部能力封装。
+- 新增功能时，建议从领域模型 (`internal/domain`) 入手，扩展 Repository，再在 Service 编排逻辑、最后在 Handler 暴露接口，并在 `tests/` 中补充对应测试用例。
+- 离线模式、鉴权策略、限流、验证码等横切逻辑，都集中在 `internal/bootstrap` 和 `internal/middleware`，便于替换或按环境启停。
+
+遵循以上结构，可以在排障时快速定位：接口 4xx/5xx 先看 Handler/Service 日志，数据差异看 Repository，连通性问题查 Infra，依赖装配问题查 Bootstrap；测试失败则根据 build tag 判断是单测还是集成测试，逐层回溯。
 
 ## Prompt 工作台流程
 

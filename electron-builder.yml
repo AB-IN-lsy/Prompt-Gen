@@ -24,3 +24,14 @@ win:
     - nsis
   artifactName: "${productName}-${version}-${arch}.${ext}"
 asar: false
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: false
+  createStartMenuShortcut: false
+  shortcutName: PromptGen
+  menuCategory: true
+  unicode: true
+  license: build/installer-license.txt
+  include: build/installerCustomization.nsh

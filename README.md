@@ -119,6 +119,17 @@ go test -tags=e2e ./backend/tests/e2e # E2E 测试
 | `go run ./backend/cmd/server` | 启动后端 HTTP 服务 |
 | `go test ./...` | 运行全部 Go 测试 |
 
+## 📦 离线版本与打包
+
+桌面端支持预打包离线安装包，可按需在 macOS 与 Windows 上分发：
+
+- `npm run prepare:offline`：预先构建前端与后端二进制，保证离线包内置所有静态资源与 Go 服务。
+- `npm run dist:mac` / `npm run dist:win`：分别生成 macOS DMG 与 Windows NSIS 安装程序。
+- `npm run dist:all`：一次性产出两个平台的安装产物，默认输出到 `release/` 目录（参见 `electron-builder.yml`）。
+
+构建完成后，可直接从 `release/` 目录分发离线版本，首次启动时将自动加载本地 SQLite 与内置账号（可结合 `APP_MODE=local` 按需体验完全离线模式）。
+- Windows 安装包现已启用多步骤向导：默认安装路径为 `%LOCALAPPDATA%\Programs\PromptGen`，可在目录页修改；欢迎页内包含产品介绍，许可证页补充离线部署要点，可在附加任务页勾选桌面/开始菜单快捷方式，并在完成页选择是否立即启动客户端。
+
 ## 🧭 后续规划
 
 - CI/CD 集成（lint / test / 构建自动化）
