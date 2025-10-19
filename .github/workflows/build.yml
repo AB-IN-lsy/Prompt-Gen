@@ -1,0 +1,88 @@
+name: Build Desktop Packages
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    env:
+      CSC_IDENTITY_AUTO_DISCOVERY: "false"
+      USE_SYSTEM_SIGNTOOL: "true"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.24"
+
+      - name: 安装依赖
+        run: |
+          npm install
+          npm --prefix frontend install
+          go mod download
+
+      - name: 导入代码签名证书
+        shell: pwsh
+        env:
+          WINDOWS_CERT_BASE64: ${{ secrets.WINDOWS_CERT_BASE64 }}
+          WINDOWS_CERT_PASSWORD: ${{ secrets.WINDOWS_CERT_PASSWORD }}
+        run: |
+          if (-not $env:WINDOWS_CERT_BASE64) {
+            Write-Host "No certificate secret configured, skipping import."
+            exit 0
+          }
+          $certPath = "$env:RUNNER_TEMP\codesign.pfx"
+          [IO.File]::WriteAllBytes($certPath, [Convert]::FromBase64String($env:WINDOWS_CERT_BASE64))
+          certutil -f -p $env:WINDOWS_CERT_PASSWORD -importpfx $certPath NoRoot
+          Remove-Item $certPath
+
+      - name: 构建 Windows 安装包
+        run: npm run dist:win
+
+      - name: 上传产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-installer
+          path: |
+            dist/*.exe
+            dist/*.blockmap
+
+  build-macos:
+    runs-on: macos-latest
+    env:
+      CSC_IDENTITY_AUTO_DISCOVERY: "false"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.24"
+
+      - name: 安装依赖
+        run: |
+          npm install
+          npm --prefix frontend install
+          go mod download
+
+      - name: 构建 macOS 安装包
+        run: npm run dist:mac
+
+      - name: 上传产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-installer
+          path: |
+            dist/*.dmg
+            dist/*.zip
