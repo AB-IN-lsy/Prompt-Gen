@@ -1,5 +1,9 @@
 name: Build Desktop Packages
 
+permissions:
+  contents: write
+  actions: read
+
 on:
   push:
     tags:
