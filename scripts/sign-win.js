@@ -7,12 +7,17 @@
 // scripts/sign-win.js
 // electron-builder 会在签名时用 require() 加载这个模块，并调用导出函数。
 // 它会把要签名的文件路径作为第 1 个参数传进来。
-const { execFile } = require("child_process");
+const { execFile, execSync } = require("child_process");
 const path = require("path");
+const fs = require("fs");
 
 function resolveSignTool() {
-    // 1) 优先用 electron-builder 缓存里的 signtool（无需安装 SDK）
-    const local = path.join(
+    const custom = process.env.SIGNTOOL_PATH;
+    if (custom && fs.existsSync(custom)) {
+        return custom;
+    }
+
+    const cached = path.join(
         process.env.LOCALAPPDATA || "",
         "electron-builder",
         "Cache",
@@ -22,9 +27,37 @@ function resolveSignTool() {
         "x64",
         "signtool.exe"
     );
-    return local;
-    // 如果你安装了 Windows SDK 并想用系统的 signtool，改成：
-    // return "C:\\Program Files (x86)\\Windows Kits\\10\\bin\\x64\\signtool.exe";
+    if (fs.existsSync(cached)) {
+        return cached;
+    }
+
+    const wellKnownPaths = [
+        "C:\\Program Files (x86)\\Windows Kits\\10\\bin\\x64\\signtool.exe",
+        "C:\\Program Files (x86)\\Windows Kits\\10\\App Certification Kit\\signtool.exe",
+        "C:\\Program Files\\Microsoft SDKs\\Windows\\v10.0A\\bin\\NETFX 4.8 Tools\\signtool.exe"
+    ];
+    for (const candidate of wellKnownPaths) {
+        if (fs.existsSync(candidate)) {
+            return candidate;
+        }
+    }
+
+    try {
+        const output = execSync("where signtool", {
+            stdio: ["ignore", "pipe", "ignore"]
+        })
+            .toString()
+            .split(/\r?\n/)
+            .map((line) => line.trim())
+            .find((line) => line.toLowerCase().endsWith("signtool.exe"));
+        if (output && fs.existsSync(output)) {
+            return output;
+        }
+    } catch (error) {
+        // ignore and fall through
+    }
+
+    throw new Error("signtool.exe not found. Please ensure Windows SDK is installed or set SIGNTOOL_PATH.");
 }
 
 // 注意：不带 /t 或 /tr（不访问时间戳服务器）
