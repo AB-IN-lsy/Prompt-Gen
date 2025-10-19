@@ -10,6 +10,33 @@
 const { execFile, execSync } = require("child_process");
 const path = require("path");
 const fs = require("fs");
+const os = require("os");
+
+function createPfxFile() {
+    const rawBase64 = process.env.WINDOWS_CERT_BASE64;
+    if (!rawBase64) {
+        throw new Error("WINDOWS_CERT_BASE64 is not set. Please provide the base64 encoded PFX via repository secrets.");
+    }
+
+    const sanitized = rawBase64.replace(/\s+/g, "");
+    let buffer;
+    try {
+        buffer = Buffer.from(sanitized, "base64");
+    } catch (error) {
+        throw new Error(`Failed to decode WINDOWS_CERT_BASE64: ${error.message}`);
+    }
+
+    if (!buffer || buffer.length === 0) {
+        throw new Error("WINDOWS_CERT_BASE64 decoded to an empty buffer.");
+    }
+
+    const tempPath = path.join(
+        os.tmpdir(),
+        `promptgen-codesign-${Date.now()}-${Math.random().toString(16).slice(2)}.pfx`
+    );
+    fs.writeFileSync(tempPath, buffer);
+    return tempPath;
+}
 
 function resolveSignTool() {
     const custom = process.env.SIGNTOOL_PATH;
@@ -64,20 +91,40 @@ function resolveSignTool() {
 function signWithSigntool(file) {
     return new Promise((resolve, reject) => {
         const signtool = resolveSignTool();
+        const pfxPath = createPfxFile();
         const args = [
             "sign",
             "/fd", "sha256",
             "/td", "sha256",
-            "/as",
-            "/n", "ab-in",      // 你的证书 Subject（也可改用 /sha1 <thumbprint>）
-            file
+            "/f", pfxPath
         ];
 
+        const password = process.env.WINDOWS_CERT_PASSWORD;
+        if (password) {
+            args.push("/p", password);
+        }
+
+        const description = process.env.WINDOWS_CERT_DESCRIPTION;
+        if (description) {
+            args.push("/d", description);
+        }
+
+        const timestampUrl = process.env.WINDOWS_CERT_TIMESTAMP_URL;
+        if (timestampUrl) {
+            args.push("/tr", timestampUrl);
+        }
+
+        args.push(file);
+
         execFile(signtool, args, { windowsHide: true }, (err, stdout, stderr) => {
-            if (stdout) process.stdout.write(stdout);
-            if (stderr) process.stderr.write(stderr);
-            if (err) return reject(err);
-            resolve();
+            try {
+                if (stdout) process.stdout.write(stdout);
+                if (stderr) process.stderr.write(stderr);
+                if (err) return reject(err);
+                resolve();
+            } finally {
+                fs.rmSync(pfxPath, { force: true });
+            }
         });
     });
 }

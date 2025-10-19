@@ -14,6 +14,10 @@ jobs:
       USE_SYSTEM_SIGNTOOL: "true"
       ELECTRON_BUILDER_DISABLE_AUTO_PUBLISH: "true"
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      WINDOWS_CERT_BASE64: ${{ secrets.WINDOWS_CERT_BASE64 }}
+      WINDOWS_CERT_PASSWORD: ${{ secrets.WINDOWS_CERT_PASSWORD }}
+      WINDOWS_CERT_DESCRIPTION: ${{ secrets.WINDOWS_CERT_DESCRIPTION }}
+      WINDOWS_CERT_TIMESTAMP_URL: ${{ secrets.WINDOWS_CERT_TIMESTAMP_URL }}
     steps:
       - uses: actions/checkout@v4
 
@@ -30,21 +34,6 @@ jobs:
           npm install
           npm --prefix frontend install
           go mod download
-
-      - name: 导入代码签名证书
-        shell: pwsh
-        env:
-          WINDOWS_CERT_BASE64: ${{ secrets.WINDOWS_CERT_BASE64 }}
-          WINDOWS_CERT_PASSWORD: ${{ secrets.WINDOWS_CERT_PASSWORD }}
-        run: |
-          if (-not $env:WINDOWS_CERT_BASE64) {
-            Write-Host "No certificate secret configured, skipping import."
-            exit 0
-          }
-          $certPath = "$env:RUNNER_TEMP\codesign.pfx"
-          [IO.File]::WriteAllBytes($certPath, [Convert]::FromBase64String($env:WINDOWS_CERT_BASE64))
-          certutil -f -p $env:WINDOWS_CERT_PASSWORD -importpfx $certPath NoRoot
-          Remove-Item $certPath
 
       - name: 构建 Windows 安装包
         run: npm run dist:win
