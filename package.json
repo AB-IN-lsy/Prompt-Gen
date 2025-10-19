@@ -13,9 +13,9 @@
     "build:frontend": "npm --prefix frontend run build",
     "build:backend": "node scripts/build-backend.mjs",
     "prepare:offline": "npm run build:frontend && npm run build:backend",
-    "dist:mac": "npm run prepare:offline && electron-builder --mac",
-    "dist:win": "npm run prepare:offline && electron-builder --win",
-    "dist:all": "npm run prepare:offline && electron-builder --mac --win"
+    "dist:mac": "npm run prepare:offline && electron-builder --mac --publish never",
+    "dist:win": "npm run prepare:offline && electron-builder --win --publish never",
+    "dist:all": "npm run prepare:offline && electron-builder --mac --win --publish never"
   },
   "devDependencies": {
     "electron": "^38.2.1",
