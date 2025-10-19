@@ -237,7 +237,7 @@
     "augmentSuggestion": "没有灵感？试试让 AI 补充关键词。",
     "interpretLoading": "正在解析描述...",
     "augmentLoading": "正在补充关键词...",
-    "generateLoading": "正在生成 Prompt...",
+    "generateLoading": "正在生成 Prompt… AI 生成可能需要更长时间，请稍候",
     "keywordDropPlaceholder": "将关键词拖到这里",
     "dragHandle": "拖拽关键词",
     "decreaseWeight": "降低相关度权重",

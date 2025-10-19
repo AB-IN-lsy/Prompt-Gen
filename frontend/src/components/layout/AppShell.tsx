@@ -7,7 +7,8 @@
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import { ReactNode, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { cn } from "../../lib/utils";
+import { cn, resolveAssetUrl } from "../../lib/utils";
+import { isLocalMode } from "../../lib/runtimeMode";
 import { Settings, HelpCircle, LayoutDashboard, Sparkles, LogOut, ListChecks, FileClock, Rocket, ShieldAlert, ScrollText } from "lucide-react";
 import { Button } from "../ui/button";
 import { useAuth } from "../../hooks/useAuth";
@@ -41,6 +42,21 @@ export function AppShell({ children, rightSlot }: AppShellProps) {
     const logout = useAuth((state) => state.logout);
     const location = useLocation();
     const scrollContainerRef = useRef<HTMLDivElement>(null);
+    const localMode = isLocalMode();
+    const primaryNavItems = useMemo(
+        () =>
+            localMode
+                ? baseNavItems.filter((item) => item.to !== "/logs")
+                : baseNavItems,
+        [localMode]
+    );
+    const adminNavList = useMemo(
+        () =>
+            localMode
+                ? adminNavItems.filter((item) => item.to !== "/admin/changelog")
+                : adminNavItems,
+        [localMode]
+    );
     const [showScrollTop, setShowScrollTop] = useState(false);
     const [fading, setFading] = useState(false);
 
@@ -55,6 +71,11 @@ export function AppShell({ children, rightSlot }: AppShellProps) {
         }
         return profile.user.username.charAt(0).toUpperCase();
     }, [profile?.user.username]);
+
+    const avatarSrc = useMemo(
+        () => resolveAssetUrl(profile?.user.avatar_url ?? null),
+        [profile?.user.avatar_url]
+    );
 
     useEffect(() => {
         const node = scrollContainerRef.current;
@@ -109,7 +130,7 @@ export function AppShell({ children, rightSlot }: AppShellProps) {
                     </div>
                     {/* 导航列表：动态渲染侧边导航按钮 */}
                     <nav className="flex flex-1 flex-col gap-2">
-                        {baseNavItems.map(({ labelKey, icon: Icon, to }) => (
+                        {primaryNavItems.map(({ labelKey, icon: Icon, to }) => (
                             <NavLink
                                 key={to}
                                 to={to}
@@ -126,12 +147,12 @@ export function AppShell({ children, rightSlot }: AppShellProps) {
                                 {t(labelKey)}
                             </NavLink>
                         ))}
-                        {profile?.user.is_admin ? (
+                        {profile?.user.is_admin && adminNavList.length > 0 ? (
                             <div className="mt-6 flex flex-col gap-2 border-t border-white/60 pt-4 dark:border-slate-800/60">
                                 <span className="px-3 text-xs font-medium uppercase tracking-[0.3em] text-slate-400">
                                     {t("nav.adminSection")}
                                 </span>
-                                {adminNavItems.map(({ labelKey, icon: Icon, to }) => (
+                                {adminNavList.map(({ labelKey, icon: Icon, to }) => (
                                     <NavLink
                                         key={to}
                                         to={to}
@@ -152,13 +173,15 @@ export function AppShell({ children, rightSlot }: AppShellProps) {
                         ) : null}
                     </nav>
                     {/* 预留退出登录操作 */}
-                    <Button
-                        variant="ghost"
-                        className="mt-auto flex items-center justify-start gap-2 text-sm text-slate-500 dark:text-slate-300"
-                        onClick={handleLogout}
-                    >
-                        <LogOut className="h-4 w-4" /> {t("appShell.logout")}
-                    </Button>
+                    {!localMode ? (
+                        <Button
+                            variant="ghost"
+                            className="mt-auto flex items-center justify-start gap-2 text-sm text-slate-500 dark:text-slate-300"
+                            onClick={handleLogout}
+                        >
+                            <LogOut className="h-4 w-4" /> {t("appShell.logout")}
+                        </Button>
+                    ) : null}
                 </aside>
                 <main className="flex flex-1 flex-col overflow-hidden">
                     {/* 顶部工具栏：包含全局操作按钮和头像占位 */}
@@ -173,10 +196,10 @@ export function AppShell({ children, rightSlot }: AppShellProps) {
                                 className="group flex h-9 items-center gap-3 rounded-full border border-white/60 bg-white/80 px-3 text-left shadow-sm transition-colors hover:border-primary/50 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 dark:border-slate-800 dark:bg-slate-900/70 dark:text-slate-300 dark:hover:border-primary/40"
                                 aria-label={t("nav.settings")}
                             >
-                                {profile?.user.avatar_url ? (
+                                {avatarSrc ? (
                                     <img
-                                        src={profile.user.avatar_url}
-                                        alt={profile.user.username}
+                                        src={avatarSrc}
+                                        alt={profile?.user.username ?? ""}
                                         className="h-7 w-7 rounded-full object-cover"
                                     />
                                 ) : (

@@ -2,7 +2,7 @@
  * @Author: NEFU AB-IN
  * @Date: 2025-10-09 23:16:10
  * @FilePath: \electron-go-app\frontend\src\lib\http.ts
- * @LastEditTime: 2025-10-09 23:16:15
+ * @LastEditTime: 2025-10-19 23:01:29
  */
 /*
  * @fileoverview Axios instance pre-configured for the PromptGen backend contract.
@@ -43,8 +43,16 @@ function resolveDefaultBaseUrl(): string {
   return fallback;
 }
 
-const API_BASE_URL = resolveDefaultBaseUrl();
-const REQUEST_TIMEOUT = 30_000;
+export const API_BASE_URL = resolveDefaultBaseUrl();
+const rawRequestTimeout = Number.parseInt(
+  (import.meta.env?.VITE_API_REQUEST_TIMEOUT_MS ?? "") as string,
+  10,
+);
+
+const REQUEST_TIMEOUT =
+  Number.isInteger(rawRequestTimeout) && rawRequestTimeout > 0
+    ? rawRequestTimeout
+    : 60_000;
 
 interface EnvelopeSuccess<T> {
   success: true;

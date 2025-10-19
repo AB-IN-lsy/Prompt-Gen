@@ -25,6 +25,7 @@ interface WorkbenchState {
   topic: string;
   model: string;
   prompt: string;
+  instructions: string;
   promptId: string | null;
   workspaceToken: string | null;
   positiveKeywords: Keyword[];
@@ -34,6 +35,7 @@ interface WorkbenchState {
   setTopic: (topic: string) => void;
   setModel: (model: string) => void;
   setPrompt: (prompt: string) => void;
+  setInstructions: (instructions: string) => void;
   setPromptId: (id: string | null) => void;
   setWorkspaceToken: (token: string | null) => void;
   setKeywords: (keywords: Keyword[]) => void;
@@ -98,6 +100,7 @@ export const usePromptWorkbench = create<WorkbenchState>((set, get) => ({
   topic: "",
   model: "",
   prompt: "",
+  instructions: "",
   promptId: null,
   workspaceToken: null,
   positiveKeywords: [],
@@ -107,6 +110,7 @@ export const usePromptWorkbench = create<WorkbenchState>((set, get) => ({
   setTopic: (topic) => set({ topic }),
   setModel: (model) => set({ model }),
   setPrompt: (prompt) => set({ prompt }),
+  setInstructions: (instructions) => set({ instructions }),
   setPromptId: (promptId) => set({ promptId }),
   setWorkspaceToken: (workspaceToken) => set({ workspaceToken }),
   setKeywords: (keywords) =>
@@ -239,6 +243,7 @@ export const usePromptWorkbench = create<WorkbenchState>((set, get) => ({
       topic: "",
       model: "",
       prompt: "",
+      instructions: "",
       promptId: null,
       workspaceToken: null,
       positiveKeywords: [],

@@ -15,10 +15,10 @@ import {
   fetchPromptDetail,
   fetchPromptVersion,
   fetchPromptVersions,
+  normaliseKeywordSource,
   PromptDetailResponse,
   PromptListKeyword,
   type Keyword,
-  type KeywordSource,
   type PromptVersionSummary,
   type PromptVersionDetail,
 } from "../lib/api";
@@ -45,6 +45,7 @@ export default function PromptDetailPage(): JSX.Element {
   const setWorkspaceToken = usePromptWorkbench((state) => state.setWorkspaceToken);
   const setCollections = usePromptWorkbench((state) => state.setCollections);
   const setTags = usePromptWorkbench((state) => state.setTags);
+  const setInstructions = usePromptWorkbench((state) => state.setInstructions);
 
   const detailQuery = useQuery({
     queryKey: ["prompt-detail", promptId],
@@ -234,6 +235,7 @@ export default function PromptDetailPage(): JSX.Element {
     setModel(detail.model);
     setPromptId(String(detail.id));
     setWorkspaceToken(detail.workspace_token ?? null);
+    setInstructions(detail.instructions ?? "");
     const positive = mapKeywords(detail.positive_keywords, "positive");
     const negative = mapKeywords(detail.negative_keywords, "negative");
     setCollections(positive, negative);
@@ -251,6 +253,7 @@ export default function PromptDetailPage(): JSX.Element {
     setModel(versionDetail.model || detail.model);
     setPromptId(String(detail.id));
     setWorkspaceToken(detail.workspace_token ?? null);
+    setInstructions(versionDetail.instructions ?? detail.instructions ?? "");
     const positive = mapKeywords(
       versionDetail.positive_keywords ?? [],
       "positive",
@@ -603,19 +606,11 @@ function mapKeywords(
       keywordId,
       word: value,
       polarity,
-      source: fallbackSource(item.source),
+      source: normaliseKeywordSource(item.source),
       weight: normalizeWeight(item.weight),
       overflow,
     };
   });
-}
-
-function fallbackSource(source?: string): KeywordSource {
-  const value = (source ?? "manual").toLowerCase();
-  if (value === "local" || value === "api" || value === "manual") {
-    return value as KeywordSource;
-  }
-  return "manual";
 }
 
 function normalizeWeight(weight?: number): number {

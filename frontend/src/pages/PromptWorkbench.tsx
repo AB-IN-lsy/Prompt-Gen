@@ -58,6 +58,7 @@ import {
   PROMPT_KEYWORD_MAX_LENGTH,
   PROMPT_TAG_LIMIT,
   PROMPT_TAG_MAX_LENGTH,
+  PROMPT_AI_GENERATE_MIN_DURATION_MS,
 } from "../config/prompt";
 import {
   augmentPromptKeywords,
@@ -66,6 +67,7 @@ import {
   fetchUserModels,
   generatePromptPreview,
   interpretPromptDescription,
+  normaliseKeywordSource,
   syncPromptWorkspaceKeywords,
   removePromptKeyword,
   savePrompt,
@@ -73,7 +75,6 @@ import {
   type AugmentPromptKeywordsResponse,
   type GeneratePromptResponse,
   type Keyword,
-  type KeywordSource,
   type ManualPromptKeywordRequest,
   type PromptKeywordInput,
   type PromptKeywordResult,
@@ -103,7 +104,7 @@ const mapKeywordResultToKeyword = (
   item: PromptKeywordResult,
 ): Keyword => {
   const polarity = (item.polarity as Keyword["polarity"]) ?? "positive";
-  const source = (item.source as KeywordSource) ?? "api";
+  const source = normaliseKeywordSource(item.source);
   const weight = clampWeight(item.weight);
   const { value, overflow } = clampTextWithOverflow(
     item.word ?? "",
@@ -220,6 +221,8 @@ export default function PromptWorkbenchPage() {
     removeTag,
     prompt,
     setPrompt,
+    instructions,
+    setInstructions,
     promptId,
     setPromptId,
     workspaceToken,
@@ -232,7 +235,6 @@ export default function PromptWorkbenchPage() {
   const setProfile = useAuth((state) => state.setProfile);
 
   const [description, setDescription] = useState("");
-  const [instructions, setInstructions] = useState("");
   const [activeKeyword, setActiveKeyword] = useState<Keyword | null>(null);
   const [newKeyword, setNewKeyword] = useState("");
   const [tagInput, setTagInput] = useState("");
@@ -246,6 +248,8 @@ export default function PromptWorkbenchPage() {
   const interpretToastId = useRef<string | number | null>(null);
   const augmentToastId = useRef<string | number | null>(null);
   const generateToastId = useRef<string | number | null>(null);
+  const generationStartRef = useRef<number>(0);
+  const generationDelayTimeoutRef = useRef<number | null>(null);
   const clearDropIndicator = useCallback(() => {
     setDropIndicator((previous) => (previous ? null : previous));
   }, []);
@@ -261,6 +265,29 @@ export default function PromptWorkbenchPage() {
       ref.current = null;
     }
   }, []);
+  const ensureMinimumGenerationDuration = useCallback(
+    (next: () => void) => {
+      const elapsed = Date.now() - generationStartRef.current;
+      const remaining = Math.max(
+        0,
+        PROMPT_AI_GENERATE_MIN_DURATION_MS - elapsed,
+      );
+      if (generationDelayTimeoutRef.current !== null) {
+        window.clearTimeout(generationDelayTimeoutRef.current);
+        generationDelayTimeoutRef.current = null;
+      }
+      if (remaining > 0) {
+        generationDelayTimeoutRef.current = window.setTimeout(() => {
+          generationDelayTimeoutRef.current = null;
+          next();
+        }, remaining);
+      } else {
+        next();
+      }
+    },
+    [PROMPT_AI_GENERATE_MIN_DURATION_MS],
+  );
+
   const keywordLimit = PROMPT_KEYWORD_LIMIT;
   const keywordMaxLength = PROMPT_KEYWORD_MAX_LENGTH;
   const tagLimit = PROMPT_TAG_LIMIT;
@@ -644,6 +671,15 @@ export default function PromptWorkbenchPage() {
   useEffect(() => {
     latestSignatureRef.current = syncSignature;
   }, [syncSignature]);
+
+  useEffect(() => {
+    return () => {
+      if (generationDelayTimeoutRef.current !== null) {
+        window.clearTimeout(generationDelayTimeoutRef.current);
+        generationDelayTimeoutRef.current = null;
+      }
+    };
+  }, []);
 
   useEffect(() => {
     if (syncTimerRef.current !== null) {
@@ -1063,57 +1099,66 @@ export default function PromptWorkbenchPage() {
       });
     },
     onMutate: () => {
+      generationStartRef.current = Date.now();
+      if (generationDelayTimeoutRef.current !== null) {
+        window.clearTimeout(generationDelayTimeoutRef.current);
+        generationDelayTimeoutRef.current = null;
+      }
       showLoadingToast(
         generateToastId,
         t("promptWorkbench.generateLoading", {
-          defaultValue: "正在生成 Prompt...",
+          defaultValue: "正在生成 Prompt… AI 生成可能需要更长时间，请稍候",
         }),
       );
     },
     onSuccess: (response: GeneratePromptResponse) => {
-      dismissLoadingToast(generateToastId);
-      setPrompt(response.prompt);
-      setWorkspaceToken(response.workspace_token ?? workspaceToken ?? null);
-      if (response.positive_keywords || response.negative_keywords) {
-        const nextKeywords = [
-          ...positiveKeywords,
-          ...negativeKeywords,
-          ...(response.positive_keywords ?? []).map(
-            mapKeywordResultToKeyword,
-          ),
-          ...(response.negative_keywords ?? []).map(
-            mapKeywordResultToKeyword,
-          ),
-        ];
-        const deduped = dedupeKeywords(nextKeywords);
-        const { limited, trimmedPositive, trimmedNegative } =
-          limitKeywordCollections(deduped);
-        setKeywords(limited);
-        notifyKeywordTrim(trimmedPositive, trimmedNegative);
-        const nextPositive = limited.filter(
-          (item) => item.polarity === "positive",
+      ensureMinimumGenerationDuration(() => {
+        dismissLoadingToast(generateToastId);
+        setPrompt(response.prompt);
+        setWorkspaceToken(response.workspace_token ?? workspaceToken ?? null);
+        if (response.positive_keywords || response.negative_keywords) {
+          const nextKeywords = [
+            ...positiveKeywords,
+            ...negativeKeywords,
+            ...(response.positive_keywords ?? []).map(
+              mapKeywordResultToKeyword,
+            ),
+            ...(response.negative_keywords ?? []).map(
+              mapKeywordResultToKeyword,
+            ),
+          ];
+          const deduped = dedupeKeywords(nextKeywords);
+          const { limited, trimmedPositive, trimmedNegative } =
+            limitKeywordCollections(deduped);
+          setKeywords(limited);
+          notifyKeywordTrim(trimmedPositive, trimmedNegative);
+          const nextPositive = limited.filter(
+            (item) => item.polarity === "positive",
+          );
+          const nextNegative = limited.filter(
+            (item) => item.polarity === "negative",
+          );
+          updateSignatureBaseline(nextPositive, nextNegative);
+        }
+        toast.success(
+          t("promptWorkbench.generateSuccess", { defaultValue: "生成完成" }),
         );
-        const nextNegative = limited.filter(
-          (item) => item.polarity === "negative",
-        );
-        updateSignatureBaseline(nextPositive, nextNegative);
-      }
-      toast.success(
-        t("promptWorkbench.generateSuccess", { defaultValue: "生成完成" }),
-      );
+      });
     },
     onError: (error: unknown) => {
-      dismissLoadingToast(generateToastId);
-      const limitMessage = extractKeywordError(error);
-      if (limitMessage) {
-        toast.warning(limitMessage);
-        return;
-      }
-      const message =
-        error instanceof ApiError
-          ? (error.message ?? t("errors.generic"))
-          : t("errors.generic");
-      toast.error(message);
+      ensureMinimumGenerationDuration(() => {
+        dismissLoadingToast(generateToastId);
+        const limitMessage = extractKeywordError(error);
+        if (limitMessage) {
+          toast.warning(limitMessage);
+          return;
+        }
+        const message =
+          error instanceof ApiError
+            ? (error.message ?? t("errors.generic"))
+            : t("errors.generic");
+        toast.error(message);
+      });
     },
   });
 

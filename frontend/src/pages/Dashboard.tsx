@@ -359,7 +359,7 @@ export default function DashboardPage(): JSX.Element {
                 <Button
                     variant="secondary"
                     size="sm"
-                    className="gap-2 text-xs"
+                    className="gap-2 whitespace-nowrap text-xs"
                     onClick={() => handleOpenPrompt(item.id)}
                 >
                     <Sparkles className="h-4 w-4" aria-hidden="true" />

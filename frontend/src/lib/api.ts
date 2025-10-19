@@ -12,7 +12,29 @@ import { clampTextWithOverflow } from "./utils";
 import { DEFAULT_KEYWORD_WEIGHT } from "../config/prompt";
 
 export type KeywordPolarity = "positive" | "negative";
-export type KeywordSource = "local" | "api" | "manual";
+export type KeywordSource = "local" | "api" | "manual" | "model";
+
+export function normaliseKeywordSource(
+  value?: string | null,
+): KeywordSource {
+  if (!value) {
+    return "manual";
+  }
+  const lower = value.toLowerCase();
+  if (lower === "model") {
+    return "model";
+  }
+  if (lower === "local") {
+    return "local";
+  }
+  if (lower === "api") {
+    return "api";
+  }
+  if (lower === "manual") {
+    return "manual";
+  }
+  return "manual";
+}
 
 const MIN_KEYWORD_WEIGHT = 0;
 const MAX_KEYWORD_WEIGHT = DEFAULT_KEYWORD_WEIGHT;

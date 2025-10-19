@@ -10,7 +10,7 @@ import { UploadCloud, X } from "lucide-react";
 import { uploadAvatar } from "../../lib/api";
 import { ApiError } from "../../lib/errors";
 import { Button } from "../ui/button";
-import { cn } from "../../lib/utils";
+import { cn, resolveAssetUrl } from "../../lib/utils";
 import { toast } from "sonner";
 
 // AvatarUploaderProps 定义头像上传组件的外部接口。
@@ -70,6 +70,7 @@ export function AvatarUploader({
 
     const displayTitle = title ?? t("avatarUploader.title");
     const displayDescription = description ?? t("avatarUploader.description");
+    const resolvedSrc = resolveAssetUrl(value);
 
     return (
         <div className="space-y-4">
@@ -85,8 +86,8 @@ export function AvatarUploader({
                     )}
                     style={{ width: size, height: size }}
                 >
-                    {value ? (
-                        <img src={value} alt={displayTitle} className="h-full w-full object-cover" />
+                    {resolvedSrc ? (
+                        <img src={resolvedSrc} alt={displayTitle} className="h-full w-full object-cover" />
                     ) : (
                         <UploadCloud className="h-6 w-6 text-slate-400" />
                     )}

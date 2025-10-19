@@ -59,3 +59,13 @@ export const DEFAULT_KEYWORD_WEIGHT =
   Number.isInteger(rawDefaultKeywordWeight) && rawDefaultKeywordWeight > 0
     ? rawDefaultKeywordWeight
     : 5;
+
+const rawAIGenerateMinDuration = Number.parseInt(
+  import.meta.env.VITE_AI_GENERATE_MIN_DURATION_MS ?? "",
+  10,
+);
+
+export const PROMPT_AI_GENERATE_MIN_DURATION_MS =
+  Number.isInteger(rawAIGenerateMinDuration) && rawAIGenerateMinDuration > 0
+    ? rawAIGenerateMinDuration
+    : 2000;

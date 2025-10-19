@@ -237,7 +237,7 @@
     "augmentSuggestion": "Need ideas? Ask AI to suggest more keywords.",
     "interpretLoading": "Interpreting description...",
     "augmentLoading": "Augmenting keywords...",
-    "generateLoading": "Generating prompt...",
+    "generateLoading": "Generating prompt… AI generation can take a bit longer, please wait",
     "keywordDropPlaceholder": "Drop keywords here",
     "dragHandle": "Drag keyword",
     "decreaseWeight": "Decrease relevance weight",

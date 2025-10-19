@@ -27,6 +27,7 @@ import {
   exportPrompts,
   fetchMyPrompts,
   fetchPromptDetail,
+  normaliseKeywordSource,
   PromptDetailResponse,
   PromptListItem,
   PromptListKeyword,
@@ -34,7 +35,7 @@ import {
   PromptListMeta,
 } from "../lib/api";
 import { usePromptWorkbench } from "../hooks/usePromptWorkbench";
-import type { Keyword, KeywordSource, PromptExportResult } from "../lib/api";
+import type { Keyword, PromptExportResult } from "../lib/api";
 import { nanoid } from "nanoid";
 import { clampTextWithOverflow, formatOverflowLabel, cn } from "../lib/utils";
 import { PageHeader } from "../components/layout/PageHeader";
@@ -48,15 +49,6 @@ const clampWeight = (value?: number): number => {
   if (value < 0) return 0;
   if (value > DEFAULT_KEYWORD_WEIGHT) return DEFAULT_KEYWORD_WEIGHT;
   return Math.round(value);
-};
-
-const fallbackSource = (value?: string): KeywordSource => {
-  if (!value) return "manual";
-  const normalised = value.toLowerCase();
-  if (normalised === "local" || normalised === "api" || normalised === "manual") {
-    return normalised as KeywordSource;
-  }
-  return "manual";
 };
 
 type FormattedDateTime = {
@@ -91,6 +83,7 @@ export default function MyPromptsPage(): JSX.Element {
   const setWorkspaceToken = usePromptWorkbench((state) => state.setWorkspaceToken);
   const setCollections = usePromptWorkbench((state) => state.setCollections);
   const setTags = usePromptWorkbench((state) => state.setTags);
+  const setInstructions = usePromptWorkbench((state) => state.setInstructions);
 
   const [lastExport, setLastExport] = useState<PromptExportResult | null>(null);
   const [status, setStatus] = useState<StatusFilter>("all");
@@ -181,6 +174,7 @@ export default function MyPromptsPage(): JSX.Element {
     setModel(detail.model);
     setPromptId(String(detail.id));
     setWorkspaceToken(detail.workspace_token ?? null);
+    setInstructions(detail.instructions ?? "");
 
     const positive = mapKeywords(detail.positive_keywords, "positive");
     const negative = mapKeywords(detail.negative_keywords, "negative");
@@ -206,7 +200,7 @@ export default function MyPromptsPage(): JSX.Element {
         keywordId,
         word: value,
         polarity,
-        source: fallbackSource(item.source),
+        source: normaliseKeywordSource(item.source),
         weight: clampWeight(item.weight),
         overflow,
       };
