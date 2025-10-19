@@ -82,4 +82,4 @@ backend/public/avatars/*
 /docs
 
 # certificate files
-mycert.pfx*
+mycert*
