@@ -12,6 +12,8 @@ jobs:
     env:
       CSC_IDENTITY_AUTO_DISCOVERY: "false"
       USE_SYSTEM_SIGNTOOL: "true"
+      ELECTRON_BUILDER_DISABLE_AUTO_PUBLISH: "true"
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - uses: actions/checkout@v4
 
@@ -46,6 +48,8 @@ jobs:
 
       - name: 构建 Windows 安装包
         run: npm run dist:win
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: 上传产物
         uses: actions/upload-artifact@v4
@@ -59,6 +63,8 @@ jobs:
     runs-on: macos-latest
     env:
       CSC_IDENTITY_AUTO_DISCOVERY: "false"
+      ELECTRON_BUILDER_DISABLE_AUTO_PUBLISH: "true"
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - uses: actions/checkout@v4
 
@@ -78,6 +84,8 @@ jobs:
 
       - name: 构建 macOS 安装包
         run: npm run dist:mac
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: 上传产物
         uses: actions/upload-artifact@v4
