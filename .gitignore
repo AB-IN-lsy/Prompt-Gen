@@ -46,9 +46,10 @@ coverage/
 .cache/
 
 # Environment & secrets
-.env
 .env.*
 !.env.example
+# Keep local .env files (local settings)
+!.env 
 
 # Go build artifacts
 *.exe
