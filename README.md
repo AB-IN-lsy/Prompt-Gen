@@ -1,141 +1,123 @@
 # Prompt Gen Desktop
 
-> 一套集成 Electron + Go 的 AI Prompt 工作台，覆盖需求解析、关键词治理、模型管理和运维后台。
+Prompt Gen Desktop 是一套以 Electron 为外壳、Go 为后端、Vite/React 为前端的提示词管理工作台，面向需要系统化维护 Prompt 的产品、运营与研发团队。应用通过桌面端封装、后端 API 与前端治理模块，为需求解析、关键词管理、模型凭据维护等场景提供统一体验。
 
-## 🌟 项目简介
+## 发布形态
 
-Prompt Gen Desktop 将 Go 写的 API 服务与 Vite/React 前端打包成 Electron 桌面应用，帮助运营 / 研发团队维护高质量的提示词。系统内置自然语言解析、AI 补词、正负关键词治理、模型凭据管理、更新日志与 IP 防护等模块，可在离线桌面端与云端后台之间无缝协同。
-
-## ✨ 核心特性
-
-- **Prompt 工作台**：输入需求即可触发 AI 解析、关键词补全与权重治理，正负关键词支持拖拽、排序与权重调整。
-- **模型凭据 & 多通道发送**：在后台保存 DeepSeek / 火山引擎等模型凭据，支持 AES-256-GCM 加密存储并可一键测试。
-- **丰富的后台能力**：内置更新日志管理、IP Guard 黑名单解封、邮箱验证提醒、图形验证码限流等管理页面。
-- **桌面端体验优化**：自定义无框标题栏、窗口固定比例、始终置顶开关、Electron 预加载桥，网页模式自动隐藏无效按钮。
-- **环境驱动的可配置性**：前后端关键词/标签限制、默认权重、关键业务阈值均可通过 `.env` 与 `frontend/.env` 覆盖。
-- **一致的 UI 体验**：基于 Tailwind 与 shadcn/ui 抽象的组件库，确保桌面端和网页端使用统一视觉语言。
-
-## 🧱 技术栈
-
-| 模块 | 技术 |
+| 形态 | 说明 |
 | --- | --- |
-| 桌面壳 | Electron 38 / Node 18 |
-| 前端 | Vite · React 18 · TypeScript · Tailwind CSS · shadcn/ui · React Query · Zustand · i18next |
-| 后端 | Go 1.24 · Gin · Gorm · MySQL · Redis · JWT · Nacos |
-| 测试 | go test（unit / integration / e2e）、前端 lint & build |
+| **离线版本** | 已发布的 Windows / macOS 安装包存放于仓库的 `release/`，内置后端服务与前端资源，安装后即可在本地离线使用。推荐在环境变量中将 `LOCAL_SQLITE_PATH` 指向用户目录，确保卸载时数据不会被清除。 |
+| **在线版本** | 云端部署计划中的网络版接口与控制台仍在内部筹备阶段，正式上线时间会在项目公告中另行通知。 |
 
-## 📁 目录总览
+> 发行包的默认配置面向离线体验，在线部署请等待官方发布的托管环境；若需自行体验在线形态，可参照下文的开发者指引自行搭建服务端与前端。  
+> 如需将本项目用于二次开发或商业化，请先阅读并遵守仓库内的 [LICENSE](LICENSE)。所有衍生工作需保留版权声明并遵守协议要求。
 
-```css
+## 项目结构
+
+```text
 .
-├── backend/                  # Go 服务端：cmd、internal、tests 等
+├── backend/                  # Go HTTP 服务（cmd、internal、tests）
 ├── frontend/                 # Vite/React 前端源码与构建脚本
-├── main.js / preload.js      # Electron 主进程 & 预加载桥
-├── AGENTS.md                 # 贡献者指南
-├── README.md                 # 当前文件
-└── .env.example              # 后端环境变量模板
+├── main.js / preload.js      # Electron 主进程及预加载脚本
+├── release/                  # 离线安装包输出目录
+├── docs/ · design/           # 设计与文档资料
+├── .env.example              # 统一环境变量模板
+└── README.md                 # 当前文件
 ```
 
-## 🚀 快速开始
+## 快速体验（离线安装包）
 
-### 前置依赖
+1. 打开仓库的 “Releases” 页面，下载对应平台的最新安装程序。
+2. 按安装向导操作，默认会安装到 `%LOCALAPPDATA%\Programs\PromptGen`（Windows）或 `/Applications`（macOS）。
+3. 安装完成后即可直接启动客户端。若需要长期保留数据，建议将 `LOCAL_SQLITE_PATH` 配置到个人目录（如 `~/.promptgen/`），避免因卸载而丢失数据库。
 
-- Node.js ≥ 18
+## 开发者指南
+
+下述步骤适用于希望克隆本仓库并继续迭代功能的开发者。请务必先阅读 [LICENSE](LICENSE) 与 `AGENTS.md` 中的协作约定，确保贡献方式与使用范围符合协议。
+
+### 前提依赖
+
+- Node.js ≥ 18（建议使用与 `.nvmrc` 对齐的版本）  
 - Go ≥ 1.24
-- MySQL 5.7 / MariaDB（持久化 Prompt 与账号）
-- Redis（验证码、限流、工作台会话缓存）
-- Nacos（统一读取生产配置）
+- pnpm / npm（任选其一，用于安装前端依赖）
+- 可选：MySQL、Redis、Nacos，仅在在线模式或完整功能调试时需要
 
-### 1. 克隆代码
+### 克隆与安装
 
 ```bash
-git clone https://github.com/your-org/prompt-gen-desktop.git
-cd prompt-gen-desktop
+git clone https://github.com/AB-IN-lsy/Prompt-Gen
+cd Prompt-Gen
+
+# 安装 Electron 主程与脚本依赖
+npm install
+
+# 安装前端依赖
+npm --prefix frontend install
+
+# 同步 Go 依赖
+go mod tidy
 ```
 
-### 2. 配置环境变量
+### 环境配置
 
-根目录复制 `.env.example` → `.env.local`，Electron 主进程、Go 后端 与 Vite 前端都会自动加载。建议至少填写：
+1. 复制 `.env.example` 为 `.env.local`（可根据需要提交 `.env`）。
+2. 基本字段包括：`APP_MODE`、`LOCAL_SQLITE_PATH`、`JWT_SECRET`、`MODEL_CREDENTIAL_MASTER_KEY` 等。  
+3. 若需调试在线模式，可补充 MySQL、Redis、Nacos 等连接参数；否则将 `APP_MODE=local` 即可在完全离线的 SQLite 环境中启动。
+4. 前端同样读取根目录 `.env(.local)` 中的 `VITE_` 字段，例如 `VITE_API_BASE_URL`、`VITE_API_REQUEST_TIMEOUT_MS` 等。
 
-- `MYSQL_HOST` / `MYSQL_USERNAME` / `MYSQL_PASSWORD` / `MYSQL_DATABASE`
-- `JWT_SECRET`
-- `MODEL_CREDENTIAL_MASTER_KEY`（32 字节 Base64）
-- `REDIS_ENDPOINT` / `REDIS_PASSWORD`（如启用）
+详细参数说明与约束请参考 `backend/backend_README.md` 与 `frontend/frontend_README.md`。
 
-前端无须单独的 `frontend/.env.local`。同一个 `.env.local` 中可直接加入前端相关字段，Vite 会通过 `envDir` 自动读取：
-
-> 若需在完全离线的本地环境中体验功能，可将 `APP_MODE` 设为 `local`，并按需调整 `LOCAL_SQLITE_PATH` 等参数；此模式会跳过 MySQL / Redis / Nacos，仅使用本地 SQLite 与内置账号。
-
-### 3. 安装依赖
+### 本地运行
 
 ```bash
-npm install                       # Electron 主程 & 脚手架
-npm --prefix frontend install     # 前端依赖
-go mod tidy                       # 后端依赖
-```
-
-### 4. 启动开发环境
-
-```bash
-# 1) 启动后端 API（默认 9090）
+# 启动后端 HTTP 服务（默认 9090）
 go run ./backend/cmd/server
 
-# 2) 启动前端 Vite Dev Server（默认 5173）
+# 启动前端 Vite 开发服务器（默认 5173）
 npm run dev:frontend
 
-# 3) 启动 Electron 桌面壳（会加载 Vite Dev URL）
+# 启动 Electron 桌面壳（加载 Vite Dev URL）
 npm start
 ```
 
-生产构建可运行：
+构建生产资源：
 
 ```bash
-npm run build:frontend   # 构建前端产物到 frontend/dist
-npm run build            # 同上（package.json 透传）
+npm run build:frontend   # 生成前端静态文件至 frontend/dist
+npm run prepare:offline  # 同时构建前端与后端二进制
+npm run dist:win         # 生成 Windows 安装包（macOS 对应 dist:mac）
 ```
 
-## 🧪 测试 & 质量
+### 质量检查
 
 ```bash
-# 前端
+# 前端静态检查
 npm --prefix frontend run lint
-npm --prefix frontend run build   # 也会执行 TS 检查
+npm --prefix frontend run build
 
-# 后端
-go test ./...                     # 单元测试
-go test -tags=integration ./backend/tests/integration # 集成测试
-go test -tags=e2e ./backend/tests/e2e # E2E 测试
+# 后端测试套件
+go test ./...
+go test -tags=integration ./backend/tests/integration   # 需要真实依赖
+go test -tags=e2e ./backend/tests/e2e                   # 命中线上接口时再运行
 ```
 
-> 集成 / E2E 测试需要联通的 MySQL、Redis、Nacos，并依赖 `.env.local` 或测试专用环境变量。
+## 常用脚本速查
 
-## 🔧 实用脚本（根目录）
-
-| 命令 | 说明 |
+| 命令 | 作用 |
 | --- | --- |
-| `npm run dev:frontend` | 启动 Vite 开发服务 |
-| `npm run build:frontend` | 构建前端生产静态文件 |
-| `npm start` | 启动 Electron，开发模式会指向 Vite URL |
-| `go run ./backend/cmd/server` | 启动后端 HTTP 服务 |
-| `go test ./...` | 运行全部 Go 测试 |
+| `npm run dev:frontend` | 启动前端开发服务器 |
+| `npm start` | 打开 Electron 客户端（开发模式） |
+| `npm run prepare:offline` | 构建离线包所需的前后端资源 |
+| `npm run dist:win` / `npm run dist:mac` | 打包发布版安装程序 |
+| `go run ./backend/cmd/server` | 启动 Go API 服务 |
+| `go test ./...` | 运行后端单元测试 |
 
-## 📦 离线版本与打包
+## 贡献与支持
 
-桌面端支持预打包离线安装包，可按需在 macOS 与 Windows 上分发：
+- 如有功能建议或缺陷反馈，请通过 Issue 进行描述，并附带复现步骤或日志。  
+- Pull Request 应遵循仓库现有的提交规范与编码风格，重要改动需附上相应的测试或截图。  
+- 若计划将本项目用于商业用途或深度定制，请提前阅读许可证条款，必要时联系维护者获取授权或协助。
 
-- `npm run prepare:offline`：预先构建前端与后端二进制，保证离线包内置所有静态资源与 Go 服务。
-- `npm run dist:mac` / `npm run dist:win`：分别生成 macOS DMG 与 Windows NSIS 安装程序。
-- `npm run dist:all`：一次性产出两个平台的安装产物，默认输出到 `release/` 目录（参见 `electron-builder.yml`）。
+## 许可证
 
-构建完成后，可直接从 `release/` 目录分发离线版本，首次启动时将自动加载本地 SQLite 与内置账号（可结合 `APP_MODE=local` 按需体验完全离线模式）。
-- Windows 安装包现已启用多步骤向导：默认安装路径为 `%LOCALAPPDATA%\Programs\PromptGen`，可在目录页修改；欢迎页内包含产品介绍，许可证页补充离线部署要点，可在附加任务页勾选桌面/开始菜单快捷方式，并在完成页选择是否立即启动客户端。
-
-## 🧭 后续规划
-
-- CI/CD 集成（lint / test / 构建自动化）
-- 支持更多模型通道与模板库
-- 桌面端差分更新与自动升级
-
-## 📄 许可证
-
-项目遵循仓库中的 [LICENSE](LICENSE) 约束。欢迎提交 Issue 或 PR，一起完善 Prompt Gen Desktop。
+本项目依据仓库中的 [LICENSE](LICENSE) 发布。使用、分发或再次开发时请遵守相关条款，并在文档、产品页面及二次发行包中保留原始版权声明。
