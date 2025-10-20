@@ -165,6 +165,41 @@ ipcMain.handle("window:toggle-always-on-top", (event) => {
     return next;
 });
 
+ipcMain.handle("window:execute-edit-command", (event, command) => {
+    const webContents = event.sender;
+    if (!webContents || typeof command !== "string") {
+        return;
+    }
+    switch (command) {
+        case "undo":
+            webContents.undo();
+            break;
+        case "redo":
+            webContents.redo();
+            break;
+        case "cut":
+            webContents.cut();
+            break;
+        case "copy":
+            webContents.copy();
+            break;
+        case "paste":
+            webContents.paste();
+            break;
+        case "delete":
+            webContents.delete();
+            break;
+        case "selectAll":
+            webContents.selectAll();
+            break;
+        case "reload":
+            webContents.reload();
+            break;
+        default:
+            break;
+    }
+});
+
 function createMainWindow() {
     const mainWindow = new BrowserWindow({
         width: DEFAULT_WINDOW.width,
@@ -172,8 +207,9 @@ function createMainWindow() {
         show: false,
         backgroundColor: "#f8f9fa",
         frame: false,
-        resizable: false,
+        resizable: process.platform === "darwin",
         maximizable: true,
+        fullscreenable: process.platform === "darwin",
         titleBarStyle: process.platform === "darwin" ? "hiddenInset" : "hidden",
         titleBarOverlay: process.platform === "win32"
             ? { color: "#0f172a", symbolColor: "#ffffff", height: 36 }
@@ -197,7 +233,9 @@ function createMainWindow() {
 
     mainWindow.once("ready-to-show", () => {
         mainWindow.show();
-        mainWindow.setAspectRatio(DEFAULT_WINDOW.width / DEFAULT_WINDOW.height);
+        if (process.platform !== "darwin") {
+            mainWindow.setAspectRatio(DEFAULT_WINDOW.width / DEFAULT_WINDOW.height);
+        }
         emitWindowState(mainWindow);
         if (enableDevTools && !mainWindow.webContents.isDevToolsOpened()) {
             mainWindow.webContents.openDevTools({ mode: "detach" });

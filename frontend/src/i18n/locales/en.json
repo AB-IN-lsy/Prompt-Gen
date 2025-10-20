@@ -93,8 +93,7 @@
           "type": "email"
         }
       ],
-      "cta": "Open CSDN blog",
-      "note": "Powered by AB-IN · ICP License 鲁ICP备2021035431号-1"
+      "note": "Questions or ideas? Open an issue or PR – contributions welcome."
     }
   },
   "logsPage": {
@@ -283,6 +282,16 @@
     "weight": "Weight {{value}}",
     "modelFallback": "Selected model is unavailable. Switched to {{model}}.",
     "modelDisabled": "This model is disabled and can’t be selected."
+  },
+  "contextMenu": {
+    "undo": "Undo",
+    "redo": "Redo",
+    "cut": "Cut",
+    "copy": "Copy",
+    "paste": "Paste",
+    "delete": "Delete",
+    "selectAll": "Select All",
+    "reload": "Reload"
   },
   "myPrompts": {
     "eyebrow": "Prompt library",

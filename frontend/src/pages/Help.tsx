@@ -59,7 +59,6 @@ export default function HelpPage() {
     const resourcesContacts = t("helpPage.resources.contacts", {
         returnObjects: true
     }) as HelpResourceLink[];
-    const resourcesCta = t("helpPage.resources.cta");
     const resourcesNote = t("helpPage.resources.note");
     const resourceIcon = {
         external: ExternalLink,
@@ -145,16 +144,10 @@ export default function HelpPage() {
                             );
                         })}
                     </ul>
-                    <p className="text-xs text-slate-400 dark:text-slate-500">{resourcesNote}</p>
+                    {resourcesNote && resourcesNote.length > 0 ? (
+                        <p className="text-xs text-slate-400 dark:text-slate-500">{resourcesNote}</p>
+                    ) : null}
                 </div>
-                <a
-                    href="https://ab-in.blog.csdn.net/"
-                    target="_blank"
-                    rel="noreferrer"
-                    className="inline-flex items-center justify-center rounded-full bg-primary px-6 py-2 text-sm font-medium text-white shadow-glow transition hover:shadow-lg focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
-                >
-                    {resourcesCta}
-                </a>
             </GlassCard>
         </div>
     );

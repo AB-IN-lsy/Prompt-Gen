@@ -47,4 +47,3 @@ func TestOfflineAuthMiddlewareHandle(t *testing.T) {
 		t.Fatalf("isAdmin not injected, got=%v", capturedRole)
 	}
 }
-

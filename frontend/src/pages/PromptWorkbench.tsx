@@ -1706,6 +1706,20 @@ export default function PromptWorkbenchPage() {
               })}
             </h2>
           </div>
+          <Button
+            variant="secondary"
+            size="sm"
+            className="shadow-sm"
+            onClick={handleGenerate}
+            disabled={isGenerating || !hasPositive}
+          >
+            {isGenerating ? (
+              <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
+            ) : (
+              <Sparkles className="mr-2 h-4 w-4" />
+            )}
+            {t("promptWorkbench.generate", { defaultValue: "AI 生成" })}
+          </Button>
         </header>
 
         <div className="rounded-3xl border border-white/60 bg-white/80 p-5 shadow-inner transition-colors dark:border-slate-800 dark:bg-slate-900/70">
@@ -1867,18 +1881,6 @@ export default function PromptWorkbenchPage() {
               <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
             ) : null}
             {t("promptWorkbench.saveDraft", { defaultValue: "保存草稿" })}
-          </Button>
-          <Button
-            variant="secondary"
-            onClick={handleGenerate}
-            disabled={isGenerating || !hasPositive}
-          >
-            {isGenerating ? (
-              <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
-            ) : (
-              <Sparkles className="mr-2 h-4 w-4" />
-            )}
-            {t("promptWorkbench.generate", { defaultValue: "AI 生成" })}
           </Button>
           <Button
             variant="secondary"

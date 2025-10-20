@@ -17,7 +17,8 @@ const desktopApi = {
         return () => {
             ipcRenderer.removeListener(WINDOW_STATE_CHANNEL, wrapped);
         };
-    }
+    },
+    executeEditCommand: (command) => ipcRenderer.invoke("window:execute-edit-command", command)
 };
 
 contextBridge.exposeInMainWorld("desktop", desktopApi);

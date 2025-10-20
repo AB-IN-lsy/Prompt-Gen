@@ -73,29 +73,28 @@
         ]
       }
     },
-    "resources": {
-      "title": "更多资源",
-      "description": "探索由 AB-IN 维护的资料、源码与支持渠道。",
-      "contacts": [
-        {
-          "label": "AB-IN CSDN 博客 · ab-in.blog.csdn.net",
-          "href": "https://ab-in.blog.csdn.net/",
-          "type": "external"
-        },
-        {
-          "label": "GitHub · AB-IN/Prompt-Gen",
-          "href": "https://github.com/AB-IN-lsy/Prompt-Gen",
-          "type": "external"
-        },
-        {
-          "label": "邮箱 · ab-in-liusy@outlook.com",
-          "href": "mailto:ab-in-liusy@outlook.com",
-          "type": "email"
-        }
-      ],
-      "cta": "访问 CSDN 博客",
-      "note": "Powered by AB-IN · 鲁ICP备2021035431号-1"
-    }
+      "resources": {
+        "title": "更多资源",
+        "description": "探索由 AB-IN 维护的资料、源码与支持渠道。",
+        "contacts": [
+          {
+            "label": "AB-IN CSDN 博客 · ab-in.blog.csdn.net",
+            "href": "https://ab-in.blog.csdn.net/",
+            "type": "external"
+          },
+          {
+            "label": "GitHub · AB-IN/Prompt-Gen",
+            "href": "https://github.com/AB-IN-lsy/Prompt-Gen",
+            "type": "external"
+          },
+          {
+            "label": "邮箱 · ab-in-liusy@outlook.com",
+            "href": "mailto:ab-in-liusy@outlook.com",
+            "type": "email"
+          }
+        ],
+        "note": "欢迎提交 Issue 与 PR，一起完善 PromptGen。"
+      }
   },
   "logsPage": {
     "eyebrow": "版本更新",
@@ -283,6 +282,16 @@
     "weight": "权重 {{value}}",
     "modelFallback": "模型不可用，已自动切换到 {{model}}。",
     "modelDisabled": "该模型已禁用或不可用。"
+  },
+  "contextMenu": {
+    "undo": "撤销",
+    "redo": "重做",
+    "cut": "剪切",
+    "copy": "复制",
+    "paste": "粘贴",
+    "delete": "删除",
+    "selectAll": "全选",
+    "reload": "刷新"
   },
   "myPrompts": {
     "eyebrow": "Prompt 清单",

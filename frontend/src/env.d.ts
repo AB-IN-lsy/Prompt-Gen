@@ -25,6 +25,7 @@ interface DesktopAPI {
     toggleAlwaysOnTop(): Promise<ElectronWindowState>;
     getWindowState(): Promise<ElectronWindowState>;
     onWindowState(callback: (state: ElectronWindowState) => void): () => void;
+    executeEditCommand(command: "undo" | "redo" | "cut" | "copy" | "paste" | "delete" | "selectAll" | "reload"): Promise<void>;
 }
 
 declare global {
