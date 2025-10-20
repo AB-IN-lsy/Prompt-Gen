@@ -10,6 +10,7 @@
   - `VITE_API_REQUEST_TIMEOUT_MS`（默认 60000）用于控制 Axios 请求超时时间，AI 生成等耗时操作可按需放宽。
   - `VITE_AI_GENERATE_MIN_DURATION_MS`（默认 2000）可调节 Prompt 工作台在生成提示时的最短加载展示时间。
 - **AI 生成等待时间**：通过 `VITE_AI_GENERATE_MIN_DURATION_MS`（默认 2000ms）调整 Prompt 工作台触发 AI 生成时的最短加载时长，配合 UI 提示让离线/低速环境下的长耗时更易感知。
+- **自动保存草稿**：Prompt 工作台新增自动草稿功能，会在正文、关键词或标签修改后 **10 秒** 内（可通过 `VITE_PROMPT_AUTOSAVE_DELAY_MS` 调整）自动调用 `/api/prompts` 保存草稿；若 Redis 工作区可用，会同步刷新 `workspace_token`，离线模式则直接写入本地 SQLite。
 - **Prompt 工作台布局**：补充要求与标签输入区改为纵向堆叠，标签按钮加宽并与输入框同列，避免小屏下换行。
 - **关键词拖拽修复**：Prompt 工作台回填草稿时的关键词拖拽现在使用会话级唯一 ID，并仅在提交时回传真实 `keywordId`，彻底解决“总是拖动第一个关键词”和跨列排序失败的问题。
   前端现在给每个关键词做了两层 ID：

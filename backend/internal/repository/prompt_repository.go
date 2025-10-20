@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"strings"
@@ -133,6 +134,24 @@ func (r *PromptRepository) DeleteOldVersions(ctx context.Context, promptID uint,
 		return fmt.Errorf("delete prompt versions: %w", err)
 	}
 	return nil
+}
+
+// MaxVersionNo 查询指定 Prompt 已存在的最高版本号，用于避免重复插入版本。
+func (r *PromptRepository) MaxVersionNo(ctx context.Context, promptID uint) (int, error) {
+	var result struct {
+		Max sql.NullInt64
+	}
+	if err := r.db.WithContext(ctx).
+		Model(&promptdomain.PromptVersion{}).
+		Where("prompt_id = ?", promptID).
+		Select("MAX(version_no) AS max").
+		Scan(&result).Error; err != nil {
+		return 0, fmt.Errorf("query max prompt version: %w", err)
+	}
+	if !result.Max.Valid {
+		return 0, nil
+	}
+	return int(result.Max.Int64), nil
 }
 
 // ListByUser 返回指定用户的 Prompt 列表，并按照更新时间倒序排列。

@@ -18,58 +18,58 @@
     "title": "Guides & troubleshooting",
     "subtitle": "Learn how to configure PromptGen from registration to day-to-day operations.",
     "sections": {
-      "gettingStarted": {
+      "quickStart": {
         "title": "Quick start",
-        "description": "Spin up your workspace in minutes.",
+        "description": "Three simple steps to get up and running.",
         "items": [
-          "Register with captcha protection, then verify your email using the one-time link we send.",
-          "After verification, sign in and the dashboard will greet you with realtime account status.",
-          "Open Settings to upload an avatar, pick your preferred model, and configure export/backups for your local database."
+          "Install the desktop app, sign in (or switch to offline mode) and land on the dashboard.",
+          "Follow the prompt to enter your model key; once you see the “connected” badge you’re ready to generate.",
+          "Click “New Prompt” to explore the workbench and how drafts are saved."
         ]
       },
-      "authentication": {
-        "title": "Authentication flow",
-        "description": "Stay secure while keeping friction low.",
+      "dashboard": {
+        "title": "Dashboard essentials",
+        "description": "See the metrics that matter at a glance.",
         "items": [
-          "Login requests surface inline validation and toast feedback for success and errors.",
-          "Email verification panels show remaining resend attempts and rate-limit cooldowns.",
-          "Use the verification callback page if you login from an email link inside Electron."
+          "Summary cards show total generations, drafts and success rate so you always know where you stand.",
+          "“Recent activity” lists the prompts you opened most recently; a soft highlight appears on hover.",
+          "Shortcut buttons on the cards take you straight back to unfinished work."
+        ]
+      },
+      "myPrompts": {
+        "title": "Managing My Prompts",
+        "description": "Keep drafts and published prompts tidy.",
+        "items": [
+          "Rows are sorted by last update; a gentle hover glow lets you confirm which prompt you’re about to open.",
+          "Each page shows 10 entries with pagination controls at the footer.",
+          "Export JSON backups anytime—deletes include a confirmation step to avoid mistakes."
         ]
       },
       "workbench": {
-        "title": "Prompt workbench",
-        "description": "Craft and iterate on prompts with keyword governance.",
+        "title": "Prompt Workbench tips",
+        "description": "Shape keywords and drafts with confidence.",
         "items": [
-          "Fetch AI-assisted keyword suggestions tied to your current topic.",
-          "Separate positive and negative keywords, adjust weights, and auto-save drafts.",
-          "Use the built-in DeepSeek model for generation; if a model becomes unavailable the UI gracefully falls back and notifies you."
+          "Enter a topic or natural-language brief and let AI suggest positive and negative keywords.",
+          "If you pause for around 10 seconds, the draft auto-saves so your edits are safe.",
+          "Manual saves and publish actions surface status toasts and record a new version."
         ]
       },
-      "models": {
-        "title": "Model credentials",
-        "description": "Securely manage API keys for DeepSeek and future providers.",
+      "settings": {
+        "title": "Settings & model management",
+        "description": "Control credentials and storage in one place.",
         "items": [
-          "Store encrypted API keys; AES-256-GCM keeps credentials safe at rest.",
-          "Enable, disable, or delete models and instantly update your preferred default.",
-          "Test connectivity directly from the card and view the last verification time."
-        ]
-      },
-      "backup": {
-        "title": "Data backup",
-        "description": "Keep your local prompt library safe and portable.",
-        "items": [
-          "Use the “Export Prompt” button in My Prompts to generate a JSON backup including keywords, tags, and metadata.",
-          "Schedule regular exports and store them securely, especially before upgrading or moving to a new machine.",
-          "Import support is planned in Settings—always back up your current data first to avoid accidental overwrites."
+          "Add or edit model credentials, then run a quick connectivity test before using them.",
+          "Use the data section to export JSON/CSV backups; the card shows when you last exported.",
+          "Moving to a new drive? Update the SQLite path here and restart the app."
         ]
       },
       "troubleshooting": {
-        "title": "Troubleshooting tips",
-        "description": "What to try when something feels off.",
+        "title": "Troubleshooting",
+        "description": "Fix common issues in minutes.",
         "items": [
-          "Captcha failing repeatedly? Refresh the image or reload the page to fetch a new captcha.",
-          "Verification email missing? Wait for the cooldown timer, then resend or check the spam folder.",
-          "Generation timing out? Confirm network connectivity, check the API key in Settings, or reduce request frequency."
+          "Seeing a duplicate-version warning when publishing? Update to the latest build and try again.",
+          "Workbench not responding in local mode? Make sure port 9090 isn’t occupied by another app.",
+          "Need more help? Reach us via the contacts below and attach your exported logs."
         ]
       }
     },
@@ -94,7 +94,15 @@
         }
       ],
       "note": "Questions or ideas? Open an issue or PR – contributions welcome."
-    }
+    },
+    "sectionOrder": [
+      "quickStart",
+      "dashboard",
+      "myPrompts",
+      "workbench",
+      "settings",
+      "troubleshooting"
+    ]
   },
   "logsPage": {
     "eyebrow": "Release notes",
@@ -699,7 +707,7 @@
     "generic": "Something went wrong. Please try again.",
     "BAD_REQUEST": "The request was invalid.",
     "UNAUTHORIZED": "Your session has expired. Please sign in again.",
-    "FORBIDDEN": "You don\u2019t have permission to perform this action.",
+    "FORBIDDEN": "You don’t have permission to perform this action.",
     "NOT_FOUND": "The requested resource was not found.",
     "CONFLICT": "The data you submitted conflicts with existing records.",
     "TOO_MANY_REQUESTS": "You are sending requests too quickly. Please wait a moment.",

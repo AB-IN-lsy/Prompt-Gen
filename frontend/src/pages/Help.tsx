@@ -10,11 +10,11 @@ import {
     ExternalLink,
     LifeBuoy,
     Mail,
-    KeyRound,
+    ClipboardList,
+    LayoutDashboard,
     Rocket,
-    ShieldCheck,
-    Sparkles,
-    HardDrive
+    Settings,
+    Sparkles
 } from "lucide-react";
 
 import { GlassCard } from "../components/ui/glass-card";
@@ -27,12 +27,12 @@ interface HelpSectionContent {
 }
 
 const sectionIcons = {
-    gettingStarted: Rocket,
-    authentication: ShieldCheck,
+    quickStart: Rocket,
+    dashboard: LayoutDashboard,
+    myPrompts: ClipboardList,
     workbench: Sparkles,
-    models: KeyRound,
-    troubleshooting: LifeBuoy,
-    backup: HardDrive
+    settings: Settings,
+    troubleshooting: LifeBuoy
 } as const;
 
 type SectionKey = keyof typeof sectionIcons;
@@ -46,10 +46,13 @@ interface HelpResourceLink {
 export default function HelpPage() {
     const { t } = useTranslation();
 
-    const sectionKeys = useMemo<SectionKey[]>(
-        () => ["gettingStarted", "authentication", "workbench", "models", "backup", "troubleshooting"],
-        []
-    );
+    const sectionKeys = useMemo<SectionKey[]>(() => {
+        const order = t("helpPage.sectionOrder", {
+            returnObjects: true,
+            defaultValue: ["quickStart", "dashboard", "myPrompts", "workbench", "settings", "troubleshooting"]
+        }) as string[];
+        return order.filter((key): key is SectionKey => key in sectionIcons);
+    }, [t]);
 
     const eyebrow = t("helpPage.eyebrow");
     const title = t("helpPage.title");

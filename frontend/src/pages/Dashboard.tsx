@@ -301,14 +301,14 @@ export default function DashboardPage(): JSX.Element {
         return (
             <div
                 key={item.id}
-                className="flex items-start justify-between gap-3 rounded-2xl border border-white/60 bg-white/70 px-4 py-3 shadow-sm transition-colors hover:border-primary/30 hover:bg-white dark:border-slate-800/60 dark:bg-slate-900/50 dark:hover:border-primary/30 dark:hover:bg-slate-900"
+                className="group flex items-start justify-between gap-3 rounded-2xl border border-white/60 bg-white/70 px-4 py-3 shadow-sm transition duration-200 hover:-translate-y-0.5 hover:border-primary/35 hover:bg-primary/5 hover:ring-2 hover:ring-primary/20 hover:ring-offset-2 hover:ring-offset-white dark:border-slate-800/60 dark:bg-slate-900/50 dark:hover:bg-primary/10 dark:hover:ring-offset-slate-900"
             >
                 <div className="space-y-1">
                     <div className="flex flex-wrap items-center gap-2">
                         <button
                             type="button"
                             onClick={() => handleOpenPrompt(item.id)}
-                            className="bg-transparent text-left text-sm font-medium text-slate-900 transition-colors hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 dark:text-slate-100"
+                            className="bg-transparent text-left text-sm font-medium text-slate-900 transition-all duration-200 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 dark:text-slate-100 dark:hover:text-primary-200 group-hover:text-primary group-hover:translate-x-0.5 dark:group-hover:text-primary-200"
                         >
                             {item.topic}
                         </button>
@@ -327,7 +327,7 @@ export default function DashboardPage(): JSX.Element {
                 <Button
                     variant="ghost"
                     size="sm"
-                    className="gap-2 text-xs"
+                    className="gap-2 text-xs transition-colors duration-200 group-hover:text-primary"
                     onClick={() => handleOpenPrompt(item.id)}
                 >
                     <ArrowUpRight className="h-4 w-4" aria-hidden="true" />

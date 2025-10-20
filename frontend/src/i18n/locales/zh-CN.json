@@ -18,83 +18,91 @@
     "title": "使用指南与排障",
     "subtitle": "从注册到日常协作，快速掌握 PromptGen。",
     "sections": {
-      "gettingStarted": {
+      "quickStart": {
         "title": "快速开始",
-        "description": "几分钟内搭建好工作台。",
+        "description": "三步完成环境配置，立刻体验 PromptGen。",
         "items": [
-          "注册时填写图形验证码，完成邮箱验证后即可激活账号。",
-          "邮箱验证完成后登录，仪表盘会展示实时账户状态。",
-          "进入设置上传头像、选择偏好模型，并配置本地数据库路径或导出备份。"
+          "安装客户端后，登录或切换到离线模式进入仪表盘。",
+          "按指引填入模型密钥，看到“连接成功”提示即可开始生成。",
+          "点击“新建 Prompt”进入工作台，熟悉关键词与草稿保存。"
         ]
       },
-      "authentication": {
-        "title": "身份认证流程",
-        "description": "安全与易用兼顾。",
+      "dashboard": {
+        "title": "了解仪表盘",
+        "description": "掌握关键指标与最近动态。",
         "items": [
-          "登录表单提供行内校验与 Toast 提示，成功或失败都会即时反馈。",
-          "邮箱验证面板实时展示剩余重发次数与限流倒计时。",
-          "在 Electron 中点击邮件链接时，可通过验证回调页一键完成登录。"
+          "顶部卡片显示生成次数、草稿数量和成功率，帮助你随时掌握进度。",
+          "“最近访问”列出最近打开的 Prompt，悬停即可看到轻量高亮提示。",
+          "常用操作（继续编辑、发布待办）都在卡片上提供快捷入口。"
+        ]
+      },
+      "myPrompts": {
+        "title": "管理我的 Prompt",
+        "description": "集中浏览草稿与已发布内容。",
+        "items": [
+          "列表默认按更新时间排序，悬停行会出现柔和高亮，方便确认目标。",
+          "每页展示 10 条，可通过列表底部的分页控件翻页。",
+          "随时导出 JSON 备份，删除前会进行确认以免误操作。"
         ]
       },
       "workbench": {
-        "title": "Prompt 工作台",
-        "description": "用关键词治理高效迭代 Prompt。",
+        "title": "掌握 Prompt 工作台",
+        "description": "关键词治理与自动草稿的核心舞台。",
         "items": [
-          "按当前主题获取 AI 推荐关键词，并可随时重新生成。",
-          "分离正向与负向关键词，调整权重并自动保存草稿。",
-          "默认使用 DeepSeek 模型生成 Prompt，若模型被禁用会自动回退并提示。"
+          "输入主题或需求描述即可获取 AI 推荐的正、负向关键词。",
+          "在编辑区停止输入大约 10 秒，草稿会自动保存，不必担心丢失。",
+          "点击“保存草稿”或“发布”时，系统会提示当前状态并记录版本。"
         ]
       },
-      "models": {
-        "title": "模型凭据",
-        "description": "安全管理 DeepSeek 等提供方的 API Key。",
+      "settings": {
+        "title": "设置与模型管理",
+        "description": "安全管理模型、凭据与数据路径。",
         "items": [
-          "凭据使用 AES-256-GCM 加密静态存储，保障敏感信息安全。",
-          "支持启用、禁用或删除模型，并即时更新偏好模型。",
-          "可在卡片上直接测试连通性，并查看最近一次验证时间。"
-        ]
-      },
-      "backup": {
-        "title": "数据备份",
-        "description": "确保本地 Prompt 资产安全可靠。",
-        "items": [
-          "在“我的 Prompt”列表点击“导出 Prompt”即可生成 JSON 备份，包含关键词、标签等核心字段。",
-          "建议定期导出并存放到安全位置，升级或迁移设备前务必完成一次最新备份。",
-          "后续可在设置页引入导入接口，导入前请先备份当前数据以免覆盖重要内容。"
+          "新增或编辑模型凭据时，可以一键测试连通性，成功后自动生效。",
+          "数据导出区提供 JSON/CSV 备份，页面会显示最近一次导出时间。",
+          "需要迁移数据库文件时，可在此调整 SQLite 路径并重启应用。"
         ]
       },
       "troubleshooting": {
-        "title": "排障小贴士",
-        "description": "遇到问题时可先检查这些步骤。",
+        "title": "排障指南",
+        "description": "常见问题的快速解决方法。",
         "items": [
-          "验证码多次失败？刷新图片或刷新页面重新获取新的验证码。",
-          "没有收到验证邮件？等待冷却结束后重发，并检查垃圾箱。",
-          "生成超时？确认网络可用，并在设置页检查 API Key 状态或适当降低调用频次。"
+          "发布时提示重复版本号？升级到最新版后即可自动修复。",
+          "工作台无响应时，检查端口 9090 是否被其他程序占用。",
+          "仍未解决？使用下方联系方式反馈，并附上导出的日志文件。"
         ]
       }
     },
-      "resources": {
-        "title": "更多资源",
-        "description": "探索由 AB-IN 维护的资料、源码与支持渠道。",
-        "contacts": [
-          {
-            "label": "AB-IN CSDN 博客 · ab-in.blog.csdn.net",
-            "href": "https://ab-in.blog.csdn.net/",
-            "type": "external"
-          },
-          {
-            "label": "GitHub · AB-IN/Prompt-Gen",
-            "href": "https://github.com/AB-IN-lsy/Prompt-Gen",
-            "type": "external"
-          },
-          {
-            "label": "邮箱 · ab-in-liusy@outlook.com",
-            "href": "mailto:ab-in-liusy@outlook.com",
-            "type": "email"
-          }
-        ],
-        "note": "欢迎提交 Issue 与 PR，一起完善 PromptGen。"
-      }
+    "resources": {
+      "title": "更多资源",
+      "description": "探索由 AB-IN 维护的资料、源码与支持渠道。",
+      "contacts": [
+        {
+          "label": "AB-IN CSDN 博客 · ab-in.blog.csdn.net",
+          "href": "https://ab-in.blog.csdn.net/",
+          "type": "external"
+        },
+        {
+          "label": "GitHub · AB-IN/Prompt-Gen",
+          "href": "https://github.com/AB-IN-lsy/Prompt-Gen",
+          "type": "external"
+        },
+        {
+          "label": "邮箱 · ab-in-liusy@outlook.com",
+          "href": "mailto:ab-in-liusy@outlook.com",
+          "type": "email"
+        }
+      ],
+      "note": "欢迎提交 Issue 与 PR，一起完善 PromptGen。"
+    },
+    "sectionOrder": [
+      "quickStart",
+      "dashboard",
+      "myPrompts",
+      "workbench",
+      "settings",
+      "troubleshooting"
+    ]
   },
   "logsPage": {
     "eyebrow": "版本更新",

@@ -59,11 +59,12 @@ import {
   PROMPT_TAG_LIMIT,
   PROMPT_TAG_MAX_LENGTH,
   PROMPT_AI_GENERATE_MIN_DURATION_MS,
+  PROMPT_AUTOSAVE_DELAY_MS,
+  DEFAULT_KEYWORD_WEIGHT,
 } from "../config/prompt";
 import {
   augmentPromptKeywords,
   createManualPromptKeyword,
-  fetchKeywords,
   fetchUserModels,
   generatePromptPreview,
   interpretPromptDescription,
@@ -84,7 +85,6 @@ import {
 import { ApiError } from "../lib/errors";
 import { usePromptWorkbench } from "../hooks/usePromptWorkbench";
 import { useAuth } from "../hooks/useAuth";
-import { DEFAULT_KEYWORD_WEIGHT } from "../config/prompt";
 import { PageHeader } from "../components/layout/PageHeader";
 
 const clampWeight = (value?: number): number => {
@@ -250,6 +250,13 @@ export default function PromptWorkbenchPage() {
   const generateToastId = useRef<string | number | null>(null);
   const generationStartRef = useRef<number>(0);
   const generationDelayTimeoutRef = useRef<number | null>(null);
+  const autosaveTimerRef = useRef<number | null>(null);
+  const autosavePendingRef = useRef(false);
+  const lastSavedSignatureRef = useRef<string>("");
+  const autosaveSignatureRef = useRef<string>("");
+  const triggerAutoSaveRef = useRef<() => void>(() => {});
+  const hasInitialSignatureRef = useRef(false);
+  const previousPromptIdRef = useRef<string | null>(null);
   const clearDropIndicator = useCallback(() => {
     setDropIndicator((previous) => (previous ? null : previous));
   }, []);
@@ -380,6 +387,29 @@ export default function PromptWorkbenchPage() {
   const syncSignature = useMemo(
     () => buildSignature(positiveKeywords, negativeKeywords),
     [buildSignature, negativeKeywords, positiveKeywords],
+  );
+
+  const autosaveFingerprint = useMemo(
+    () =>
+      JSON.stringify({
+        topic: topic.trim(),
+        prompt: prompt.trim(),
+        instructions: instructions.trim(),
+        model: model.trim(),
+        tags: tags.map((tag) => tag.value.trim()),
+        positive: serializeKeywords(positiveKeywords),
+        negative: serializeKeywords(negativeKeywords),
+      }),
+    [
+      instructions,
+      model,
+      negativeKeywords,
+      positiveKeywords,
+      prompt,
+      serializeKeywords,
+      tags,
+      topic,
+    ],
   );
 
   const lastSyncedSignature = useRef<string>("");
@@ -673,6 +703,29 @@ export default function PromptWorkbenchPage() {
   }, [syncSignature]);
 
   useEffect(() => {
+    autosaveSignatureRef.current = autosaveFingerprint;
+  }, [autosaveFingerprint]);
+
+  useEffect(() => {
+    const currentId = promptId ?? null;
+    if (previousPromptIdRef.current !== currentId) {
+      previousPromptIdRef.current = currentId;
+      hasInitialSignatureRef.current = false;
+    }
+    if (!currentId) {
+      return;
+    }
+    if (
+      !hasInitialSignatureRef.current &&
+      topic.trim() &&
+      prompt.trim()
+    ) {
+      lastSavedSignatureRef.current = autosaveSignatureRef.current;
+      hasInitialSignatureRef.current = true;
+    }
+  }, [promptId, prompt, topic]);
+
+  useEffect(() => {
     return () => {
       if (generationDelayTimeoutRef.current !== null) {
         window.clearTimeout(generationDelayTimeoutRef.current);
@@ -763,34 +816,6 @@ export default function PromptWorkbenchPage() {
     },
     [keywordLimit, t],
   );
-
-  const keywordQuery = useQuery<Keyword[]>({
-    queryKey: ["keywords", topic],
-    queryFn: () => fetchKeywords({ topic }),
-    enabled: Boolean(topic),
-  });
-
-  useEffect(() => {
-    if (keywordQuery.data) {
-      const { limited, trimmedPositive, trimmedNegative } =
-        limitKeywordCollections(keywordQuery.data);
-      setKeywords(limited);
-      notifyKeywordTrim(trimmedPositive, trimmedNegative);
-      const nextPositive = limited.filter(
-        (item) => item.polarity === "positive",
-      );
-      const nextNegative = limited.filter(
-        (item) => item.polarity === "negative",
-      );
-      updateSignatureBaseline(nextPositive, nextNegative);
-    }
-  }, [
-    keywordQuery.data,
-    limitKeywordCollections,
-    notifyKeywordTrim,
-    updateSignatureBaseline,
-    setKeywords,
-  ]);
 
   const modelsQuery = useQuery<UserModelCredential[]>({
     queryKey: ["models"],
@@ -1143,6 +1168,7 @@ export default function PromptWorkbenchPage() {
         toast.success(
           t("promptWorkbench.generateSuccess", { defaultValue: "生成完成" }),
         );
+        triggerAutoSaveRef.current();
       });
     },
     onError: (error: unknown) => {
@@ -1200,6 +1226,7 @@ export default function PromptWorkbenchPage() {
         setPromptId(String(response.prompt_id));
       }
       setWorkspaceToken(response.workspace_token ?? workspaceToken ?? null);
+      lastSavedSignatureRef.current = autosaveSignatureRef.current;
       if (response.task_id) {
         toast.success(
           t("promptWorkbench.saveQueued", {
@@ -1219,7 +1246,13 @@ export default function PromptWorkbenchPage() {
           : t("errors.generic");
       toast.error(message);
     },
-    onSettled: () => setSaving(false),
+    onSettled: () => {
+      setSaving(false);
+      if (autosavePendingRef.current) {
+        autosavePendingRef.current = false;
+        triggerAutoSaveRef.current();
+      }
+    },
   });
 
   const modelPreferenceMutation = useMutation({
@@ -1234,6 +1267,65 @@ export default function PromptWorkbenchPage() {
       toast.error(message);
     },
   });
+
+  const triggerAutoSave = useCallback(() => {
+    if (!topic.trim() || !prompt.trim()) {
+      return;
+    }
+    if (autosaveSignatureRef.current === lastSavedSignatureRef.current) {
+      return;
+    }
+    if (savePromptMutation.isPending) {
+      autosavePendingRef.current = true;
+      return;
+    }
+    autosavePendingRef.current = false;
+    savePromptMutation.mutateAsync(false).catch(() => {
+      // 错误提示已在 mutation 内统一处理
+    });
+  }, [prompt, savePromptMutation, topic]);
+
+  useEffect(() => {
+    triggerAutoSaveRef.current = triggerAutoSave;
+  }, [triggerAutoSave]);
+
+  useEffect(() => {
+    if (autosaveTimerRef.current !== null) {
+      window.clearTimeout(autosaveTimerRef.current);
+      autosaveTimerRef.current = null;
+    }
+
+    if (!topic.trim() || !prompt.trim()) {
+      return;
+    }
+
+    if (autosaveFingerprint === lastSavedSignatureRef.current) {
+      return;
+    }
+
+    if (savePromptMutation.isPending) {
+      autosavePendingRef.current = true;
+      return;
+    }
+
+    autosaveTimerRef.current = window.setTimeout(() => {
+      autosaveTimerRef.current = null;
+      triggerAutoSaveRef.current();
+    }, PROMPT_AUTOSAVE_DELAY_MS);
+
+    return () => {
+      if (autosaveTimerRef.current !== null) {
+        window.clearTimeout(autosaveTimerRef.current);
+        autosaveTimerRef.current = null;
+      }
+    };
+  }, [
+    autosaveFingerprint,
+    prompt,
+    savePromptMutation.isPending,
+    topic,
+    PROMPT_AUTOSAVE_DELAY_MS,
+  ]);
 
   const handleModelSelect = (nextModel: string) => {
     if (model === nextModel) return;

@@ -69,3 +69,13 @@ export const PROMPT_AI_GENERATE_MIN_DURATION_MS =
   Number.isInteger(rawAIGenerateMinDuration) && rawAIGenerateMinDuration > 0
     ? rawAIGenerateMinDuration
     : 2000;
+
+const rawAutosaveDelay = Number.parseInt(
+  import.meta.env.VITE_PROMPT_AUTOSAVE_DELAY_MS ?? "",
+  10,
+);
+
+export const PROMPT_AUTOSAVE_DELAY_MS =
+  Number.isInteger(rawAutosaveDelay) && rawAutosaveDelay > 0
+    ? rawAutosaveDelay
+    : 10000;

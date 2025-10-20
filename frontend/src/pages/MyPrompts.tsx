@@ -492,13 +492,13 @@ function PromptRow({
   const statusLabel = t(`myPrompts.statusBadge.${item.status}`);
   const formattedUpdatedAt = formatDateTime(item.updated_at, locale);
   return (
-    <tr className="bg-white/40 transition hover:bg-white/70 dark:bg-slate-900/40 dark:hover:bg-slate-900/60">
+    <tr className="group bg-white/40 transition duration-200 hover:-translate-y-0.5 hover:bg-primary/5 hover:shadow-[0_8px_20px_-10px_rgba(59,130,246,0.35)] hover:ring-2 hover:ring-primary/25 hover:ring-offset-2 hover:ring-offset-white dark:bg-slate-900/40 dark:hover:bg-primary/10 dark:hover:ring-offset-slate-900">
       <td className="px-6 py-4 align-top">
         <div className="flex flex-col gap-1">
           <button
             type="button"
             onClick={onView}
-            className="bg-transparent text-left text-sm font-semibold text-slate-800 transition-colors hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 dark:text-slate-100"
+            className="bg-transparent text-left text-sm font-semibold text-slate-800 transition-all duration-200 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 dark:text-slate-100 dark:hover:text-primary-200 group-hover:text-primary group-hover:translate-x-1 dark:group-hover:text-primary-200"
           >
             {item.topic}
           </button>

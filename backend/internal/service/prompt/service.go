@@ -1661,7 +1661,6 @@ func (s *Service) updatePromptRecord(ctx context.Context, input SaveInput, statu
 	if err != nil {
 		return SaveOutput{}, fmt.Errorf("encode tags: %w", err)
 	}
-	wasPublished := entity.Status == promptdomain.PromptStatusPublished
 	entity.Topic = sanitizedTopic
 	entity.Body = input.Body
 	entity.Instructions = input.Instructions
@@ -1671,11 +1670,20 @@ func (s *Service) updatePromptRecord(ctx context.Context, input SaveInput, statu
 	entity.Status = status
 	entity.Tags = string(encodedTags)
 	if status == promptdomain.PromptStatusPublished {
-		if wasPublished {
-			entity.LatestVersionNo++
-		} else {
-			entity.LatestVersionNo = 1
+		currentVersion := entity.LatestVersionNo
+		if entity.ID != 0 {
+			maxVersion, err := s.prompts.MaxVersionNo(ctx, entity.ID)
+			if err != nil {
+				return SaveOutput{}, fmt.Errorf("load prompt version: %w", err)
+			}
+			if maxVersion > currentVersion {
+				currentVersion = maxVersion
+			}
 		}
+		if currentVersion < 0 {
+			currentVersion = 0
+		}
+		entity.LatestVersionNo = currentVersion + 1
 		now := time.Now()
 		entity.PublishedAt = &now
 	}
