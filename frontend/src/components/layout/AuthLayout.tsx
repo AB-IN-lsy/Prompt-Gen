@@ -7,6 +7,8 @@
 import { ReactNode } from "react";
 import { Sparkles } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { TitleBar } from "./TitleBar";
+import { DesktopContextMenu } from "../system/DesktopContextMenu";
 
 interface AuthLayoutProps {
     title: string;
@@ -19,6 +21,8 @@ export function AuthLayout({ title, subtitle, children }: AuthLayoutProps) {
 
     return (
         <div className="flex min-h-screen flex-col bg-[var(--bg)] text-[var(--fg)] transition-colors">
+            <TitleBar />
+            <DesktopContextMenu />
             <div className="flex flex-1 flex-col items-center justify-center px-4 py-12">
                 <div className="mb-12 flex items-center gap-3 text-primary">
                     <Sparkles className="h-8 w-8" />

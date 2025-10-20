@@ -13,6 +13,7 @@ import { Settings, HelpCircle, LayoutDashboard, Sparkles, LogOut, ListChecks, Fi
 import { Button } from "../ui/button";
 import { useAuth } from "../../hooks/useAuth";
 import { TitleBar } from "./TitleBar";
+import { DesktopContextMenu } from "../system/DesktopContextMenu";
 
 // 侧边导航基础配置：labelKey 与翻译 key 对应，icon 控制导航图标。
 const baseNavItems = [
@@ -121,6 +122,7 @@ export function AppShell({ children, rightSlot }: AppShellProps) {
     return (
         <div className="flex h-screen w-screen flex-col bg-[var(--bg)] text-[var(--fg)] transition-colors">
             <TitleBar />
+            <DesktopContextMenu />
             <div className="flex flex-1 overflow-hidden">
                 <aside className="hidden w-56 shrink-0 border-r border-white/40 bg-white/70 px-4 py-6 backdrop-blur-2xl transition-colors dark:border-slate-800/70 dark:bg-slate-900/60 md:flex md:flex-col">
                     {/* 顶部品牌区：展示应用名称与图标 */}
