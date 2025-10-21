@@ -1499,7 +1499,7 @@ export default function PromptWorkbenchPage() {
           defaultValue: "Prompt 工作台",
         })}
         title={t("promptWorkbench.workbenchTitle", {
-          defaultValue: "打造你的面试脚本",
+          defaultValue: "打造你的 Prompt 工作台",
         })}
         description={t("promptWorkbench.workbenchSubtitle", {
           defaultValue: "从解析需求到发布 Prompt 的一站式工作区。",

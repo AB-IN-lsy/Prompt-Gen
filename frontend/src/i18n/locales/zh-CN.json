@@ -270,7 +270,7 @@
     "negativeSectionTitle": "负向关键词",
     "emptySection": "暂无{{title}}，可通过“添加关键词”迅速补充。",
     "workbenchEyebrow": "Prompt 工作台",
-    "workbenchTitle": "打造你的面试脚本",
+    "workbenchTitle": "打造你的 Prompt 工作台",
     "workbenchSubtitle": "从解析需求到补充关键词、生成与发布的一站式流程。",
     "regenerate": "再次生成",
     "topicLabel": "主题",
