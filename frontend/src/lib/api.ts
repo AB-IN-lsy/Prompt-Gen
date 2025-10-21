@@ -138,6 +138,17 @@ export interface PromptExportResult {
   generatedAt: string;
 }
 
+export interface PromptImportError {
+  topic: string;
+  reason: string;
+}
+
+export interface PromptImportResult {
+  importedCount: number;
+  skippedCount: number;
+  errors: PromptImportError[];
+}
+
 export interface PromptVersionSummary {
   versionNo: number;
   model: string;
@@ -825,6 +836,43 @@ export async function exportPrompts(): Promise<PromptExportResult> {
           ? data.prompt_count
           : 0,
       generatedAt: data.generated_at ?? "",
+    };
+  } catch (error) {
+    throw normaliseError(error);
+  }
+}
+
+/** 导入导出的 Prompt JSON 文件，支持合并或覆盖模式。 */
+export async function importPrompts(
+  file: File,
+  mode: "merge" | "overwrite" = "merge",
+): Promise<PromptImportResult> {
+  const formData = new FormData();
+  formData.append("file", file);
+  formData.append("mode", mode);
+  try {
+    const response: AxiosResponse<{
+      imported_count?: number;
+      skipped_count?: number;
+      errors?: Array<{ topic?: string; reason?: string }>;
+    }> = await http.post("/prompts/import", formData, {
+      params: { mode },
+    });
+    const data = response.data ?? {};
+    const errors = (data.errors ?? []).map((item) => ({
+      topic: item.topic ?? "",
+      reason: item.reason ?? "",
+    }));
+    return {
+      importedCount:
+        typeof data.imported_count === "number" && Number.isFinite(data.imported_count)
+          ? data.imported_count
+          : 0,
+      skippedCount:
+        typeof data.skipped_count === "number" && Number.isFinite(data.skipped_count)
+          ? data.skipped_count
+          : 0,
+      errors,
     };
   } catch (error) {
     throw normaliseError(error);

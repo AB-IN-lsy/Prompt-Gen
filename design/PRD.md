@@ -141,6 +141,7 @@
   - 默认保存为 `draft` 状态，自动本地草稿保存（停顿 10 秒后触发，可通过 `VITE_PROMPT_AUTOSAVE_DELAY_MS` 调整），用户显式点击“发布”后才变为 `published` 并记录新的版本快照。
   - 发布时需读取已存在的最大版本号并在其基础上递增，确保与历史 `prompt_versions` 记录一致，避免重复版本插入导致的唯一键冲突。
   - 历史版本保留最近 3 版，可回滚，回滚后生成新的 `draft` 版本记录。
+  - 版本号策略：首次仅保存草稿时版本号保持为 `0`；首次发布写入版本 `1`；发布后的再次保存草稿不会改变版本号，下一次发布会在历史最大版本基础上顺延 +1，保证序号连续。
   - `positive_keywords` / `negative_keywords` 仍保存为 JSON 数组，元素结构扩展为 `{ "keyword_id": number, "word": string, "weight": number, "source": string }`；SQLite 可直接使用 JSON 类型并默认 `[]`，MySQL 5.7 使用 `TEXT` 存储序列化结果，服务端需保证空数组写为 `'[]'`。
 
 ### 4.5 本地存储

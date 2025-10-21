@@ -126,6 +126,11 @@ go test -tags=integration ./backend/tests/integration   # 需要真实依赖
 go test -tags=e2e ./backend/tests/e2e                   # 命中线上接口时再运行
 ```
 
+### 数据导出 / 导入
+
+- `POST /api/prompts/export`：导出当前用户的 Prompt，Electron 客户端会在“我的 Prompt”页面提供按钮并显示导出路径。
+- `POST /api/prompts/import`：上传导出的 JSON 文件，可合并或覆盖现有 Prompt；前端会展示导入统计以及失败条目列表，便于逐项修复。
+
 ## 常用脚本速查
 
 | 命令 | 作用 |

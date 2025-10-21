@@ -319,6 +319,23 @@
       "timeLabel": "Exported at {{date}} {{time}}",
       "countLabel": "Entries: {{count}}"
     },
+    "import": {
+      "button": "Import prompts",
+      "loading": "Importing...",
+      "modeLabel": "Mode",
+      "modeMerge": "Merge",
+      "modeOverwrite": "Overwrite",
+      "success": "Imported {{count}} prompts, skipped {{skipped}}.",
+      "partial": "Imported {{count}} prompts, skipped {{skipped}}. {{errorCount}} entries reported errors.",
+      "failed": "Failed to import prompts. Please try again later.",
+      "noticeTitle": "Latest import",
+      "summary": "Imported {{count}} prompts, skipped {{skipped}}.",
+      "errorListHeading": "Failed entries ({{count}} total)",
+      "unknownTopic": "Untitled topic",
+      "moreErrors": "{{remaining}} more errors. See notification for details.",
+      "resultBadge": "Imported: {{count}}",
+      "errorHint": "Some prompts could not be imported"
+    },
     "listTitle": "Saved prompts",
     "searchPlaceholder": "Search topics or tags",
     "statusFilter": {

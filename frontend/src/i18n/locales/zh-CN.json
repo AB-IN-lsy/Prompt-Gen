@@ -319,6 +319,23 @@
       "timeLabel": "导出时间：{{date}} {{time}}",
       "countLabel": "包含条目：{{count}}"
     },
+    "import": {
+      "button": "导入 Prompt",
+      "loading": "正在导入",
+      "modeLabel": "导入模式",
+      "modeMerge": "合并",
+      "modeOverwrite": "覆盖",
+      "success": "成功导入 {{count}} 条 Prompt，跳过 {{skipped}} 条。",
+      "partial": "导入 {{count}} 条 Prompt，跳过 {{skipped}} 条，其中 {{errorCount}} 条出现错误。",
+      "failed": "导入 Prompt 时发生错误，请稍后重试。",
+      "noticeTitle": "最近一次导入",
+      "summary": "成功导入 {{count}} 条 Prompt，跳过 {{skipped}} 条。",
+      "errorListHeading": "以下条目导入失败（共 {{count}} 条）",
+      "unknownTopic": "未命名主题",
+      "moreErrors": "另外还有 {{remaining}} 条错误，详见通知。",
+      "resultBadge": "导入成功：{{count}} 条",
+      "errorHint": "部分 Prompt 导入失败"
+    },
     "listTitle": "Prompt 列表",
     "searchPlaceholder": "搜索主题或标签",
     "statusFilter": {
