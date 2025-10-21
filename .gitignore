@@ -80,7 +80,9 @@ Thumbs.db
 # avatar images
 backend/public/avatars/*
 !backend/public/avatars/.gitkeep
-/docs
+docs/*
+!docs/assets/
+!docs/assets/**
 
 # certificate files
 mycert*

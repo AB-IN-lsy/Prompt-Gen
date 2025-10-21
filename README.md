@@ -1,6 +1,23 @@
 # Prompt Gen Desktop
 
+![GitHub Stars](https://img.shields.io/github/stars/AB-IN-lsy/Prompt-Gen?style=social)
+![GitHub Forks](https://img.shields.io/github/forks/AB-IN-lsy/Prompt-Gen?style=social)
+![GitHub Issues](https://img.shields.io/github/issues/AB-IN-lsy/Prompt-Gen)
+![Visitors](https://komarev.com/ghpvc/?username=AB-IN-lsy&repo=Prompt-Gen&style=flat-square)
+
 Prompt Gen Desktop 是一套以 Electron 为外壳、Go 为后端、Vite/React 为前端的提示词管理工作台，面向需要系统化维护 Prompt 的产品、运营与研发团队。应用通过桌面端封装、后端 API 与前端治理模块，为需求解析、关键词管理、模型凭据维护等场景提供统一体验。
+
+## 演示视频
+
+<video controls width="640" src="docs/assets/demo1.mp4">
+  你的浏览器不支持内嵌播放，请下载 <a href="docs/assets/demo1.mp4">demo1.mp4</a> 查看。
+</video>
+
+<video controls width="640" src="docs/assets/demo2.mp4">
+  你的浏览器不支持内嵌播放，请下载 <a href="docs/assets/demo2.mp4">demo2.mp4</a> 查看。
+</video>
+
+> 若在 GitHub 页面无法直接播放，请右键链接选择“在新标签页打开”，或至本地仓库的 `docs/assets/` 目录离线查看。
 
 ## 发布形态
 
