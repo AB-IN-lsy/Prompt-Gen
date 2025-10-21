@@ -22,6 +22,8 @@
 - 启动流程拆分为 `internal/app.InitResources`（负责连接/迁移）与 `internal/bootstrap.BuildApplication`（负责装配依赖），提升职责清晰度。
 - 新增 `/api/models` 系列接口，支持模型凭据的创建、查看、更新与删除，API Key 会在入库前加密。
 - 引入 `MODEL_CREDENTIAL_MASTER_KEY` 环境变量，使用 AES-256-GCM 加解密用户提交的模型凭据。
+- 新增 `POST /api/prompts/import`，可上传导出的 JSON 文件并选择“合并/覆盖”模式批量回灌 Prompt，导入批大小由 `PROMPT_IMPORT_BATCH_SIZE` 控制。
+- Prompt 版本号策略：首次仅保存草稿不会产生版本（`latest_version_no=0`），首次发布才会生成版本 1；发布后再保存草稿不改变版本号，下次发布时会遍历历史版本取最大值再 +1，保证序号连续递增。
 - 数据库自动迁移包含 `user_model_credentials` 与 `changelog_entries` 表，服务启动即可创建所需数据结构。
 - 模型凭据禁用或删除时，会自动清理用户偏好的 `preferred_model`，避免指向不可用的模型；`PUT /api/users/me` 也会验证偏好模型是否存在并已启用。
 - 新增 `infra/model/deepseek` 模块与 `Service.InvokeChatCompletion`，可使用存量凭据直接向接入的大模型发起调用（当前支持 DeepSeek / 火山引擎）。
@@ -108,6 +110,7 @@
 | `PROMPT_LIST_PAGE_SIZE` | “我的 Prompt”列表默认每页数量，默认 `20` |
 | `PROMPT_LIST_MAX_PAGE_SIZE` | “我的 Prompt”列表单页最大数量，默认 `100` |
 | `PROMPT_USE_FULLTEXT` | 设置为 `1` 时使用 FULLTEXT 检索（需提前创建 `ft_prompts_topic_tags` 索引） |
+| `PROMPT_IMPORT_BATCH_SIZE` | 导入 Prompt 时单批处理的最大条数，默认 `20` |
 
 > ❗ **排障提示**：如果日志中出现  
 > `decode interpretation response: json: cannot unmarshal array into Go struct`，说明模型把 `instructions` 字段生成为数组。现有实现已兼容数组与字符串两种格式；若自定义提示词，请确保仍返回 JSON 对象，并将补充要求放在 `instructions` 字段（字符串或字符串数组均可）。
@@ -215,6 +218,7 @@ go run ./backend/cmd/sendmail -to you@example.com -name "测试账号"
 | `POST` | `/api/prompts/keywords/sync` | 同步排序与权重到工作区 | JSON：`workspace_token`、`positive_keywords[]`、`negative_keywords[]`（元素含 `word`、`polarity`、`weight`） |
 | `GET` | `/api/prompts` | 获取当前用户的 Prompt 列表 | Query：`status`（可选，draft/published）、`q`（模糊搜索 topic/tags）、`page`、`page_size` |
 | `POST` | `/api/prompts/export` | 导出当前用户的 Prompt 并返回本地保存路径 | 无 |
+| `POST` | `/api/prompts/import` | 导入导出的 Prompt JSON（支持合并/覆盖模式） | multipart：`file`（JSON 文件）、`mode`（可选，merge/overwrite）；或直接提交 JSON 正文 |
 | `GET` | `/api/prompts/:id` | 获取单条 Prompt 详情并返回最新工作区 token | 无 |
 | `GET` | `/api/prompts/:id/versions` | 列出指定 Prompt 的历史版本 | Query：`limit`（可选，默认保留配置中的数量） |
 | `GET` | `/api/prompts/:id/versions/:version` | 获取指定版本的完整内容 | 无 |
@@ -789,6 +793,33 @@ ALTER TABLE prompts
 
 - **备注**：导出目录通过 `PROMPT_EXPORT_DIR` 配置，默认写入 `data/exports`，首次导出会自动创建目录。
 
+#### POST /api/prompts/import
+
+- **用途**：将 `POST /api/prompts/export` 生成的 JSON 文件导入当前账号，可选择“合并”（默认）或“覆盖”已有 Prompt。
+- **请求方式**：
+  - `multipart/form-data`：`file`（必填，导出的 JSON 文件）、`mode`（可选，`merge` / `overwrite`）。
+  - 或直接以 `application/json` 提交导出文件的原始内容，同时通过查询字符串 `?mode=merge` 指定模式。
+- **成功响应**：`200`
+
+  ```json
+  {
+    "success": true,
+    "data": {
+      "imported_count": 8,
+      "skipped_count": 1,
+      "errors": [
+        { "topic": "React 面试", "reason": "topic is required" }
+      ]
+    }
+  }
+  ```
+
+- **说明**：
+  - 覆盖模式会在导入前调用 `DeleteByUser` 清理该用户的所有 Prompt、关联关键词与历史版本；关键词字典按需增量更新。
+  - 正/负关键词、标签、正文等字段会走与 `POST /api/prompts` 相同的校验逻辑；不符合要求的条目会加入 `errors` 列表并跳过。
+  - 导入批处理大小由 `PROMPT_IMPORT_BATCH_SIZE` 控制，默认每批 20 条，并会在日志中输出进度。
+  - 历史版本无法完整恢复时，服务会创建一条最新版本快照，版本号沿用导出文件中的 `latest_version_no`。
+
 #### DELETE /api/prompts/:id
 
 - **用途**：删除指定 Prompt 及其关联的关键词关系、历史版本。
@@ -1094,7 +1125,8 @@ backend/
 ### Redis 工作区模型
 
 - **工作区标识**：`prompt:workspace:{userID}:{workspaceToken}`（Hash），存储 `topic`、`language`、`model_key`、`draft_body`、`updated_at` 等元数据。  
-- **正/负关键词集合**：`prompt:workspace:{userID}:{workspaceToken}:positive` / `:negative`（ZSET），`member` 为小写 `word`，`score` 可存储权重或 `unix timestamp`。实际关键词内容存放在 Hash `prompt:workspace:{userID}:{workspaceToken}:keywords` 中，字段为 `polarity|word`，值为 JSON（包含 `source`、`weight`、`display_word` 等）。  
+- **正/负关键词集合**：`prompt:workspace:{userID}:{workspaceToken}:positive` / `:negative`（ZSET），`member` 为小写 `word`，`score` 用于记录当前排序（拖拽后按提交顺序递增）。实际关键词内容存放在 Hash `prompt:workspace:{userID}:{workspaceToken}:keywords` 中，字段为 `polarity|word`，值为 JSON（包含 `source`、`weight`、`display_word` 等）。  
+- **关键词同步**：`MergeKeywords`/`replaceKeywords` 会通过 `TxPipeline()` 打开 `MULTI/EXEC`，先写 Hash（来源、权重）再写 ZSET 顺序，任一步失败都会 `Discard`，确保拖拽或调权时 Hash 与 ZSET 不会一半成功一半失败。当前 score 简单使用数组下标递增，纯粹用于保持排序。  
 - **Prompt 元信息**：Hash 额外缓存 `prompt_id` 与 `status`（draft/published），创建或更新成功后立即写回，保证前端后续的保存/发布可以基于同一条记录继续编辑。  
 - **TTL 策略**：工作区默认保留 30~60 分钟未操作即自动过期；每次写操作需刷新 TTL，避免活跃编辑被提前清理。  
 - **并发控制**：使用 `WATCH`/`MULTI` 或 Lua 保证批量写入的原子性；对于生成/保存操作，在将任务入队前记录 `version` 字段，worker 按版本校验，防止旧任务覆盖新内容。  

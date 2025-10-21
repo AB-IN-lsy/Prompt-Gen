@@ -3,6 +3,7 @@ package handler
 import (
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"strconv"
 	"strings"
@@ -247,6 +248,44 @@ func (h *PromptHandler) ExportPrompts(c *gin.Context) {
 		"file_path":    result.FilePath,
 		"prompt_count": result.PromptCount,
 		"generated_at": result.GeneratedAt,
+	}, nil)
+}
+
+// ImportPrompts 读取导出文件内容并批量导入 Prompt 数据。
+func (h *PromptHandler) ImportPrompts(c *gin.Context) {
+	log := h.scope("import")
+	userID, ok := extractUserID(c)
+	if !ok {
+		response.Fail(c, http.StatusUnauthorized, response.ErrUnauthorized, "missing user id", nil)
+		return
+	}
+
+	mode := strings.TrimSpace(c.Query("mode"))
+	if mode == "" {
+		mode = strings.TrimSpace(c.PostForm("mode"))
+	}
+
+	payload, err := h.readImportPayload(c)
+	if err != nil {
+		response.Fail(c, http.StatusBadRequest, response.ErrBadRequest, "导入数据读取失败", gin.H{"detail": err.Error()})
+		return
+	}
+
+	result, err := h.service.ImportPrompts(c.Request.Context(), promptsvc.ImportPromptsInput{
+		UserID:  userID,
+		Mode:    mode,
+		Payload: payload,
+	})
+	if err != nil {
+		log.Errorw("import prompts failed", "error", err, "user_id", userID)
+		response.Fail(c, http.StatusInternalServerError, response.ErrInternal, "导入 Prompt 失败", nil)
+		return
+	}
+
+	response.Success(c, http.StatusOK, gin.H{
+		"imported_count": result.Imported,
+		"skipped_count":  result.Skipped,
+		"errors":         result.Errors,
 	}, nil)
 }
 
@@ -766,6 +805,35 @@ func (h *PromptHandler) allow(c *gin.Context, key string, limit int, window time
 	retry := int(res.RetryAfter.Seconds())
 	response.Fail(c, http.StatusTooManyRequests, response.ErrTooManyRequests, "请求过于频繁，请稍后再试", gin.H{"retry_after_seconds": retry})
 	return false
+}
+
+// readImportPayload 负责从请求中提取导入文件的原始内容。
+func (h *PromptHandler) readImportPayload(c *gin.Context) ([]byte, error) {
+	contentType := c.ContentType()
+	if strings.HasPrefix(contentType, "multipart/form-data") {
+		file, err := c.FormFile("file")
+		if err != nil {
+			return nil, fmt.Errorf("缺少导入文件: %w", err)
+		}
+		src, err := file.Open()
+		if err != nil {
+			return nil, fmt.Errorf("打开导入文件失败: %w", err)
+		}
+		defer func() { _ = src.Close() }()
+		data, err := io.ReadAll(src)
+		if err != nil {
+			return nil, fmt.Errorf("读取导入文件失败: %w", err)
+		}
+		return data, nil
+	}
+	data, err := io.ReadAll(c.Request.Body)
+	if err != nil {
+		return nil, fmt.Errorf("读取导入内容失败: %w", err)
+	}
+	if len(data) == 0 {
+		return nil, errors.New("导入内容为空")
+	}
+	return data, nil
 }
 
 // scope 派生带行动标签的日志实例，便于排查具体操作。

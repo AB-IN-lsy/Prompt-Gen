@@ -317,6 +317,7 @@ func loadPromptConfig(logger *zap.SugaredLogger) promptsvc.Config {
 		UseFullTextSearch:   parseBoolEnv("PROMPT_USE_FULLTEXT", false),
 		ExportDirectory:     strings.TrimSpace(os.Getenv("PROMPT_EXPORT_DIR")),
 		VersionRetention:    parseIntEnv("PROMPT_VERSION_KEEP_LIMIT", promptsvc.DefaultVersionRetentionLimit, logger),
+		ImportBatchSize:     parseIntEnv("PROMPT_IMPORT_BATCH_SIZE", promptsvc.DefaultImportBatchSize, logger),
 	}
 }
 

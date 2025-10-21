@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 	"unicode"
 
 	promptdomain "electron-go-app/backend/internal/domain/prompt"
@@ -28,6 +29,15 @@ type PromptListFilter struct {
 	Offset      int
 }
 
+// PromptMetadataUpdate 用于在导入场景下批量同步 Prompt 的时间戳与版本编号。
+type PromptMetadataUpdate struct {
+	UsePublishedAt  bool
+	PublishedAt     *time.Time
+	LatestVersionNo *int
+	CreatedAt       *time.Time
+	UpdatedAt       *time.Time
+}
+
 // NewPromptRepository 创建 PromptRepository。
 func NewPromptRepository(db *gorm.DB) *PromptRepository {
 	return &PromptRepository{db: db}
@@ -38,7 +48,7 @@ func (r *PromptRepository) Create(ctx context.Context, entity *promptdomain.Prom
 	if entity == nil {
 		return errors.New("prompt entity is nil")
 	}
-	if err := r.db.WithContext(ctx).Create(entity).Error; err != nil {
+	if err := r.db.WithContext(ctx).Select("*").Create(entity).Error; err != nil {
 		return fmt.Errorf("create prompt: %w", err)
 	}
 	return nil
@@ -251,6 +261,81 @@ func (r *PromptRepository) Delete(ctx context.Context, userID, id uint) error {
 		}
 		if res.RowsAffected == 0 {
 			return gorm.ErrRecordNotFound
+		}
+		return nil
+	})
+}
+
+// DeleteByUser 会清空指定用户的全部 Prompt 以及关联数据，常用于导入覆盖模式。
+func (r *PromptRepository) DeleteByUser(ctx context.Context, userID uint) error {
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var promptIDs []uint
+		if err := tx.WithContext(ctx).
+			Model(&promptdomain.Prompt{}).
+			Where("user_id = ?", userID).
+			Pluck("id", &promptIDs).Error; err != nil {
+			return fmt.Errorf("list prompt ids: %w", err)
+		}
+		if len(promptIDs) > 0 {
+			if err := tx.Where("prompt_id IN ?", promptIDs).Delete(&promptdomain.PromptKeyword{}).Error; err != nil {
+				return fmt.Errorf("delete prompt keywords: %w", err)
+			}
+			if err := tx.Where("prompt_id IN ?", promptIDs).Delete(&promptdomain.PromptVersion{}).Error; err != nil {
+				return fmt.Errorf("delete prompt versions: %w", err)
+			}
+		}
+		if err := tx.Where("user_id = ?", userID).Delete(&promptdomain.Prompt{}).Error; err != nil {
+			return fmt.Errorf("delete prompts: %w", err)
+		}
+		return nil
+	})
+}
+
+// UpdateMetadata 用于同步 Prompt 的时间戳、最新版本号等元信息。
+func (r *PromptRepository) UpdateMetadata(ctx context.Context, promptID uint, meta PromptMetadataUpdate) error {
+	updates := make(map[string]any)
+	if meta.UsePublishedAt {
+		if meta.PublishedAt != nil {
+			updates["published_at"] = *meta.PublishedAt
+		} else {
+			updates["published_at"] = nil
+		}
+	}
+	if meta.LatestVersionNo != nil {
+		updates["latest_version_no"] = *meta.LatestVersionNo
+	}
+	if meta.CreatedAt != nil {
+		updates["created_at"] = *meta.CreatedAt
+	}
+	if meta.UpdatedAt != nil {
+		updates["updated_at"] = *meta.UpdatedAt
+	}
+	if len(updates) == 0 {
+		return nil
+	}
+	if err := r.db.WithContext(ctx).
+		Model(&promptdomain.Prompt{}).
+		Where("id = ?", promptID).
+		Updates(updates).Error; err != nil {
+		return fmt.Errorf("update prompt metadata: %w", err)
+	}
+	return nil
+}
+
+// ReplacePromptVersions 会清空 Prompt 现有的历史版本，再写入新的版本列表。
+func (r *PromptRepository) ReplacePromptVersions(ctx context.Context, promptID uint, versions []promptdomain.PromptVersion) error {
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("prompt_id = ?", promptID).Delete(&promptdomain.PromptVersion{}).Error; err != nil {
+			return fmt.Errorf("delete prompt versions: %w", err)
+		}
+		if len(versions) == 0 {
+			return nil
+		}
+		for idx := range versions {
+			versions[idx].PromptID = promptID
+		}
+		if err := tx.Create(&versions).Error; err != nil {
+			return fmt.Errorf("create prompt versions: %w", err)
 		}
 		return nil
 	})

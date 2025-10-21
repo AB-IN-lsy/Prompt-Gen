@@ -685,6 +685,256 @@ func TestPromptServiceSave(t *testing.T) {
 	}
 }
 
+// TestPromptServiceImportPromptsMerge 验证导入默认采用合并模式并正确更新/新增 Prompt。
+func TestPromptServiceImportPromptsMerge(t *testing.T) {
+	service, promptRepo, keywordRepo, db, _ := setupPromptService(t)
+	defer func() {
+		sqlDB, _ := db.DB()
+		sqlDB.Close()
+	}()
+
+	ctx := context.Background()
+	existing, err := service.Save(ctx, promptsvc.SaveInput{
+		UserID:           1,
+		Topic:            "React 面试",
+		Body:             "旧正文",
+		Instructions:     "旧说明",
+		Model:            "deepseek-chat",
+		Status:           promptdomain.PromptStatusDraft,
+		Publish:          false,
+		Tags:             []string{"旧标签"},
+		PositiveKeywords: []promptsvc.KeywordItem{{Word: "Hooks", Polarity: promptdomain.KeywordPolarityPositive, Weight: 4}},
+		NegativeKeywords: []promptsvc.KeywordItem{{Word: "过时框架", Polarity: promptdomain.KeywordPolarityNegative, Weight: 2}},
+	})
+	if err != nil {
+		t.Fatalf("seed prompt: %v", err)
+	}
+
+	publishedAt := time.Date(2025, 10, 16, 9, 30, 0, 0, time.UTC)
+	createdAt := publishedAt.Add(-2 * time.Hour)
+	updatedAt := publishedAt.Add(30 * time.Minute)
+
+	payload := map[string]any{
+		"generated_at": time.Now().UTC(),
+		"prompt_count": 2,
+		"prompts": []any{
+			map[string]any{
+				"id":           existing.PromptID,
+				"topic":        "React 面试",
+				"body":         "更新后的正文",
+				"instructions": "请突出 Hooks 与并发特性",
+				"model":        "deepseek-chat",
+				"status":       "published",
+				"tags":         []string{"合并", "更新"},
+				"positive_keywords": []map[string]any{
+					{"word": "Hooks", "weight": 5, "source": "manual"},
+					{"word": "并发", "weight": 4, "source": "manual"},
+				},
+				"negative_keywords": []map[string]any{
+					{"word": "过时框架", "weight": 1, "source": "manual"},
+				},
+				"published_at":      &publishedAt,
+				"created_at":        createdAt,
+				"updated_at":        updatedAt,
+				"latest_version_no": 3,
+			},
+			map[string]any{
+				"id":           0,
+				"topic":        "新建 Prompt",
+				"body":         "新的草稿正文",
+				"instructions": "强调结构化输出",
+				"model":        "deepseek-chat",
+				"status":       "draft",
+				"tags":         []string{"新增"},
+				"positive_keywords": []map[string]any{
+					{"word": "总结", "weight": 4, "source": "manual"},
+				},
+				"negative_keywords": []map[string]any{},
+				"created_at":        updatedAt,
+				"updated_at":        updatedAt,
+				"latest_version_no": 0,
+			},
+		},
+	}
+
+	raw, err := json.Marshal(payload)
+	if err != nil {
+		t.Fatalf("marshal payload: %v", err)
+	}
+
+	result, err := service.ImportPrompts(ctx, promptsvc.ImportPromptsInput{UserID: 1, Payload: raw})
+	if err != nil {
+		t.Fatalf("import prompts: %v", err)
+	}
+	if result.Imported != 2 || result.Skipped != 0 || len(result.Errors) != 0 {
+		t.Fatalf("unexpected result: %+v", result)
+	}
+
+	updatedPrompt, err := promptRepo.FindByID(ctx, 1, existing.PromptID)
+	if err != nil {
+		t.Fatalf("load updated prompt: %v", err)
+	}
+	if updatedPrompt.Body != "更新后的正文" {
+		t.Fatalf("unexpected body: %s", updatedPrompt.Body)
+	}
+	if updatedPrompt.LatestVersionNo != 3 {
+		t.Fatalf("expected latest version 3, got %d", updatedPrompt.LatestVersionNo)
+	}
+	if updatedPrompt.PublishedAt == nil || !updatedPrompt.PublishedAt.Equal(publishedAt) {
+		t.Fatalf("unexpected published_at: %v", updatedPrompt.PublishedAt)
+	}
+	if !updatedPrompt.CreatedAt.Equal(createdAt) || !updatedPrompt.UpdatedAt.Equal(updatedAt) {
+		t.Fatalf("unexpected timestamps: created=%v updated=%v", updatedPrompt.CreatedAt, updatedPrompt.UpdatedAt)
+	}
+
+	detail, err := service.GetPrompt(ctx, promptsvc.GetPromptInput{UserID: 1, PromptID: existing.PromptID})
+	if err != nil {
+		t.Fatalf("get prompt detail: %v", err)
+	}
+	if len(detail.PositiveKeywords) != 2 {
+		t.Fatalf("expected 2 positive keywords, got %d", len(detail.PositiveKeywords))
+	}
+	if !reflect.DeepEqual(detail.Tags, []string{"合并", "更新"}) {
+		t.Fatalf("unexpected tags: %+v", detail.Tags)
+	}
+
+	versions, err := promptRepo.ListVersions(ctx, existing.PromptID, 10)
+	if err != nil {
+		t.Fatalf("list versions: %v", err)
+	}
+	if len(versions) != 1 || versions[0].VersionNo != 3 {
+		t.Fatalf("unexpected versions: %+v", versions)
+	}
+
+	newPrompt, err := promptRepo.FindByUserAndTopic(ctx, 1, "新建 Prompt")
+	if err != nil {
+		t.Fatalf("find new prompt: %v", err)
+	}
+	newDetail, err := service.GetPrompt(ctx, promptsvc.GetPromptInput{UserID: 1, PromptID: newPrompt.ID})
+	if err != nil {
+		t.Fatalf("get new prompt detail: %v", err)
+	}
+	if len(newDetail.PositiveKeywords) != 1 || newDetail.PositiveKeywords[0].Word != "总结" {
+		t.Fatalf("unexpected new prompt keywords: %+v", newDetail.PositiveKeywords)
+	}
+	if _, err := keywordRepo.ListByTopic(ctx, 1, "新建 Prompt"); err != nil {
+		t.Fatalf("list keywords: %v", err)
+	}
+}
+
+// TestPromptServiceImportPromptsOverwrite 验证覆盖模式会在导入前清空原有 Prompt。
+func TestPromptServiceImportPromptsOverwrite(t *testing.T) {
+	service, promptRepo, _, db, _ := setupPromptService(t)
+	defer func() {
+		sqlDB, _ := db.DB()
+		sqlDB.Close()
+	}()
+
+	ctx := context.Background()
+	if _, err := service.Save(ctx, promptsvc.SaveInput{
+		UserID:           1,
+		Topic:            "旧数据",
+		Body:             "旧正文",
+		Model:            "deepseek-chat",
+		Status:           promptdomain.PromptStatusDraft,
+		Publish:          false,
+		PositiveKeywords: []promptsvc.KeywordItem{{Word: "旧关键词", Polarity: promptdomain.KeywordPolarityPositive}},
+	}); err != nil {
+		t.Fatalf("seed prompt: %v", err)
+	}
+
+	payload := map[string]any{
+		"generated_at": time.Now().UTC(),
+		"prompt_count": 1,
+		"prompts": []any{
+			map[string]any{
+				"topic":        "覆盖后的 Prompt",
+				"body":         "覆盖正文",
+				"instructions": "覆盖说明",
+				"model":        "deepseek-chat",
+				"status":       "published",
+				"positive_keywords": []map[string]any{
+					{"word": "覆盖关键词", "weight": 5, "source": "manual"},
+				},
+				"negative_keywords": []map[string]any{},
+				"published_at":      time.Now().UTC(),
+				"created_at":        time.Now().UTC(),
+				"updated_at":        time.Now().UTC(),
+				"latest_version_no": 1,
+			},
+		},
+	}
+	raw, err := json.Marshal(payload)
+	if err != nil {
+		t.Fatalf("marshal payload: %v", err)
+	}
+
+	result, err := service.ImportPrompts(ctx, promptsvc.ImportPromptsInput{UserID: 1, Mode: "overwrite", Payload: raw})
+	if err != nil {
+		t.Fatalf("import prompts: %v", err)
+	}
+	if result.Imported != 1 || result.Skipped != 0 || len(result.Errors) != 0 {
+		t.Fatalf("unexpected result: %+v", result)
+	}
+
+	prompts, _, err := promptRepo.ListByUser(ctx, 1, repository.PromptListFilter{})
+	if err != nil {
+		t.Fatalf("list prompts: %v", err)
+	}
+	if len(prompts) != 1 || prompts[0].Topic != "覆盖后的 Prompt" {
+		t.Fatalf("unexpected prompts after overwrite: %+v", prompts)
+	}
+}
+
+// TestPromptServiceImportPromptsInvalidPayload 验证非法条目会被跳过并返回错误列表。
+func TestPromptServiceImportPromptsInvalidPayload(t *testing.T) {
+	service, promptRepo, _, db, _ := setupPromptService(t)
+	defer func() {
+		sqlDB, _ := db.DB()
+		sqlDB.Close()
+	}()
+
+	ctx := context.Background()
+	payload := map[string]any{
+		"generated_at": time.Now().UTC(),
+		"prompt_count": 1,
+		"prompts": []any{
+			map[string]any{
+				"topic":  "",
+				"body":   "",
+				"model":  "deepseek-chat",
+				"status": "draft",
+				"positive_keywords": []map[string]any{
+					{"word": "空主题", "weight": 4, "source": "manual"},
+				},
+			},
+		},
+	}
+	raw, err := json.Marshal(payload)
+	if err != nil {
+		t.Fatalf("marshal payload: %v", err)
+	}
+
+	result, err := service.ImportPrompts(ctx, promptsvc.ImportPromptsInput{UserID: 1, Payload: raw})
+	if err != nil {
+		t.Fatalf("import prompts: %v", err)
+	}
+	if result.Imported != 0 || result.Skipped != 1 || len(result.Errors) != 1 {
+		t.Fatalf("unexpected result: %+v", result)
+	}
+	if !strings.Contains(result.Errors[0].Reason, "topic is required") {
+		t.Fatalf("unexpected error reason: %s", result.Errors[0].Reason)
+	}
+
+	prompts, _, err := promptRepo.ListByUser(ctx, 1, repository.PromptListFilter{})
+	if err != nil {
+		t.Fatalf("list prompts: %v", err)
+	}
+	if len(prompts) != 0 {
+		t.Fatalf("expected no prompts inserted, got %d", len(prompts))
+	}
+}
+
 func TestPromptServiceSaveTagLimitExceeded(t *testing.T) {
 	cfg := promptsvc.Config{
 		KeywordLimit:        promptsvc.DefaultKeywordLimit,

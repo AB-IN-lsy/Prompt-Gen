@@ -1,6 +1,7 @@
 package prompt
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -66,6 +67,7 @@ type Service struct {
 	useFullText         bool
 	exportDir           string
 	versionKeepLimit    int
+	importBatchSize     int
 }
 
 const (
@@ -88,6 +90,9 @@ const DefaultTagMaxLength = 5
 
 // DefaultVersionRetentionLimit 默认保留的 Prompt 历史版本数量。
 const DefaultVersionRetentionLimit = 5
+
+// DefaultImportBatchSize 控制导入 Prompt 时的批处理大小。
+const DefaultImportBatchSize = 20
 
 const (
 	workspaceAttrInstructions = "instructions"
@@ -139,6 +144,7 @@ type Config struct {
 	UseFullTextSearch   bool
 	ExportDirectory     string
 	VersionRetention    int
+	ImportBatchSize     int
 }
 
 // NewServiceWithConfig 构建 Service，并允许自定义分页等配置。
@@ -170,6 +176,9 @@ func NewServiceWithConfig(prompts *repository.PromptRepository, keywords *reposi
 	if cfg.VersionRetention <= 0 {
 		cfg.VersionRetention = DefaultVersionRetentionLimit
 	}
+	if cfg.ImportBatchSize <= 0 {
+		cfg.ImportBatchSize = DefaultImportBatchSize
+	}
 	baseExportDir := strings.TrimSpace(cfg.ExportDirectory)
 	if baseExportDir == "" {
 		baseExportDir = DefaultPromptExportDir
@@ -200,6 +209,7 @@ func NewServiceWithConfig(prompts *repository.PromptRepository, keywords *reposi
 		useFullText:         cfg.UseFullTextSearch,
 		exportDir:           normalisedExportDir,
 		versionKeepLimit:    cfg.VersionRetention,
+		importBatchSize:     cfg.ImportBatchSize,
 	}
 }
 
@@ -361,6 +371,34 @@ type promptExportEnvelope struct {
 	Prompts     []promptExportRecord `json:"prompts"`
 }
 
+// ImportMode 定义导入 Prompt 时的模式。
+type ImportMode string
+
+const (
+	importModeMerge     ImportMode = "merge"
+	importModeOverwrite ImportMode = "overwrite"
+)
+
+// ImportPromptsInput 描述导入 Prompt 时的请求参数。
+type ImportPromptsInput struct {
+	UserID  uint
+	Mode    string
+	Payload []byte
+}
+
+// ImportPromptsResult 返回导入过程中的统计信息。
+type ImportPromptsResult struct {
+	Imported int
+	Skipped  int
+	Errors   []ImportError
+}
+
+// ImportError 用于记录导入失败的 Prompt 以及失败原因。
+type ImportError struct {
+	Topic  string `json:"topic"`
+	Reason string `json:"reason"`
+}
+
 // ExportPrompts 将用户的 Prompt 序列化为本地 JSON 文件并返回保存结果。
 func (s *Service) ExportPrompts(ctx context.Context, input ExportPromptsInput) (ExportPromptsOutput, error) {
 	if input.UserID == 0 {
@@ -420,6 +458,191 @@ func (s *Service) ExportPrompts(ctx context.Context, input ExportPromptsInput) (
 		PromptCount: len(exportItems),
 		GeneratedAt: payload.GeneratedAt,
 	}, nil
+}
+
+// ImportPrompts 根据导出的 JSON 文件内容回灌 Prompt 数据，支持合并或覆盖模式。
+func (s *Service) ImportPrompts(ctx context.Context, input ImportPromptsInput) (ImportPromptsResult, error) {
+	var result ImportPromptsResult
+	if input.UserID == 0 {
+		return result, errors.New("user id is required")
+	}
+	payload := bytes.TrimSpace(input.Payload)
+	if len(payload) == 0 {
+		return result, errors.New("import payload is empty")
+	}
+	var envelope promptExportEnvelope
+	if err := json.Unmarshal(payload, &envelope); err != nil {
+		return result, fmt.Errorf("decode import payload: %w", err)
+	}
+	mode := normaliseImportMode(input.Mode)
+	if mode == importModeOverwrite {
+		if err := s.prompts.DeleteByUser(ctx, input.UserID); err != nil {
+			return result, fmt.Errorf("clear prompts before import: %w", err)
+		}
+	}
+	batchSize := s.importBatchSize
+	if batchSize <= 0 {
+		batchSize = DefaultImportBatchSize
+	}
+	total := len(envelope.Prompts)
+	for idx, record := range envelope.Prompts {
+		if err := s.importPromptRecord(ctx, input.UserID, record); err != nil {
+			result.Skipped++
+			topic := strings.TrimSpace(record.Topic)
+			if topic == "" {
+				topic = fmt.Sprintf("prompt#%d", idx+1)
+			}
+			result.Errors = append(result.Errors, ImportError{
+				Topic:  topic,
+				Reason: err.Error(),
+			})
+			continue
+		}
+		result.Imported++
+		if batchSize > 0 && (idx+1)%batchSize == 0 {
+			s.logger.Infow("prompt import progress", "processed", idx+1, "total", total)
+		}
+	}
+	return result, nil
+}
+
+// normaliseImportMode 将导入模式字符串归一化。
+func normaliseImportMode(value string) ImportMode {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case string(importModeOverwrite):
+		return importModeOverwrite
+	default:
+		return importModeMerge
+	}
+}
+
+// importPromptRecord 将导出的单条 Prompt 记录写回数据库。
+func (s *Service) importPromptRecord(ctx context.Context, userID uint, record promptExportRecord) error {
+	topic := strings.TrimSpace(record.Topic)
+	if topic == "" {
+		return errors.New("topic is required")
+	}
+	if strings.TrimSpace(record.Body) == "" {
+		return errors.New("body is required")
+	}
+	positiveItems := exportKeywordsToKeywordItems(record.PositiveKeywords, promptdomain.KeywordPolarityPositive)
+	negativeItems := exportKeywordsToKeywordItems(record.NegativeKeywords, promptdomain.KeywordPolarityNegative)
+	status := normalizeStatus(record.Status, record.Status == promptdomain.PromptStatusPublished)
+
+	var promptID uint
+	if record.ID > 0 {
+		if existing, err := s.prompts.FindByID(ctx, userID, record.ID); err == nil {
+			promptID = existing.ID
+		}
+	}
+	if promptID == 0 {
+		if existing, err := s.prompts.FindByUserAndTopic(ctx, userID, normalizeMixedLanguageSpacing(topic)); err == nil {
+			promptID = existing.ID
+		}
+	}
+
+	input := SaveInput{
+		UserID:           userID,
+		PromptID:         promptID,
+		Topic:            record.Topic,
+		Body:             record.Body,
+		Instructions:     record.Instructions,
+		Model:            record.Model,
+		Status:           status,
+		Publish:          status == promptdomain.PromptStatusPublished,
+		Tags:             record.Tags,
+		PositiveKeywords: positiveItems,
+		NegativeKeywords: negativeItems,
+	}
+
+	result, err := s.persistPrompt(ctx, input, status, "")
+	if err != nil {
+		return err
+	}
+
+	if err := s.syncImportedMetadata(ctx, result.PromptID, record, status); err != nil {
+		return err
+	}
+	return nil
+}
+
+// exportKeywordsToKeywordItems 将导出的关键词列表转换为内部使用的结构。
+func exportKeywordsToKeywordItems(items []promptdomain.PromptKeywordItem, polarity string) []KeywordItem {
+	if len(items) == 0 {
+		return []KeywordItem{}
+	}
+	result := make([]KeywordItem, 0, len(items))
+	for _, item := range items {
+		result = append(result, KeywordItem{
+			KeywordID: item.KeywordID,
+			Word:      item.Word,
+			Source:    item.Source,
+			Polarity:  polarity,
+			Weight:    clampWeight(item.Weight),
+		})
+	}
+	return result
+}
+
+// syncImportedMetadata 会在导入成功后同步时间戳、版本号等附加信息。
+func (s *Service) syncImportedMetadata(ctx context.Context, promptID uint, record promptExportRecord, status string) error {
+	if promptID == 0 {
+		return errors.New("prompt id missing after import")
+	}
+	meta := repository.PromptMetadataUpdate{
+		UsePublishedAt: true,
+		PublishedAt:    record.PublishedAt,
+	}
+	if record.LatestVersionNo > 0 {
+		meta.LatestVersionNo = &record.LatestVersionNo
+	}
+	if !record.CreatedAt.IsZero() {
+		meta.CreatedAt = &record.CreatedAt
+	}
+	if !record.UpdatedAt.IsZero() {
+		meta.UpdatedAt = &record.UpdatedAt
+	}
+	if err := s.prompts.UpdateMetadata(ctx, promptID, meta); err != nil {
+		return fmt.Errorf("update prompt metadata: %w", err)
+	}
+	if status != promptdomain.PromptStatusPublished {
+		if err := s.prompts.ReplacePromptVersions(ctx, promptID, nil); err != nil {
+			return fmt.Errorf("reset prompt versions: %w", err)
+		}
+		return nil
+	}
+	versionNo := record.LatestVersionNo
+	if versionNo <= 0 {
+		versionNo = 1
+	}
+	positiveBytes, err := json.Marshal(record.PositiveKeywords)
+	if err != nil {
+		return fmt.Errorf("encode positive keywords for version: %w", err)
+	}
+	negativeBytes, err := json.Marshal(record.NegativeKeywords)
+	if err != nil {
+		return fmt.Errorf("encode negative keywords for version: %w", err)
+	}
+	version := promptdomain.PromptVersion{
+		PromptID:         promptID,
+		VersionNo:        versionNo,
+		Body:             record.Body,
+		Instructions:     record.Instructions,
+		PositiveKeywords: string(positiveBytes),
+		NegativeKeywords: string(negativeBytes),
+		Model:            record.Model,
+	}
+	if !record.UpdatedAt.IsZero() {
+		version.CreatedAt = record.UpdatedAt
+	} else if record.PublishedAt != nil {
+		version.CreatedAt = *record.PublishedAt
+	} else {
+		version.CreatedAt = time.Now()
+	}
+	if err := s.prompts.ReplacePromptVersions(ctx, promptID, []promptdomain.PromptVersion{version}); err != nil {
+		return fmt.Errorf("replace prompt versions: %w", err)
+	}
+	return nil
 }
 
 // GetPrompt 根据 ID 返回 Prompt 详情，并尝试为工作台创建 Redis 工作区快照（包含标签）。
@@ -1109,8 +1332,13 @@ func (s *Service) RemoveWorkspaceKeyword(ctx context.Context, input RemoveKeywor
 	return nil
 }
 
-// SyncWorkspaceKeywords 将前端的排序与权重同步到工作区缓存，保持 Redis 状态与 UI 一致。
-// 若工作区 token 失效会返回错误，前端需重新获取最新数据。
+// SyncWorkspaceKeywords 是前端拖拽关键词、调整权重后同步 Redis 工作区快照的接口。保持 Redis 状态与 UI 一致。流程如下：
+// 1. 前端把最新的正/负向关键词列表（包含顺序与权重）连同 workspace_token 发给后端。
+// 2. Service 先用 workspace.Snapshot 取回当前 Redis 快照：里面包括草稿正文、现有关键词等。
+// 3. 用 workspaceKeywordsFromOrdered 把前端传回的数组转换成 Redis 存储结构（我们会重新分配 score、清洗来源/权重）。
+// 4. 更新 snapshot 的 Positive/Negative 列表、更新时间和版本号。
+// 5. 调用 workspace.CreateOrReplace，这一步内部使用 MULTI/EXEC 管道一次性覆盖 Hash 和 ZSet，保证排序与权重同步更新。
+// 6. 如果 token 失效或 Redis 有问题就返回错误，让前端重新拉最新快照。
 func (s *Service) SyncWorkspaceKeywords(ctx context.Context, input SyncWorkspaceInput) error {
 	if s.workspace == nil {
 		return nil
@@ -1339,6 +1567,12 @@ func toWorkspaceKeywords(items []KeywordItem, limit int) []promptdomain.Workspac
 }
 
 // workspaceKeywordsFromOrdered 根据 UI 提交的顺序重建工作区关键词列表，用于拖拽/调权之后的同步。
+//   - 输入：前端提交的 KeywordItem 数组（包含 word/source/weight/polarity），顺序就是 UI 里显示的顺序。
+//   - 处理：
+//   - 先根据 PROMPT_KEYWORD_LIMIT 截断，防止写入超过上限的条目。
+//   - 对每个词做清洗（clampKeywordWord 限制长度、normalizePolarity 统一正负、sourceFallback 兼容来源）。
+//   - 把数组下标 +1 作为 Score，用来写入 ZSet，确保排序和 UI 一致。
+//   - 输出：[]WorkspaceKeyword，里头包含 Word、Source、Polarity、Weight、Score，这个结构正好用于写入 Redis 的 Hash 和 ZSet。
 func (s *Service) workspaceKeywordsFromOrdered(items []KeywordItem) []promptdomain.WorkspaceKeyword {
 	limit := s.keywordLimit
 	if limit <= 0 {
@@ -1618,6 +1852,14 @@ func (s *Service) createPromptRecord(ctx context.Context, input SaveInput, statu
 	}
 	if err := s.prompts.Create(ctx, entity); err != nil {
 		return SaveOutput{}, err
+	}
+	if status != promptdomain.PromptStatusPublished {
+		entity.LatestVersionNo = 0
+		if err := s.prompts.UpdateMetadata(ctx, entity.ID, repository.PromptMetadataUpdate{
+			LatestVersionNo: &entity.LatestVersionNo,
+		}); err != nil {
+			return SaveOutput{}, fmt.Errorf("reset prompt version metadata: %w", err)
+		}
 	}
 	relations, err := s.upsertPromptKeywords(ctx, input.UserID, entity.Topic, entity.ID, input.PositiveKeywords, input.NegativeKeywords)
 	if err != nil {
