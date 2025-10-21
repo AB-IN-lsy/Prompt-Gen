@@ -13,9 +13,17 @@ Prompt Gen Desktop 是一套以 Electron 为外壳、Go 为后端、Vite/React �
   你的浏览器不支持内嵌播放，请下载 <a href="https://github.com/AB-IN-lsy/Prompt-Gen/raw/main/docs/assets/demo1.mp4">demo1.mp4</a> 查看。
 </video>
 
+
+https://github.com/user-attachments/assets/3130ece5-65e4-4480-9eb2-d3745b395126
+
+
 <video src="https://github.com/AB-IN-lsy/Prompt-Gen/raw/main/docs/assets/demo2.mp4" controls width="70%">
   你的浏览器不支持内嵌播放，请下载 <a href="https://github.com/AB-IN-lsy/Prompt-Gen/raw/main/docs/assets/demo2.mp4">demo2.mp4</a> 查看。
 </video>
+
+
+https://github.com/user-attachments/assets/6ceaa86c-10e8-4e5f-a208-89dee8090876
+
 
 > 若在 GitHub 页面无法直接播放，请右键链接选择“在新标签页打开”，或至本地仓库的 `docs/assets/` 目录离线查看。
 
