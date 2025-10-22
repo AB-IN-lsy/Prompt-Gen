@@ -44,6 +44,17 @@ This repository combines an Electron shell, a Go HTTP backend, and a Vite/React 
 
 ---
 
+## Code Modification Visibility
+
+* When adding or modifying code, **do not use hidden or non-transparent patch commands** (for example, `apply_patch <<'PATCH'` or similar automated patch scripts).
+* All code edits must be **visibly shown in the terminal or pull request**, with clear additions and deletions.
+* Acceptable examples include visible diffs such as `git diff` or PR views that highlight line changes with `+` and `-`.
+* Avoid summarized patch outputs that only display generic messages like “Updated file X (+58 lines)” without showing the actual line differences.
+* This rule applies to both frontend and backend changes and ensures that all modifications are **fully visible and reviewable**.
+* In short: always prefer **explicit visible diffs** over **hidden patch logs**, so that every code change can be directly inspected.
+
+---
+
 ## Testing Guidelines
 
 * Place new fast checks beside the subject in `backend/tests/unit`; mimic existing table-driven tests.
