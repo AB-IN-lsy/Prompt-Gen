@@ -13,15 +13,16 @@ import (
 )
 
 type RouterOptions struct {
-	AuthHandler      *handler.AuthHandler
-	UserHandler      *handler.UserHandler
-	UploadHandler    *handler.UploadHandler
-	ModelHandler     *handler.ModelHandler
-	ChangelogHandler *handler.ChangelogHandler
-	PromptHandler    *handler.PromptHandler
-	AuthMW           middleware.Authenticator
-	IPGuard          *middleware.IPGuardMiddleware
-	IPGuardHandler   *handler.IPGuardHandler
+	AuthHandler         *handler.AuthHandler
+	UserHandler         *handler.UserHandler
+	UploadHandler       *handler.UploadHandler
+	ModelHandler        *handler.ModelHandler
+	ChangelogHandler    *handler.ChangelogHandler
+	PromptHandler       *handler.PromptHandler
+	PublicPromptHandler *handler.PublicPromptHandler
+	AuthMW              middleware.Authenticator
+	IPGuard             *middleware.IPGuardMiddleware
+	IPGuardHandler      *handler.IPGuardHandler
 }
 
 // NewRouter 构建应用的 Gin Engine，汇总所有 REST 接口与公共中间件配置。
@@ -138,6 +139,18 @@ func NewRouter(opts RouterOptions) *gin.Engine {
 			prompts.GET("/:id", opts.PromptHandler.GetPrompt)
 			prompts.DELETE("/:id", opts.PromptHandler.DeletePrompt)
 			prompts.POST("", opts.PromptHandler.SavePrompt)
+		}
+
+		if opts.PublicPromptHandler != nil {
+			publicPrompts := api.Group("/public-prompts")
+			if opts.AuthMW != nil {
+				publicPrompts.Use(opts.AuthMW.Handle())
+			}
+			publicPrompts.GET("", opts.PublicPromptHandler.List)
+			publicPrompts.GET("/:id", opts.PublicPromptHandler.Get)
+			publicPrompts.POST("/:id/download", opts.PublicPromptHandler.Download)
+			publicPrompts.POST("", opts.PublicPromptHandler.Submit)
+			publicPrompts.POST("/:id/review", opts.PublicPromptHandler.Review)
 		}
 
 		if opts.IPGuardHandler != nil {

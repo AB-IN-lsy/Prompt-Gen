@@ -28,6 +28,10 @@ type PromptHandler struct {
 	interpretWindow time.Duration
 	generateLimit   int
 	generateWindow  time.Duration
+	saveLimit       int
+	saveWindow      time.Duration
+	publishLimit    int
+	publishWindow   time.Duration
 }
 
 // PromptRateLimit 配置两类关键接口的限流阈值。
@@ -36,6 +40,10 @@ type PromptRateLimit struct {
 	InterpretWindow time.Duration
 	GenerateLimit   int
 	GenerateWindow  time.Duration
+	SaveLimit       int
+	SaveWindow      time.Duration
+	PublishLimit    int
+	PublishWindow   time.Duration
 }
 
 const (
@@ -47,6 +55,14 @@ const (
 	DefaultInterpretWindow = time.Minute
 	// DefaultGenerateWindow 控制生成接口限流窗口长度。
 	DefaultGenerateWindow = time.Minute
+	// DefaultSaveLimit 控制保存接口默认限额。
+	DefaultSaveLimit = 20
+	// DefaultSaveWindow 控制保存接口限流窗口长度。
+	DefaultSaveWindow = time.Minute
+	// DefaultPublishLimit 控制发布接口默认限额。
+	DefaultPublishLimit = 6
+	// DefaultPublishWindow 控制发布接口限流窗口长度。
+	DefaultPublishWindow = 10 * time.Minute
 )
 
 // NewPromptHandler 创建 PromptHandler，若未传入限流配置则使用默认阈值。
@@ -64,6 +80,18 @@ func NewPromptHandler(service *promptsvc.Service, limiter ratelimit.Limiter, cfg
 	if cfg.GenerateWindow <= 0 {
 		cfg.GenerateWindow = DefaultGenerateWindow
 	}
+	if cfg.SaveLimit <= 0 {
+		cfg.SaveLimit = DefaultSaveLimit
+	}
+	if cfg.SaveWindow <= 0 {
+		cfg.SaveWindow = DefaultSaveWindow
+	}
+	if cfg.PublishLimit <= 0 {
+		cfg.PublishLimit = DefaultPublishLimit
+	}
+	if cfg.PublishWindow <= 0 {
+		cfg.PublishWindow = DefaultPublishWindow
+	}
 	return &PromptHandler{
 		service:         service,
 		limiter:         limiter,
@@ -72,6 +100,10 @@ func NewPromptHandler(service *promptsvc.Service, limiter ratelimit.Limiter, cfg
 		interpretWindow: cfg.InterpretWindow,
 		generateLimit:   cfg.GenerateLimit,
 		generateWindow:  cfg.GenerateWindow,
+		saveLimit:       cfg.SaveLimit,
+		saveWindow:      cfg.SaveWindow,
+		publishLimit:    cfg.PublishLimit,
+		publishWindow:   cfg.PublishWindow,
 	}
 }
 
@@ -749,6 +781,15 @@ func (h *PromptHandler) SavePrompt(c *gin.Context) {
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.Fail(c, http.StatusBadRequest, response.ErrBadRequest, err.Error(), nil)
 		return
+	}
+
+	if !h.allow(c, fmt.Sprintf("prompt:save:%d", userID), h.saveLimit, h.saveWindow) {
+		return
+	}
+	if req.Publish {
+		if !h.allow(c, fmt.Sprintf("prompt:publish:%d", userID), h.publishLimit, h.publishWindow) {
+			return
+		}
 	}
 
 	if !h.validateKeywordLimit(c, req.PositiveKeywords, req.NegativeKeywords) {

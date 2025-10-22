@@ -9,6 +9,7 @@
   "nav": {
     "dashboard": "Dashboard",
     "myPrompts": "我的 Prompt",
+    "publicPrompts": "优质 Prompt 库",
     "workbench": "Prompt 工作台",
     "settings": "设置",
     "logs": "更新日志",
@@ -118,6 +119,46 @@
       "troubleshooting",
       "contact"
     ]
+  },
+  "publicPrompts": {
+    "eyebrow": "精选库",
+    "title": "优质 Prompt 库",
+    "subtitle": "社区精选的 Prompt，随时导入到你的工作台。",
+    "searchPlaceholder": "搜索主题、标签或作者…",
+    "total": "共 {{count}} 条公共 Prompt",
+    "offlineHint": "离线模式仅支持浏览与下载",
+    "filters": {
+      "title": "筛选",
+      "all": "全部",
+      "approved": "已通过",
+      "pending": "待审核",
+      "rejected": "已驳回"
+    },
+    "empty": "暂无符合条件的公共 Prompt，请换个关键词试试。",
+    "noSummary": "还没有简介，点击卡片查看详情。",
+    "downloadAction": "下载到我的 Prompt",
+    "downloadSuccess": "下载完成，已添加到“我的 Prompt”。",
+    "paginationInfo": "第 {{page}} / {{totalPages}} 页",
+    "prevPage": "上一页",
+    "nextPage": "下一页",
+    "loadingDetail": "正在加载详情…",
+    "instructions": "补充说明",
+    "noInstructions": "暂无补充说明",
+    "body": "Prompt 正文",
+    "status": {
+      "approved": "已通过",
+      "pending": "待审核",
+      "rejected": "已驳回"
+    },
+    "keywords": {
+      "positive": "正向关键词",
+      "negative": "负向关键词",
+      "empty": "暂无关键词"
+    },
+    "detailMeta": {
+      "model": "使用模型：{{model}}",
+      "updatedAt": "最近更新：{{date}} {{time}}"
+    }
   },
   "logsPage": {
     "eyebrow": "版本更新",

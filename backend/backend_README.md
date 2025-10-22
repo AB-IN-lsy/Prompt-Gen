@@ -23,6 +23,7 @@
 - 新增 `/api/models` 系列接口，支持模型凭据的创建、查看、更新与删除，API Key 会在入库前加密。
 - 引入 `MODEL_CREDENTIAL_MASTER_KEY` 环境变量，使用 AES-256-GCM 加解密用户提交的模型凭据。
 - 新增 `POST /api/prompts/import`，可上传导出的 JSON 文件并选择“合并/覆盖”模式批量回灌 Prompt，导入批大小由 `PROMPT_IMPORT_BATCH_SIZE` 控制。
+- 公共 Prompt 库上线：新增 `/api/public-prompts` 列表、详情与下载接口；投稿仅在在线模式开放，离线模式默认只读，避免本地环境误提交。
 - Prompt 版本号策略：首次仅保存草稿不会产生版本（`latest_version_no=0`），首次发布才会生成版本 1；发布后再保存草稿不改变版本号，下次发布时会遍历历史版本取最大值再 +1，保证序号连续递增。
 - 数据库自动迁移包含 `user_model_credentials` 与 `changelog_entries` 表，服务启动即可创建所需数据结构。
 - 模型凭据禁用或删除时，会自动清理用户偏好的 `preferred_model`，避免指向不可用的模型；`PUT /api/users/me` 也会验证偏好模型是否存在并已启用。
@@ -65,7 +66,7 @@
    - 如需管理员权限，可将 `LOCAL_USER_ADMIN=true`
 2. 启动后端：`go run ./backend/cmd/server`
 3. 启动前端：`npm run dev:frontend`（Electron 启动流程不变）
-4. 登录页点击“离线模式”按钮即可直接进入工作台；此时所有数据仅保存在上一步配置的 SQLite 文件中，云同步、邮箱验证等依赖在线服务的功能会自动禁用。
+4. 登录页点击“离线模式”按钮即可直接进入工作台；此时所有数据仅保存在上一步配置的 SQLite 文件中，邮箱验证等依赖在线服务的功能会自动禁用。
 5. 若要恢复在线模式，将 `APP_MODE` 改回 `online` 并按照原有方式配置数据库/Redis/Nacos。
 
 ### 验证码与 Redis
@@ -103,6 +104,10 @@
 | `PROMPT_INTERPRET_WINDOW` | 自然语言解析限流窗口，如 `60s`，默认 `1m` |
 | `PROMPT_GENERATE_LIMIT` | Prompt 生成接口限流次数，默认 `5` |
 | `PROMPT_GENERATE_WINDOW` | Prompt 生成限流窗口，默认 `1m` |
+| `PROMPT_SAVE_LIMIT` | 保存/发布接口限流次数，默认 `20` |
+| `PROMPT_SAVE_WINDOW` | 保存/发布限流窗口，默认 `1m` |
+| `PROMPT_PUBLISH_LIMIT` | 发布操作限流次数（仅在 `publish=true` 时计数），默认 `6` |
+| `PROMPT_PUBLISH_WINDOW` | 发布限流窗口，默认 `10m` |
 | `PROMPT_KEYWORD_LIMIT` | 正向/负向关键词的数量上限，默认 `10`，需与前端 `VITE_PROMPT_KEYWORD_LIMIT` 保持一致 |
 | `PROMPT_KEYWORD_MAX_LENGTH` | 单个关键词允许的最大字符数（按 Unicode 码点计），默认 `32` |
 | `PROMPT_TAG_LIMIT` | 标签数量上限，默认 `3`，需与前端 `VITE_PROMPT_TAG_LIMIT` 保持一致 |
@@ -114,6 +119,15 @@
 
 > ❗ **排障提示**：如果日志中出现  
 > `decode interpretation response: json: cannot unmarshal array into Go struct`，说明模型把 `instructions` 字段生成为数组。现有实现已兼容数组与字符串两种格式；若自定义提示词，请确保仍返回 JSON 对象，并将补充要求放在 `instructions` 字段（字符串或字符串数组均可）。
+
+### 公共 Prompt 库限流（可选）
+
+| 变量 | 作用 |
+| --- | --- |
+| `PUBLIC_PROMPT_SUBMIT_LIMIT` | 投稿接口限流次数，默认 `5` |
+| `PUBLIC_PROMPT_SUBMIT_WINDOW` | 投稿限流窗口，默认 `30m` |
+| `PUBLIC_PROMPT_DOWNLOAD_LIMIT` | 下载接口限流次数，默认 `30` |
+| `PUBLIC_PROMPT_DOWNLOAD_WINDOW` | 下载限流窗口，默认 `1h` |
 
 ### IP 防护（可选）
 
@@ -825,6 +839,95 @@ ALTER TABLE prompts
 - **用途**：删除指定 Prompt 及其关联的关键词关系、历史版本。
 - **成功响应**：`204`。
 - **常见错误**：Prompt 不存在或无访问权限 → `404`。
+
+#### GET /api/public-prompts
+
+- **用途**：获取公共 Prompt 列表，用于优质 Prompt 浏览。离线模式下接口保持可用但仅支持只读，投稿入口会被前端隐藏。
+- **查询参数**：`q`（关键词模糊搜索标题、主题、标签）、`status`（管理员可传 `pending`/`rejected` 查看待审条目，普通用户仅返回 `approved`）、`page`、`page_size`。
+- **成功响应**：`200`
+
+  ```json
+  {
+    "success": true,
+    "data": {
+      "items": [
+        {
+          "id": 18,
+          "title": "React 面试宝典",
+          "topic": "React 面试",
+          "summary": "整理常见行为与技术面试题",
+          "model": "deepseek-chat",
+          "language": "zh-CN",
+          "status": "approved",
+          "tags": ["面试", "前端"],
+          "download_count": 32,
+          "created_at": "2025-10-18T02:30:00Z",
+          "updated_at": "2025-10-19T09:15:00Z",
+          "author_user_id": 3,
+          "reviewer_user_id": 1
+        }
+      ]
+    },
+    "meta": {
+      "page": 1,
+      "page_size": 9,
+      "total_items": 24,
+      "total_pages": 3
+    }
+  }
+  ```
+
+#### GET /api/public-prompts/:id
+
+- **用途**：查询公共 Prompt 详情，返回正文、说明及关键词快照。普通用户访问未审核（`pending`/`rejected`）条目会得到 `403`。
+- **成功响应**：`200`
+
+  ```json
+  {
+    "success": true,
+    "data": {
+      "id": 18,
+      "title": "React 面试宝典",
+      "topic": "React 面试",
+      "summary": "整理常见行为与技术面试题",
+      "body": "你是资深面试官...",
+      "instructions": "使用 STAR 框架组织问题",
+      "model": "deepseek-chat",
+      "language": "zh-CN",
+      "status": "approved",
+      "positive_keywords": [
+        { "word": "React", "weight": 5 },
+        { "word": "Hooks", "weight": 4 }
+      ],
+      "negative_keywords": [
+        { "word": "jQuery", "weight": 1 }
+      ],
+      "tags": ["面试", "前端"],
+      "download_count": 32,
+      "created_at": "2025-10-18T02:30:00Z",
+      "updated_at": "2025-10-19T09:15:00Z"
+    }
+  }
+  ```
+
+#### POST /api/public-prompts/:id/download
+
+- **用途**：将公共 Prompt 复制到当前用户的个人 Prompt 列表，同时自增公共库的下载次数。
+- **成功响应**：`200`，返回新建 Prompt 的 ID 及状态，例如 `{ "prompt_id": 42, "status": "draft" }`。
+- **限流说明**：受 `PUBLIC_PROMPT_DOWNLOAD_LIMIT` / `PUBLIC_PROMPT_DOWNLOAD_WINDOW` 约束；离线模式使用内存版限流器，仍会限制高频操作。
+
+#### POST /api/public-prompts
+
+- **用途**：提交公共 Prompt 供管理员审核，默认状态为 `pending`。离线模式下返回 `403 Forbidden`。
+- **请求体**：`title`、`topic`、`summary`、`body`、`instructions`、`model`、`language`、`tags[]` 以及 `positive_keywords`/`negative_keywords`（支持字符串数组或对象数组）；可选 `source_prompt_id` 指向原始私有 Prompt。
+- **成功响应**：`201`，返回新建公共 Prompt 的 `id` 与 `status`。
+- **限流说明**：受 `PUBLIC_PROMPT_SUBMIT_LIMIT` / `PUBLIC_PROMPT_SUBMIT_WINDOW` 约束，默认 30 分钟内最多 5 次投稿。
+
+#### POST /api/public-prompts/:id/review
+
+- **用途**：管理员审核公共 Prompt，支持通过（`approved`）或驳回（`rejected`）；可选 `reason` 字段会记录驳回原因，便于前端展示。
+- **成功响应**：`204`。
+- **常见错误**：记录不存在 → `404`；状态非法 → `400`。
 
 #### POST /api/prompts/generate
 

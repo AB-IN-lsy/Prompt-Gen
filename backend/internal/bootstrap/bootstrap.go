@@ -2,7 +2,7 @@
  * @Author: NEFU AB-IN
  * @Date: 2025-10-09 20:51:28
  * @FilePath: \electron-go-app\backend\internal\bootstrap\bootstrap.go
- * @LastEditTime: 2025-10-14 20:38:19
+ * @LastEditTime: 2025-10-22 20:53:30
  */
 package bootstrap
 
@@ -31,6 +31,7 @@ import (
 	changelogsrv "electron-go-app/backend/internal/service/changelog"
 	modelsvc "electron-go-app/backend/internal/service/model"
 	promptsvc "electron-go-app/backend/internal/service/prompt"
+	publicpromptsvc "electron-go-app/backend/internal/service/publicprompt"
 	usersvc "electron-go-app/backend/internal/service/user"
 
 	"go.uber.org/zap"
@@ -66,6 +67,7 @@ func BuildApplication(ctx context.Context, logger *zap.SugaredLogger, resources 
 	changelogRepo := repository.NewChangelogRepository(resources.DBConn())
 	promptRepo := repository.NewPromptRepository(resources.DBConn())
 	keywordRepo := repository.NewKeywordRepository(resources.DBConn())
+	publicPromptRepo := repository.NewPublicPromptRepository(resources.DBConn())
 
 	isLocalMode := strings.EqualFold(cfg.Mode, config.ModeLocal)
 
@@ -113,6 +115,13 @@ func BuildApplication(ctx context.Context, logger *zap.SugaredLogger, resources 
 		promptLimiter = ratelimit.NewMemoryLimiter()
 	}
 
+	var publicPromptLimiter ratelimit.Limiter
+	if resources.Redis != nil {
+		publicPromptLimiter = ratelimit.NewRedisLimiter(resources.Redis, "public_prompt")
+	} else {
+		publicPromptLimiter = ratelimit.NewMemoryLimiter()
+	}
+
 	// 支持通过环境变量自定义验证邮件的频率限制。
 	verificationLimit, verificationWindow := loadEmailVerificationRateConfig(logger)
 
@@ -135,6 +144,10 @@ func BuildApplication(ctx context.Context, logger *zap.SugaredLogger, resources 
 	promptService := promptsvc.NewServiceWithConfig(promptRepo, keywordRepo, modelService, workspaceStore, persistenceQueue, logger, promptCfg)
 	promptRateLimit := loadPromptRateLimit(logger)
 	promptHandler := handler.NewPromptHandler(promptService, promptLimiter, promptRateLimit)
+	// 公开 Prompt 服务与 Handler 仅负责公开库的查询功能。
+	publicPromptRate := loadPublicPromptRateLimit(logger)
+	publicPromptService := publicpromptsvc.NewService(publicPromptRepo, resources.DBConn(), logger, !isLocalMode)
+	publicPromptHandler := handler.NewPublicPromptHandler(publicPromptService, publicPromptLimiter, publicPromptRate)
 
 	// IP 防护中间件也是可选的，且强依赖 Redis。
 	ipGuardCfg := loadIPGuardConfig(logger)
@@ -174,15 +187,16 @@ func BuildApplication(ctx context.Context, logger *zap.SugaredLogger, resources 
 		authenticator = middleware.NewAuthMiddleware(cfg.JWTSecret)
 	}
 	router := server.NewRouter(server.RouterOptions{
-		AuthHandler:      authHandler,
-		UserHandler:      userHandler,
-		UploadHandler:    uploadHandler,
-		ModelHandler:     modelHandler,
-		ChangelogHandler: changelogHandler,
-		PromptHandler:    promptHandler,
-		AuthMW:           authenticator,
-		IPGuard:          ipGuard,
-		IPGuardHandler:   ipGuardHandler,
+		AuthHandler:         authHandler,
+		UserHandler:         userHandler,
+		UploadHandler:       uploadHandler,
+		ModelHandler:        modelHandler,
+		ChangelogHandler:    changelogHandler,
+		PromptHandler:       promptHandler,
+		PublicPromptHandler: publicPromptHandler,
+		AuthMW:              authenticator,
+		IPGuard:             ipGuard,
+		IPGuardHandler:      ipGuardHandler,
 	})
 
 	return &Application{
@@ -297,11 +311,33 @@ func loadPromptRateLimit(logger *zap.SugaredLogger) handler.PromptRateLimit {
 	interpretWindow := parseDurationEnv("PROMPT_INTERPRET_WINDOW", handler.DefaultInterpretWindow, logger)
 	generateLimit := parseIntEnv("PROMPT_GENERATE_LIMIT", handler.DefaultGenerateLimit, logger)
 	generateWindow := parseDurationEnv("PROMPT_GENERATE_WINDOW", handler.DefaultGenerateWindow, logger)
+	saveLimit := parseIntEnv("PROMPT_SAVE_LIMIT", handler.DefaultSaveLimit, logger)
+	saveWindow := parseDurationEnv("PROMPT_SAVE_WINDOW", handler.DefaultSaveWindow, logger)
+	publishLimit := parseIntEnv("PROMPT_PUBLISH_LIMIT", handler.DefaultPublishLimit, logger)
+	publishWindow := parseDurationEnv("PROMPT_PUBLISH_WINDOW", handler.DefaultPublishWindow, logger)
 	return handler.PromptRateLimit{
 		InterpretLimit:  interpretLimit,
 		InterpretWindow: interpretWindow,
 		GenerateLimit:   generateLimit,
 		GenerateWindow:  generateWindow,
+		SaveLimit:       saveLimit,
+		SaveWindow:      saveWindow,
+		PublishLimit:    publishLimit,
+		PublishWindow:   publishWindow,
+	}
+}
+
+// loadPublicPromptRateLimit 读取公共 Prompt 库的限流配置。
+func loadPublicPromptRateLimit(logger *zap.SugaredLogger) handler.PublicPromptRateLimit {
+	submitLimit := parseIntEnv("PUBLIC_PROMPT_SUBMIT_LIMIT", handler.DefaultPublicSubmitLimit, logger)
+	submitWindow := parseDurationEnv("PUBLIC_PROMPT_SUBMIT_WINDOW", handler.DefaultPublicSubmitWindow, logger)
+	downloadLimit := parseIntEnv("PUBLIC_PROMPT_DOWNLOAD_LIMIT", handler.DefaultPublicDownloadLimit, logger)
+	downloadWindow := parseDurationEnv("PUBLIC_PROMPT_DOWNLOAD_WINDOW", handler.DefaultPublicDownloadWindow, logger)
+	return handler.PublicPromptRateLimit{
+		SubmitLimit:    submitLimit,
+		SubmitWindow:   submitWindow,
+		DownloadLimit:  downloadLimit,
+		DownloadWindow: downloadWindow,
 	}
 }
 

@@ -25,7 +25,7 @@ import {
 import { Button } from "../components/ui/button";
 import { Badge } from "../components/ui/badge";
 import { GlassCard } from "../components/ui/glass-card";
-import { Input } from "../components/ui/input";
+import { SpotlightSearch } from "../components/ui/spotlight-search";
 import { useAuth } from "../hooks/useAuth";
 import {
     fetchMyPrompts,
@@ -462,7 +462,7 @@ export default function DashboardPage(): JSX.Element {
                         className="flex flex-col gap-3 md:flex-row md:items-center"
                         onSubmit={handleSearchSubmit}
                     >
-                        <Input
+                        <SpotlightSearch
                             value={searchInput}
                             onChange={(event) => setSearchInput(event.target.value)}
                             placeholder={t("dashboard.search.placeholder")}

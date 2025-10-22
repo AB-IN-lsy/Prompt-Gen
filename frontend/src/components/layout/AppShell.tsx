@@ -9,7 +9,7 @@ import { ReactNode, useCallback, useEffect, useLayoutEffect, useMemo, useRef, us
 import { useTranslation } from "react-i18next";
 import { cn, resolveAssetUrl } from "../../lib/utils";
 import { isLocalMode } from "../../lib/runtimeMode";
-import { Settings, HelpCircle, LayoutDashboard, Sparkles, LogOut, ListChecks, FileClock, Rocket, ShieldAlert, ScrollText } from "lucide-react";
+import { Settings, HelpCircle, LayoutDashboard, Sparkles, LogOut, ListChecks, FileClock, Rocket, ShieldAlert, ScrollText, Library } from "lucide-react";
 import { Button } from "../ui/button";
 import { useAuth } from "../../hooks/useAuth";
 import { TitleBar } from "./TitleBar";
@@ -20,6 +20,7 @@ import { AuroraBackdrop } from "../visuals/AuroraBackdrop";
 const baseNavItems = [
     { labelKey: "nav.dashboard", icon: LayoutDashboard, to: "/" },
     { labelKey: "nav.myPrompts", icon: ListChecks, to: "/prompts" },
+    { labelKey: "nav.publicPrompts", icon: Library, to: "/public-prompts" },
     { labelKey: "nav.workbench", icon: Sparkles, to: "/prompt-workbench" },
     { labelKey: "nav.logs", icon: FileClock, to: "/logs" },
     { labelKey: "nav.help", icon: HelpCircle, to: "/help" },

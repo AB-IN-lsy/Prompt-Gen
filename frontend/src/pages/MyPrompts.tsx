@@ -5,7 +5,6 @@ import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import {
   LoaderCircle,
-  Search,
   Edit3,
   Trash2,
   ChevronLeft,
@@ -16,7 +15,7 @@ import {
 } from "lucide-react";
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
-import { Input } from "../components/ui/input";
+import { SpotlightSearch } from "../components/ui/spotlight-search";
 import {
   PROMPT_KEYWORD_MAX_LENGTH,
   PROMPT_TAG_MAX_LENGTH,
@@ -248,15 +247,13 @@ export default function MyPromptsPage(): JSX.Element {
         onSubmit={handleSearchSubmit}
       >
           <div className="flex flex-1 items-center gap-3">
-            <div className="flex flex-1 items-center gap-2 rounded-full border border-white/60 bg-white/90 px-3 py-2 transition-colors dark:border-slate-700 dark:bg-slate-900/60">
-              <Search className="h-4 w-4 text-slate-500 dark:text-slate-400" />
-              <Input
-                value={searchInput}
-                onChange={(event) => setSearchInput(event.target.value)}
-                placeholder={t("myPrompts.searchPlaceholder")}
-                className="border-none bg-transparent text-sm focus-visible:ring-0"
-              />
-            </div>
+            <SpotlightSearch
+              value={searchInput}
+              onChange={(event) => setSearchInput(event.target.value)}
+              placeholder={t("myPrompts.searchPlaceholder")}
+              className="flex-1"
+              name="my-prompts-search"
+            />
             <Button type="submit" size="sm" variant="secondary">
               {t("common.search")}
             </Button>

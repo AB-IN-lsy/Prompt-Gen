@@ -22,6 +22,7 @@ import LogsPage from "./pages/Logs";
 import IpGuardPage from "./pages/IpGuard";
 import ChangelogAdminPage from "./pages/ChangelogAdmin";
 import PromptDetailPage from "./pages/PromptDetail";
+import PublicPromptsPage from "./pages/PublicPrompts";
 import { useAuth, useIsAuthenticated } from "./hooks/useAuth";
 import { isLocalMode } from "./lib/runtimeMode";
 import { EntryTransition } from "./components/visuals/EntryTransition";
@@ -123,6 +124,7 @@ export default function App() {
             <Routes>
                 <Route path="/" element={<DashboardPage />} />
                 <Route path="/prompts" element={<MyPromptsPage />} />
+                <Route path="/public-prompts" element={<PublicPromptsPage />} />
                 <Route path="/prompt-workbench" element={<PromptWorkbenchPage />} />
                 <Route path="/prompts/:id" element={<PromptDetailPage />} />
                 <Route path="/settings" element={<SettingsPage />} />

@@ -4,17 +4,23 @@
  * @FilePath: \electron-go-app\frontend\src\components\ui\glass-card.tsx
  * @LastEditTime: 2025-10-09 22:46:48
  */
-import { CSSProperties, ForwardedRef, ReactNode, forwardRef } from "react";
+import {
+    CSSProperties,
+    ForwardedRef,
+    HTMLAttributes,
+    ReactNode,
+    forwardRef,
+} from "react";
 import { cn } from "../../lib/utils";
 
-interface GlassCardProps {
+interface GlassCardProps extends HTMLAttributes<HTMLDivElement> {
     children: ReactNode;
     className?: string;
     style?: CSSProperties;
 }
 
 export const GlassCard = forwardRef(function GlassCard(
-    { children, className, style }: GlassCardProps,
+    { children, className, style, ...props }: GlassCardProps,
     ref: ForwardedRef<HTMLDivElement>
 ) {
     return (
@@ -25,6 +31,7 @@ export const GlassCard = forwardRef(function GlassCard(
                 className
             )}
             style={style}
+            {...props}
         >
             {children}
         </div>

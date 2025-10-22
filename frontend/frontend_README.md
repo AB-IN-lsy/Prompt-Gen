@@ -23,6 +23,8 @@
 - **动效开关**：设置页“应用设置”新增「界面动效」开关，可随时开启/关闭欢迎过场与背景光效，偏好会同步保存到用户设置。
 - **Dashboard Spotlight Hero**：仪表盘顶区改为 Spotlight Hero 模式，融合欢迎语、快捷按钮与核心指标卡片，叠加柔光/噪点背景。
 - **Magnetic 按钮**：在仪表盘 CTA 及设置页数据导入导出按钮启用磁吸动效，增强指针跟随反馈。
+- **Spotlight 搜索框**：抽象出 `SpotlightSearch` 组件，并在仪表盘、我的 Prompt、公共 Prompt 库复用，保持光影聚焦与指针跟随体验。
+- **优质 Prompt 库**：新增 “优质 Prompt 库” 页面，支持按关键词、状态筛选公共 Prompt，并一键导入到个人库（离线模式保留浏览与下载能力，投稿在在线模式开放）。
 - **帮助中心 Scroll Stack**：`Help.tsx` 采用滚动联动卡片布局，左侧章节索引与右侧卡片堆叠联动，逐步呈现操作指南。
 - **版本历史**：Prompt 详情页左侧新增“版本历史”卡片，可浏览、预览历史版本并一键加载到工作台继续编辑。
 
@@ -122,12 +124,18 @@ frontend/
    │  ├─ layout/
    │  │  ├─ AppShell.tsx           # 顶部工具栏 + 侧边导航的应用外壳
    │  │  └─ AuthLayout.tsx         # 登录/注册页的独立布局
-   │  └─ ui/                       # 轻量 UI 组件（Button、Input、GlassCard 等）
+   │  └─ ui/
+   │     ├─ badge.tsx              # Capsule 风格徽章
+   │     ├─ button.tsx             # 多 Variant 按钮
+   │     ├─ glass-card.tsx         # 毛玻璃卡片容器，支持透传原生事件
+   │     ├─ magnetic-button.tsx    # 指针跟随磁吸按钮
+   │     └─ spotlight-search.tsx   # Spotlight 风格搜索框，带渐变光晕与指针跟随
    ├─ pages/
    │  ├─ Dashboard.tsx             # 仪表盘页面，展示指标卡、动态与提示词表现
    │  ├─ Login.tsx                 # 登录表单，内置行内校验与 Toast 成功/失败提示
    │  ├─ Register.tsx              # 注册表单，内置验证码刷新、自动重试与行内校验提示
    │  ├─ PromptWorkbench.tsx       # 提示词工作台，整合关键词管理与草稿编辑
+   │  ├─ PublicPrompts.tsx         # 优质 Prompt 列表，支持搜索、筛选与下载/导入
    │  ├─ Settings.tsx              # 设置页，管理账户资料、模型偏好与主题
    │  ├─ Help.tsx                  # 帮助中心，汇总使用指南与支持渠道
    │  ├─ Logs.tsx                  # 更新日志，展示并（管理员）维护 changelog

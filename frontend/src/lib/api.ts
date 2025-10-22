@@ -52,6 +52,88 @@ const clampKeywordWeight = (value?: number): number => {
   return Math.round(value);
 };
 
+const parseJsonSafe = <T>(value: unknown, fallback: T): T => {
+  if (value == null) {
+    return fallback;
+  }
+  if (typeof value === "object") {
+    return value as T;
+  }
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (trimmed === "") {
+      return fallback;
+    }
+    try {
+      return JSON.parse(trimmed) as T;
+    } catch {
+      return fallback;
+    }
+  }
+  return fallback;
+};
+
+const parseStringArray = (value: unknown): string[] => {
+  const parsed = parseJsonSafe<unknown[]>(value, []);
+  if (!Array.isArray(parsed)) {
+    if (typeof value === "string" && value.includes(",")) {
+      return value
+        .split(",")
+        .map((item) => item.trim())
+        .filter(Boolean);
+    }
+    return [];
+  }
+  return parsed
+    .map((item) => {
+      if (typeof item === "string") {
+        return item.trim();
+      }
+      if (item && typeof item === "object" && "name" in item) {
+        return String((item as { name?: string }).name ?? "").trim();
+      }
+      return "";
+    })
+    .filter(Boolean);
+};
+
+export interface PublicPromptKeywordItem {
+  word: string;
+  source?: string;
+  weight?: number;
+}
+
+const parsePublicPromptKeywords = (value: unknown): PublicPromptKeywordItem[] => {
+  const parsed = parseJsonSafe<unknown[]>(value, []);
+  if (!Array.isArray(parsed)) {
+    return [];
+  }
+  return parsed
+    .map((item) => {
+      if (typeof item === "string") {
+        return { word: item };
+      }
+      if (item && typeof item === "object") {
+        const record = item as Record<string, unknown>;
+        const word = typeof record.word === "string" ? record.word : "";
+        if (!word) {
+          return null;
+        }
+        const weight =
+          typeof record.weight === "number" && Number.isFinite(record.weight)
+            ? record.weight
+            : undefined;
+        const source =
+          typeof record.source === "string" && record.source.trim() !== ""
+            ? record.source
+            : undefined;
+        return { word, source, weight };
+      }
+      return null;
+    })
+    .filter((item): item is PublicPromptKeywordItem => Boolean(item));
+};
+
 /**
  * Keyword entity as returned by the backend. The Prompt Workbench primarily uses the
  * `id`, `word`, `polarity`, `source`, and `weight` fields.
@@ -130,6 +212,47 @@ export interface PromptListMeta {
 export interface PromptListResponse {
   items: PromptListItem[];
   meta: PromptListMeta;
+}
+
+export interface PublicPromptListItem {
+  id: number;
+  title: string;
+  topic: string;
+  summary: string;
+  model: string;
+  language: string;
+  status: "pending" | "approved" | "rejected" | string;
+  tags: string[];
+  download_count: number;
+  created_at: string;
+  updated_at: string;
+  author_user_id: number;
+  reviewer_user_id?: number | null;
+  review_reason?: string | null;
+}
+
+export interface PublicPromptListMeta {
+  page: number;
+  page_size: number;
+  total_items: number;
+  total_pages: number;
+}
+
+export interface PublicPromptListResponse {
+  items: PublicPromptListItem[];
+  meta: PublicPromptListMeta;
+}
+
+export interface PublicPromptDetail extends PublicPromptListItem {
+  body: string;
+  instructions: string;
+  positive_keywords: PublicPromptKeywordItem[];
+  negative_keywords: PublicPromptKeywordItem[];
+}
+
+export interface PublicPromptDownloadResult {
+  promptId: number | null;
+  status: string;
 }
 
 export interface PromptExportResult {
@@ -815,6 +938,122 @@ export async function fetchMyPrompts(params: {
     return {
       items: response.data?.items ?? [],
       meta: meta ?? fallbackMeta,
+    };
+  } catch (error) {
+    throw normaliseError(error);
+  }
+}
+
+export async function fetchPublicPrompts(params: {
+  query?: string;
+  status?: string;
+  page?: number;
+  pageSize?: number;
+  authorId?: number;
+} = {}): Promise<PublicPromptListResponse> {
+  try {
+    const response: AxiosResponse<{ items: any[] }> & {
+      meta?: PublicPromptListMeta;
+    } = await http.get("/public-prompts", {
+      params: {
+        q: params.query,
+        status: params.status,
+        page: params.page,
+        page_size: params.pageSize,
+        author_id: params.authorId,
+      },
+    });
+    const items = (response.data?.items ?? []).map((item) => {
+      const tags = parseStringArray(item?.tags);
+      return {
+        id: Number(item?.id ?? 0),
+        title: String(item?.title ?? item?.topic ?? ""),
+        topic: String(item?.topic ?? ""),
+        summary: String(item?.summary ?? ""),
+        model: String(item?.model ?? ""),
+        language: String(item?.language ?? "zh-CN"),
+        status: String(item?.status ?? "pending"),
+        tags,
+        download_count: Number(item?.download_count ?? 0),
+        created_at: String(item?.created_at ?? ""),
+        updated_at: String(item?.updated_at ?? ""),
+        author_user_id: Number(item?.author_user_id ?? 0),
+        reviewer_user_id:
+          item?.reviewer_user_id === null || item?.reviewer_user_id === undefined
+            ? undefined
+            : Number(item.reviewer_user_id),
+        review_reason:
+          typeof item?.review_reason === "string" ? item.review_reason : undefined,
+      } as PublicPromptListItem;
+    });
+    const meta =
+      response.meta ??
+      ({
+        page: params.page ?? 1,
+        page_size: params.pageSize ?? 12,
+        total_items: items.length,
+        total_pages: 1,
+      } satisfies PublicPromptListMeta);
+    return { items, meta };
+  } catch (error) {
+    throw normaliseError(error);
+  }
+}
+
+export async function fetchPublicPromptDetail(
+  id: number,
+): Promise<PublicPromptDetail> {
+  try {
+    const response: AxiosResponse<Record<string, unknown>> = await http.get(
+      `/public-prompts/${id}`,
+    );
+    const data = response.data ?? {};
+    const tags = parseStringArray(data.tags);
+    const positive = parsePublicPromptKeywords(data.positive_keywords);
+    const negative = parsePublicPromptKeywords(data.negative_keywords);
+    return {
+      id: Number(data.id ?? id),
+      title: String(data.title ?? data.topic ?? ""),
+      topic: String(data.topic ?? ""),
+      summary: String(data.summary ?? ""),
+      model: String(data.model ?? ""),
+      language: String(data.language ?? "zh-CN"),
+      status: String(data.status ?? "pending"),
+      tags,
+      download_count: Number(data.download_count ?? 0),
+      created_at: String(data.created_at ?? ""),
+      updated_at: String(data.updated_at ?? ""),
+      author_user_id: Number(data.author_user_id ?? 0),
+      reviewer_user_id:
+        data.reviewer_user_id === null || data.reviewer_user_id === undefined
+          ? undefined
+          : Number(data.reviewer_user_id),
+      review_reason:
+        typeof data.review_reason === "string" ? data.review_reason : undefined,
+      body: String(data.body ?? ""),
+      instructions: String(data.instructions ?? ""),
+      positive_keywords: positive,
+      negative_keywords: negative,
+    };
+  } catch (error) {
+    throw normaliseError(error);
+  }
+}
+
+export async function downloadPublicPrompt(
+  id: number,
+): Promise<PublicPromptDownloadResult> {
+  try {
+    const response: AxiosResponse<{
+      prompt_id?: number;
+      status?: string;
+    }> = await http.post(`/public-prompts/${id}/download`);
+    return {
+      promptId:
+        typeof response.data?.prompt_id === "number"
+          ? response.data.prompt_id
+          : null,
+      status: String(response.data?.status ?? ""),
     };
   } catch (error) {
     throw normaliseError(error);

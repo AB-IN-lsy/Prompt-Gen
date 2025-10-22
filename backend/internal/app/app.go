@@ -75,6 +75,7 @@ func InitResources(ctx context.Context) (*Resources, error) {
 		&promptdomain.Keyword{},
 		&promptdomain.PromptKeyword{},
 		&promptdomain.PromptVersion{},
+		&promptdomain.PublicPrompt{},
 	); err != nil {
 		return nil, fmt.Errorf("auto migrate: %w", err)
 	}
@@ -150,6 +151,7 @@ func initLocalResources(ctx context.Context, flags config.RuntimeFlags) (*Resour
 		&promptdomain.Keyword{},
 		&promptdomain.PromptKeyword{},
 		&promptdomain.PromptVersion{},
+		&promptdomain.PublicPrompt{},
 	); err != nil {
 		return nil, fmt.Errorf("auto migrate sqlite: %w", err)
 	}

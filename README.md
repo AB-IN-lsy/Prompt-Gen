@@ -6,7 +6,7 @@
 ![Visitors](https://komarev.com/ghpvc/?username=AB-IN-lsy&repo=Prompt-Gen&style=flat-square)
 [![zread](https://img.shields.io/badge/Ask_Zread-_.svg?style=flat&color=00b0aa&labelColor=000000&logo=data%3Aimage%2Fsvg%2Bxml%3Bbase64%2CPHN2ZyB3aWR0aD0iMTYiIGhlaWdodD0iMTYiIHZpZXdCb3g9IjAgMCAxNiAxNiIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHBhdGggZD0iTTQuOTYxNTYgMS42MDAxSDIuMjQxNTZDMS44ODgxIDEuNjAwMSAxLjYwMTU2IDEuODg2NjQgMS42MDE1NiAyLjI0MDFWNC45NjAxQzEuNjAxNTYgNS4zMTM1NiAxLjg4ODEgNS42MDAxIDIuMjQxNTYgNS42MDAxSDQuOTYxNTZDNS4zMTUwMiA1LjYwMDEgNS42MDE1NiA1LjMxMzU2IDUuNjAxNTYgNC45NjAxVjIuMjQwMUM1LjYwMTU2IDEuODg2NjQgNS4zMTUwMiAxLjYwMDEgNC45NjE1NiAxLjYwMDFaIiBmaWxsPSIjZmZmIi8%2BCjxwYXRoIGQ9Ik00Ljk2MTU2IDEwLjM5OTlIMi4yNDE1NkMxLjg4ODEgMTAuMzk5OSAxLjYwMTU2IDEwLjY4NjQgMS42MDE1NiAxMS4wMzk5VjEzLjc1OTlDMS42MDE1NiAxNC4xMTM0IDEuODg4MSAxNC4zOTk5IDIuMjQxNTYgMTQuMzk5OUg0Ljk2MTU2QzUuMzE1MDIgMTQuMzk5OSA1LjYwMTU2IDE0LjExMzQgNS42MDE1NiAxMy43NTk5VjExLjAzOTlDNS42MDE1NiAxMC42ODY0IDUuMzE1MDIgMTAuMzk5OSA0Ljk2MTU2IDEwLjM5OTlaIiBmaWxsPSIjZmZmIi8%2BCjxwYXRoIGQ9Ik0xMy43NTg0IDEuNjAwMUgxMS4wMzg0QzEwLjY4NSAxLjYwMDEgMTAuMzk4NCAxLjg4NjY0IDEwLjM5ODQgMi4yNDAxVjQuOTYwMUMxMC4zOTg0IDUuMzEzNTYgMTAuNjg1IDUuNjAwMSAxMS4wMzg0IDUuNjAwMUgxMy43NTg0QzE0LjExMTkgNS42MDAxIDE0LjM5ODQgNS4zMTM1NiAxNC4zOTg0IDQuOTYwMVYyLjI0MDFDMTQuMzk4NCAxLjg4NjY0IDE0LjExMTkgMS42MDAxIDEzLjc1ODQgMS42MDAxWiIgZmlsbD0iI2ZmZiIvPgo8cGF0aCBkPSJNNCAxMkwxMiA0TDQgMTJaIiBmaWxsPSIjZmZmIi8%2BCjxwYXRoIGQ9Ik00IDEyTDEyIDQiIHN0cm9rZT0iI2ZmZiIgc3Ryb2tlLXdpZHRoPSIxLjUiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPgo8L3N2Zz4K&logoColor=ffffff)](https://zread.ai/AB-IN-lsy/Prompt-Gen)
 
-Prompt Gen Desktop 是一套以 Electron 为外壳、Go 为后端、Vite/React 为前端的提示词管理工作台，面向需要系统化维护 Prompt 的产品、运营与研发团队。应用通过桌面端封装、后端 API 与前端治理模块，为需求解析、关键词管理、模型凭据维护等场景提供统一体验。
+Prompt Gen Desktop 是一套以 Electron 为外壳、Go 为后端、Vite/React 为前端的提示词管理工作台，面向需要系统化维护 Prompt 的产品、运营与研发团队。应用通过桌面端封装、后端 API 与前端治理模块，为需求解析、关键词管理、模型凭据维护等场景提供统一体验；设置页同时提供界面动效开关，可自由控制 Aurora 背景与欢迎过场动画。
 
 ## 演示视频
 
@@ -83,9 +83,10 @@ go mod tidy
 ### 环境配置
 
 1. 复制 `.env.example` 为 `.env.local`（可根据需要提交 `.env`）。
-2. 基本字段包括：`APP_MODE`、`LOCAL_SQLITE_PATH`、`JWT_SECRET`、`MODEL_CREDENTIAL_MASTER_KEY` 等。  
+2. 基本字段包括：`APP_MODE`、`LOCAL_SQLITE_PATH`、`JWT_SECRET`、`MODEL_CREDENTIAL_MASTER_KEY`（用于 AES-256-GCM 加密模型凭据，需填入 Base64 编码的 32 字节密钥）等。  
 3. 若需调试在线模式，可补充 MySQL、Redis、Nacos 等连接参数；否则将 `APP_MODE=local` 即可在完全离线的 SQLite 环境中启动。
 4. 前端同样读取根目录 `.env(.local)` 中的 `VITE_` 字段，例如 `VITE_API_BASE_URL`、`VITE_API_REQUEST_TIMEOUT_MS` 等。
+5. 当前版本仅提供本地存储加手动的 JSON 导入/导出备份能力，不再包含任何远程同步功能。
 
 详细参数说明与约束请参考 `backend/backend_README.md` 与 `frontend/frontend_README.md`。
 

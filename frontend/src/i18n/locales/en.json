@@ -9,6 +9,7 @@
   "nav": {
     "dashboard": "Dashboard",
     "myPrompts": "My Prompts",
+    "publicPrompts": "Public Prompt Library",
     "workbench": "Prompt Workbench",
     "settings": "Settings",
     "logs": "Activity Logs",
@@ -118,6 +119,46 @@
       "troubleshooting",
       "contact"
     ]
+  },
+  "publicPrompts": {
+    "eyebrow": "Curated",
+    "title": "Public Prompt Library",
+    "subtitle": "Browse community-sourced prompts and add them to your workspace in one click.",
+    "searchPlaceholder": "Search by topic, tag, or author…",
+    "total": "{{count}} public prompts available",
+    "offlineHint": "Offline mode allows browsing and downloading only",
+    "filters": {
+      "title": "Filters",
+      "all": "All",
+      "approved": "Approved",
+      "pending": "Pending",
+      "rejected": "Rejected"
+    },
+    "empty": "No public prompts match your filters yet. Try another keyword.",
+    "noSummary": "No summary yet – open the card to view full details.",
+    "downloadAction": "Download to My Prompts",
+    "downloadSuccess": "Prompt downloaded and added to your library.",
+    "paginationInfo": "Page {{page}} of {{totalPages}}",
+    "prevPage": "Previous",
+    "nextPage": "Next",
+    "loadingDetail": "Loading prompt details…",
+    "instructions": "Instructions",
+    "noInstructions": "No additional instructions",
+    "body": "Prompt body",
+    "status": {
+      "approved": "Approved",
+      "pending": "Pending",
+      "rejected": "Rejected"
+    },
+    "keywords": {
+      "positive": "Positive keywords",
+      "negative": "Negative keywords",
+      "empty": "No keywords provided"
+    },
+    "detailMeta": {
+      "model": "Model: {{model}}",
+      "updatedAt": "Updated: {{date}} {{time}}"
+    }
   },
   "logsPage": {
     "eyebrow": "Release notes",
