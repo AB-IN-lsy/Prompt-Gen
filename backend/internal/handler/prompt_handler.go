@@ -724,6 +724,7 @@ func (h *PromptHandler) GeneratePrompt(c *gin.Context) {
 		"duration_ms":       out.Duration.Milliseconds(),
 		"positive_keywords": toKeywordResponse(out.PositiveUsed),
 		"negative_keywords": toKeywordResponse(out.NegativeUsed),
+		"topic":             strings.TrimSpace(req.Topic),
 	}
 	if out.Usage != nil {
 		payload["usage"] = out.Usage

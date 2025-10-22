@@ -1,4 +1,4 @@
-import { ChangeEvent, FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
@@ -12,8 +12,7 @@ import {
   ChevronRight,
   RefreshCcw,
   Sparkles,
-  Download,
-  Upload,
+  Settings,
 } from "lucide-react";
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
@@ -25,8 +24,6 @@ import {
 import { KEYWORD_ROW_LIMIT, DEFAULT_KEYWORD_WEIGHT } from "../config/prompt";
 import {
   deletePrompt,
-  exportPrompts,
-  importPrompts,
   fetchMyPrompts,
   fetchPromptDetail,
   normaliseKeywordSource,
@@ -35,10 +32,9 @@ import {
   PromptListKeyword,
   PromptListResponse,
   PromptListMeta,
-  PromptImportResult,
 } from "../lib/api";
 import { usePromptWorkbench } from "../hooks/usePromptWorkbench";
-import type { Keyword, PromptExportResult } from "../lib/api";
+import type { Keyword } from "../lib/api";
 import { nanoid } from "nanoid";
 import { clampTextWithOverflow, formatOverflowLabel, cn } from "../lib/utils";
 import { PageHeader } from "../components/layout/PageHeader";
@@ -77,7 +73,6 @@ export default function MyPromptsPage(): JSX.Element {
   const { t, i18n } = useTranslation();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const resetWorkbench = usePromptWorkbench((state) => state.reset);
   const setTopic = usePromptWorkbench((state) => state.setTopic);
@@ -89,84 +84,10 @@ export default function MyPromptsPage(): JSX.Element {
   const setTags = usePromptWorkbench((state) => state.setTags);
   const setInstructions = usePromptWorkbench((state) => state.setInstructions);
 
-  const [lastExport, setLastExport] = useState<PromptExportResult | null>(null);
-  const [lastImport, setLastImport] = useState<PromptImportResult | null>(null);
   const [status, setStatus] = useState<StatusFilter>("all");
   const [page, setPage] = useState(1);
   const [searchInput, setSearchInput] = useState("");
   const [committedSearch, setCommittedSearch] = useState("");
-  const [importMode, setImportMode] = useState<"merge" | "overwrite">("merge");
-
-  const exportMutation = useMutation({
-    mutationFn: exportPrompts,
-    onMutate: () => {
-      toast.dismiss("prompt-export");
-      toast.loading(t("myPrompts.export.loading"), { id: "prompt-export" });
-    },
-    onSuccess: (result) => {
-      toast.dismiss("prompt-export");
-      setLastExport(result);
-      const key =
-        result.promptCount > 0 ? "myPrompts.export.success" : "myPrompts.export.empty";
-      toast.success(t(key, { count: result.promptCount, path: result.filePath }));
-    },
-    onError: (error: unknown) => {
-      toast.dismiss("prompt-export");
-      toast.error(
-        error instanceof Error ? error.message : t("myPrompts.export.failed"),
-      );
-    },
-  });
-
-  const importMutation = useMutation({
-    mutationFn: ({ file, mode }: { file: File; mode: "merge" | "overwrite" }) =>
-      importPrompts(file, mode),
-    onMutate: () => {
-      toast.dismiss("prompt-import");
-      toast.loading(t("myPrompts.import.loading"), { id: "prompt-import" });
-    },
-    onSuccess: (result) => {
-      toast.dismiss("prompt-import");
-      setLastImport(result);
-      const successKey = result.errors.length > 0 ? "myPrompts.import.partial" : "myPrompts.import.success";
-      toast.success(
-        t(successKey, {
-          count: result.importedCount,
-          skipped: result.skippedCount,
-          errorCount: result.errors.length,
-        }),
-      );
-      if (result.errors.length > 0) {
-        const detail = result.errors
-          .slice(0, 3)
-          .map((item) => `${item.topic || "-"}: ${item.reason}`)
-          .join("\n");
-        if (detail) {
-          toast.message(t("myPrompts.import.errorHint"), { description: detail });
-        }
-      }
-      void queryClient.invalidateQueries({ queryKey: ["my-prompts"] });
-    },
-    onError: (error: unknown) => {
-      toast.dismiss("prompt-import");
-      toast.error(
-        error instanceof Error ? error.message : t("myPrompts.import.failed"),
-      );
-    },
-  });
-
-  const handleImportButtonClick = () => {
-    fileInputRef.current?.click();
-  };
-
-  const handleImportFileChange = (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) {
-      return;
-    }
-    importMutation.mutate({ file, mode: importMode });
-    event.target.value = "";
-  };
 
   const listQuery = useQuery<PromptListResponse>({
     queryKey: ["my-prompts", { status, page, committedSearch }],
@@ -290,10 +211,6 @@ export default function MyPromptsPage(): JSX.Element {
     [t],
   );
 
-  const exportTimestamp = lastExport
-    ? formatDateTime(lastExport.generatedAt, i18n.language)
-    : null;
-
   return (
     <div className="flex h-full flex-col gap-6">
       <PageHeader
@@ -302,65 +219,14 @@ export default function MyPromptsPage(): JSX.Element {
         description={t("myPrompts.subtitle")}
         actions={
           <div className="flex flex-wrap items-center gap-2">
-            <div className="flex items-center gap-2 rounded-full border border-white/60 bg-white/80 px-3 py-1 shadow-sm transition-colors dark:border-slate-800 dark:bg-slate-900/60">
-              <label className="text-xs font-medium text-slate-500 dark:text-slate-400" htmlFor="import-mode-select">
-                {t("myPrompts.import.modeLabel")}
-              </label>
-              <select
-                id="import-mode-select"
-                className="rounded-md border border-transparent bg-white/90 px-2 py-1 text-xs text-slate-700 shadow-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary/40 dark:border-slate-700 dark:bg-slate-900/80 dark:text-slate-200 dark:shadow-none"
-                value={importMode}
-                onChange={(event) => setImportMode(event.target.value as "merge" | "overwrite")}
-                disabled={importMutation.isPending}
-              >
-                <option value="merge">{t("myPrompts.import.modeMerge")}</option>
-                <option value="overwrite">{t("myPrompts.import.modeOverwrite")}</option>
-              </select>
-            </div>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="application/json"
-              onChange={handleImportFileChange}
-              className="hidden"
-            />
             <Button
               variant="outline"
               size="sm"
-              disabled={importMutation.isPending}
-              onClick={handleImportButtonClick}
               className="shadow-sm dark:shadow-none"
+              onClick={() => navigate("/settings?tab=app")}
             >
-              {importMutation.isPending ? (
-                <>
-                  <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
-                  {t("myPrompts.import.loading")}
-                </>
-              ) : (
-                <>
-                  <Upload className="mr-2 h-4 w-4" />
-                  {t("myPrompts.import.button")}
-                </>
-              )}
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={exportMutation.isPending}
-              onClick={() => exportMutation.mutate()}
-              className="shadow-sm dark:shadow-none"
-            >
-              {exportMutation.isPending ? (
-                <>
-                  <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
-                  {t("myPrompts.export.loading")}
-                </>
-              ) : (
-                <>
-                  <Download className="mr-2 h-4 w-4" />
-                  {t("myPrompts.export.button")}
-                </>
-              )}
+              <Settings className="mr-2 h-4 w-4" />
+              {t("myPrompts.manageBackups")}
             </Button>
             <Button
               variant="secondary"
@@ -377,84 +243,10 @@ export default function MyPromptsPage(): JSX.Element {
           </div>
         }
       />
-      {lastExport ? (
-        <div className="rounded-3xl border border-primary/20 bg-white/80 px-4 py-3 text-sm text-slate-600 shadow-sm transition-colors dark:border-primary/30 dark:bg-slate-900/60 dark:text-slate-200">
-          <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-            <div className="space-y-1">
-              <span className="text-xs font-semibold uppercase tracking-[0.26em] text-primary">
-                {t("myPrompts.exportNotice.title")}
-              </span>
-              <p className="font-mono text-xs text-slate-500 dark:text-slate-400">
-                {t("myPrompts.exportNotice.pathLabel")}：
-                <span className="ml-1 break-all text-slate-700 dark:text-slate-200">
-                  {lastExport.filePath}
-                </span>
-              </p>
-              <p className="text-xs text-slate-500 dark:text-slate-400">
-                {t("myPrompts.exportNotice.timeLabel", {
-                  date: exportTimestamp?.date ?? "",
-                  time: exportTimestamp?.time ?? "",
-                })}
-              </p>
-            </div>
-            <Badge variant="outline" className="whitespace-nowrap text-xs">
-              {t("myPrompts.exportNotice.countLabel", {
-                count: lastExport.promptCount,
-              })}
-            </Badge>
-          </div>
-        </div>
-      ) : null}
-      {lastImport ? (
-        <div className="rounded-3xl border border-emerald-200/60 bg-emerald-50/70 px-4 py-3 text-sm text-emerald-700 shadow-sm transition-colors dark:border-emerald-400/40 dark:bg-emerald-500/10 dark:text-emerald-200">
-          <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-            <div className="space-y-1">
-              <span className="text-xs font-semibold uppercase tracking-[0.26em] text-emerald-500 dark:text-emerald-300">
-                {t("myPrompts.import.noticeTitle")}
-              </span>
-              <p className="text-xs">
-                {t("myPrompts.import.summary", {
-                  count: lastImport.importedCount,
-                  skipped: lastImport.skippedCount,
-                })}
-              </p>
-              {lastImport.errors.length > 0 ? (
-                <div className="rounded-2xl border border-amber-200/60 bg-amber-50/80 px-3 py-2 text-xs text-amber-700 dark:border-amber-400/40 dark:bg-amber-500/10 dark:text-amber-200">
-                  <p className="font-medium">
-                    {t("myPrompts.import.errorListHeading", {
-                      count: lastImport.errors.length,
-                    })}
-                  </p>
-                  <ul className="mt-1 list-disc space-y-1 pl-5">
-                    {lastImport.errors.slice(0, 5).map((item, index) => (
-                      <li key={`${item.topic}-${index}`} className="break-all">
-                        <span className="font-semibold">{item.topic || t("myPrompts.import.unknownTopic")}</span>
-                        <span className="ml-1 text-slate-600 dark:text-slate-200">{item.reason}</span>
-                      </li>
-                    ))}
-                    {lastImport.errors.length > 5 ? (
-                      <li className="italic text-slate-500 dark:text-slate-300">
-                        {t("myPrompts.import.moreErrors", {
-                          remaining: lastImport.errors.length - 5,
-                        })}
-                      </li>
-                    ) : null}
-                  </ul>
-                </div>
-              ) : null}
-            </div>
-            <Badge variant="outline" className="whitespace-nowrap text-xs">
-              {t("myPrompts.import.resultBadge", {
-                count: lastImport.importedCount,
-              })}
-            </Badge>
-          </div>
-        </div>
-      ) : null}
       <form
-          className="flex flex-col gap-3 rounded-3xl border border-white/60 bg-white/80 p-4 shadow-sm transition-colors dark:border-slate-800 dark:bg-slate-900/70 md:flex-row md:items-center md:justify-between"
-          onSubmit={handleSearchSubmit}
-        >
+        className="flex flex-col gap-3 rounded-3xl border border-white/60 bg-white/80 p-4 shadow-sm transition-colors dark:border-slate-800 dark:bg-slate-900/70 md:flex-row md:items-center md:justify-between"
+        onSubmit={handleSearchSubmit}
+      >
           <div className="flex flex-1 items-center gap-3">
             <div className="flex flex-1 items-center gap-2 rounded-full border border-white/60 bg-white/90 px-3 py-2 transition-colors dark:border-slate-700 dark:bg-slate-900/60">
               <Search className="h-4 w-4 text-slate-500 dark:text-slate-400" />

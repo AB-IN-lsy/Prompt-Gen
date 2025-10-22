@@ -201,7 +201,7 @@ export interface AuthUser {
 
 export interface UserSettings {
   preferred_model: string;
-  sync_enabled: boolean;
+  enable_animations: boolean;
 }
 
 export interface AuthProfile {
@@ -361,6 +361,7 @@ export interface GeneratePromptResponse {
   model: string;
   duration_ms?: number;
   usage?: ChatCompletionUsage;
+  topic?: string;
   positive_keywords?: PromptKeywordResult[];
   negative_keywords?: PromptKeywordResult[];
   workspace_token?: string;
@@ -407,7 +408,7 @@ export interface UpdateCurrentUserRequest {
   email?: string;
   avatar_url?: string | null;
   preferred_model?: string;
-  sync_enabled?: boolean;
+  enable_animations?: boolean;
 }
 
 export interface EmailVerificationRequestResult {

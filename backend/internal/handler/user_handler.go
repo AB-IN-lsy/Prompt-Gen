@@ -65,11 +65,11 @@ func (h *UserHandler) GetMe(c *gin.Context) {
 
 // UpdateMeRequest 描述更新当前登录用户资料与设置的请求体。
 type UpdateMeRequest struct {
-	Username       *string `json:"username" binding:"omitempty,min=2,max=64"`
-	Email          *string `json:"email" binding:"omitempty,email"`
-	AvatarURL      *string `json:"avatar_url"`
-	PreferredModel string  `json:"preferred_model" binding:"omitempty,min=1"`
-	SyncEnabled    *bool   `json:"sync_enabled"`
+	Username         *string `json:"username" binding:"omitempty,min=2,max=64"`
+	Email            *string `json:"email" binding:"omitempty,email"`
+	AvatarURL        *string `json:"avatar_url"`
+	PreferredModel   string  `json:"preferred_model" binding:"omitempty,min=1"`
+	EnableAnimations *bool   `json:"enable_animations"`
 }
 
 // UpdateMe 更新当前用户的资料、偏好模型及同步开关。
@@ -102,7 +102,7 @@ func (h *UserHandler) UpdateMe(c *gin.Context) {
 	}
 	avatarProvided := req.AvatarURL != nil
 
-	log.Infow("update request", "username", usernameLog, "email", emailLog, "avatar_provided", avatarProvided, "preferred_model", req.PreferredModel, "sync_enabled", req.SyncEnabled)
+	log.Infow("update request", "username", usernameLog, "email", emailLog, "avatar_provided", avatarProvided, "preferred_model", req.PreferredModel, "enable_animations", req.EnableAnimations)
 
 	profile, err := h.service.GetProfile(c.Request.Context(), userID)
 	if err != nil {
@@ -177,11 +177,11 @@ func (h *UserHandler) UpdateMe(c *gin.Context) {
 	if req.PreferredModel != "" {
 		settings.PreferredModel = req.PreferredModel
 	}
-	if req.SyncEnabled != nil {
-		settings.SyncEnabled = *req.SyncEnabled
+	if req.EnableAnimations != nil {
+		settings.EnableAnimations = *req.EnableAnimations
 	}
 
-	if req.PreferredModel != "" || req.SyncEnabled != nil {
+	if req.PreferredModel != "" || req.EnableAnimations != nil {
 		updatedSettings, updateErr := h.service.UpdateSettings(c.Request.Context(), userID, settings)
 		if updateErr != nil {
 			status := http.StatusInternalServerError
@@ -210,7 +210,7 @@ func (h *UserHandler) UpdateMe(c *gin.Context) {
 		current = updatedSettings
 	}
 
-	log.Infow("update success", "username", current.User.Username, "email", current.User.Email, "preferred_model", current.Settings.PreferredModel, "sync_enabled", current.Settings.SyncEnabled)
+	log.Infow("update success", "username", current.User.Username, "email", current.User.Email, "preferred_model", current.Settings.PreferredModel, "enable_animations", current.Settings.EnableAnimations)
 
 	response.Success(c, http.StatusOK, current, nil)
 }

@@ -95,8 +95,8 @@ func TestUserService_UpdateSettings(t *testing.T) {
 	}
 
 	desired := domain.Settings{
-		PreferredModel: "gpt-4o-mini",
-		SyncEnabled:    true,
+		PreferredModel:   "gpt-4o-mini",
+		EnableAnimations: true,
 	}
 
 	profile, err := svc.UpdateSettings(context.Background(), u.ID, desired)
@@ -207,7 +207,7 @@ func TestUserService_UpdateSettings_ValidatePreferredModel(t *testing.T) {
 		t.Fatalf("create credential: %v", err)
 	}
 
-	settings := domain.Settings{PreferredModel: "primary", SyncEnabled: true}
+	settings := domain.Settings{PreferredModel: "primary", EnableAnimations: true}
 	if _, err := svc.UpdateSettings(context.Background(), user.ID, settings); err != nil {
 		t.Fatalf("UpdateSettings returned error: %v", err)
 	}
@@ -262,12 +262,12 @@ func TestUserService_UpdateSettings_EmptyPreferredModelResetsToDefault(t *testin
 		t.Fatalf("create credential: %v", err)
 	}
 
-	initial := domain.Settings{PreferredModel: "primary", SyncEnabled: true}
+	initial := domain.Settings{PreferredModel: "primary", EnableAnimations: true}
 	if _, err := svc.UpdateSettings(context.Background(), user.ID, initial); err != nil {
 		t.Fatalf("set initial preferred model: %v", err)
 	}
 
-	cleared := domain.Settings{PreferredModel: "", SyncEnabled: false}
+	cleared := domain.Settings{PreferredModel: "", EnableAnimations: true}
 	profile, err := svc.UpdateSettings(context.Background(), user.ID, cleared)
 	if err != nil {
 		t.Fatalf("update with empty preferred model: %v", err)
@@ -352,7 +352,7 @@ func TestUserService_UpdateSettings_AllowsDefaultWithoutCredentials(t *testing.T
 		t.Fatalf("create user: %v", err)
 	}
 
-	defaultSettings := domain.Settings{PreferredModel: domain.DefaultSettings().PreferredModel, SyncEnabled: true}
+	defaultSettings := domain.Settings{PreferredModel: domain.DefaultSettings().PreferredModel, EnableAnimations: true}
 	profile, err := svc.UpdateSettings(context.Background(), user.ID, defaultSettings)
 	if err != nil {
 		t.Fatalf("UpdateSettings returned error: %v", err)

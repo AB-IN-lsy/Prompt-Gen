@@ -14,6 +14,7 @@ import { Button } from "../ui/button";
 import { useAuth } from "../../hooks/useAuth";
 import { TitleBar } from "./TitleBar";
 import { DesktopContextMenu } from "../system/DesktopContextMenu";
+import { AuroraBackdrop } from "../visuals/AuroraBackdrop";
 
 // 侧边导航基础配置：labelKey 与翻译 key 对应，icon 控制导航图标。
 const baseNavItems = [
@@ -119,8 +120,16 @@ export function AppShell({ children, rightSlot }: AppShellProps) {
         node.scrollTo({ top: 0, behavior: "smooth" });
     }, []);
 
+    const animationsEnabled = profile?.settings?.enable_animations ?? true;
+
+    const shellBackgroundClass = animationsEnabled
+        ? "bg-[var(--bg)]/60 backdrop-blur-xl"
+        : "bg-[var(--bg)]";
+
     return (
-        <div className="flex h-screen w-screen flex-col bg-[var(--bg)] text-[var(--fg)] transition-colors">
+        <div className="relative flex h-screen w-screen overflow-hidden text-[var(--fg)] transition-colors">
+            {animationsEnabled ? <AuroraBackdrop /> : null}
+            <div className={`relative z-10 flex h-full w-full flex-col ${shellBackgroundClass}`}>
             <TitleBar />
             <DesktopContextMenu />
             <div className="flex flex-1 overflow-hidden">
@@ -255,6 +264,7 @@ export function AppShell({ children, rightSlot }: AppShellProps) {
                     ) : null}
                 </main>
             </div>
+        </div>
         </div>
     );
 }

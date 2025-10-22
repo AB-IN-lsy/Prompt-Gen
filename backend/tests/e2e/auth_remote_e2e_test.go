@@ -315,8 +315,8 @@ func TestRemoteAuthFlow(t *testing.T) {
 
 	// Step 4: 调用 /api/users/me 执行设置更新，模拟前端修改偏好模型与同步开关。
 	updateResp := performJSONRequest(t, router, http.MethodPut, "/api/users/me", map[string]any{
-		"preferred_model": "claude-3-opus",
-		"sync_enabled":    true,
+		"preferred_model":   "claude-3-opus",
+		"enable_animations": false,
 	}, map[string]string{
 		"Authorization": "Bearer " + accessToken,
 	})
@@ -345,8 +345,8 @@ func TestRemoteAuthFlow(t *testing.T) {
 	if model, _ := settingsMap["preferred_model"].(string); model != "claude-3-opus" {
 		t.Fatalf("expected preferred_model to be claude-3-opus, got %v", settingsMap["preferred_model"])
 	}
-	if enabled, _ := settingsMap["sync_enabled"].(bool); !enabled {
-		t.Fatalf("expected sync_enabled true, got %v", settingsMap["sync_enabled"])
+	if animations, _ := settingsMap["enable_animations"].(bool); animations {
+		t.Fatalf("expected enable_animations false, got %v", settingsMap["enable_animations"])
 	}
 
 	// Step 5: 再次获取 /api/users/me，验证资料与设置已在远程库中生效。
@@ -385,8 +385,8 @@ func TestRemoteAuthFlow(t *testing.T) {
 		if model, _ := meSettings["preferred_model"].(string); model != "claude-3-opus" {
 			t.Fatalf("expected preferred_model claude-3-opus after reload, got %v", model)
 		}
-		if enabled, _ := meSettings["sync_enabled"].(bool); !enabled {
-			t.Fatalf("expected sync_enabled true after reload, got %v", enabled)
+		if animations, _ := meSettings["enable_animations"].(bool); animations {
+			t.Fatalf("expected enable_animations false after reload, got %v", animations)
 		}
 	} else {
 		t.Fatalf("me response missing settings block")

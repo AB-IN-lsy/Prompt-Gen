@@ -10,6 +10,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 import { useSearchParams } from "react-router-dom";
@@ -27,6 +28,7 @@ import { Textarea } from "../components/ui/textarea";
 import { AvatarUploader } from "../components/account/AvatarUploader";
 import { useAuth } from "../hooks/useAuth";
 import { PageHeader } from "../components/layout/PageHeader";
+import { Download, LoaderCircle, Upload } from "lucide-react";
 import {
   updateCurrentUser,
   requestEmailVerification,
@@ -36,12 +38,16 @@ import {
   deleteUserModel,
   fetchCurrentUser,
   testUserModel,
+  exportPrompts,
+  importPrompts,
   type UpdateCurrentUserRequest,
   type UserModelCredential,
   type CreateUserModelRequest,
   type UpdateUserModelRequest,
   type TestUserModelRequest,
   type ChatCompletionResponse,
+  type PromptExportResult,
+  type PromptImportResult,
 } from "../lib/api";
 import { ApiError, isApiError } from "../lib/errors";
 import { EMAIL_VERIFIED_EVENT_KEY } from "../lib/verification";
@@ -79,6 +85,137 @@ export default function SettingsPage() {
   const initializeAuth = useAuth((state) => state.initialize);
   const isEmailVerified = Boolean(profile?.user.email_verified_at);
   const queryClient = useQueryClient();
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [importMode, setImportMode] = useState<"merge" | "overwrite">("merge");
+  const [lastExport, setLastExport] = useState<PromptExportResult | null>(null);
+  const [lastImport, setLastImport] = useState<PromptImportResult | null>(null);
+  const formatDateTime = useCallback(
+    (value?: string | null) => {
+      if (!value) {
+        return null;
+      }
+      const date = new Date(value);
+      if (Number.isNaN(date.getTime())) {
+        return {
+          date: value,
+          time: "",
+        };
+      }
+      const dateFormatter = new Intl.DateTimeFormat(language, {
+        dateStyle: "short",
+      });
+      const timeFormatter = new Intl.DateTimeFormat(language, {
+        timeStyle: "short",
+      });
+      return {
+        date: dateFormatter.format(date),
+        time: timeFormatter.format(date),
+      };
+    },
+    [language],
+  );
+  const exportMutation = useMutation<PromptExportResult>({
+    mutationFn: exportPrompts,
+    onMutate: () => {
+      toast.dismiss("settings-export");
+      toast.loading(t("settings.backupCard.exportLoading"), {
+        id: "settings-export",
+      });
+    },
+    onSuccess: (result) => {
+      toast.dismiss("settings-export");
+      setLastExport(result);
+      const key =
+        result.promptCount > 0
+          ? "settings.backupCard.exportSuccess"
+          : "settings.backupCard.exportEmpty";
+      toast.success(t(key, { count: result.promptCount, path: result.filePath }));
+    },
+    onError: (error: unknown) => {
+      toast.dismiss("settings-export");
+      const message =
+        error instanceof Error
+          ? error.message
+          : t("settings.backupCard.exportFailed");
+      toast.error(message);
+    },
+  });
+
+  const importMutation = useMutation<
+    PromptImportResult,
+    unknown,
+    { file: File; mode: "merge" | "overwrite" }
+  >({
+    mutationFn: ({ file, mode }) => importPrompts(file, mode),
+    onMutate: () => {
+      toast.dismiss("settings-import");
+      toast.loading(t("settings.backupCard.importLoading"), {
+        id: "settings-import",
+      });
+    },
+    onSuccess: (result) => {
+      toast.dismiss("settings-import");
+      setLastImport(result);
+      const successKey =
+        result.errors.length > 0
+          ? "settings.backupCard.importPartial"
+          : "settings.backupCard.importSuccess";
+      toast.success(
+        t(successKey, {
+          count: result.importedCount,
+          skipped: result.skippedCount,
+          errorCount: result.errors.length,
+        }),
+      );
+      if (result.errors.length > 0) {
+        const detail = result.errors
+          .slice(0, 3)
+          .map((item) => `${item.topic || "-"}: ${item.reason}`)
+          .join("\n");
+        if (detail) {
+          toast.message(t("settings.backupCard.importErrorHint"), {
+            description: detail,
+          });
+        }
+      }
+      void queryClient.invalidateQueries({ queryKey: ["my-prompts"] });
+    },
+    onError: (error: unknown) => {
+      toast.dismiss("settings-import");
+      const message =
+        error instanceof Error
+          ? error.message
+          : t("settings.backupCard.importFailed");
+      toast.error(message);
+    },
+  });
+
+  const handleImportButtonClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleImportFileChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) {
+      return;
+    }
+    importMutation.mutate({ file, mode: importMode });
+    event.target.value = "";
+  };
+  const exportTimestamp = useMemo(
+    () => formatDateTime(lastExport?.generatedAt),
+    [formatDateTime, lastExport],
+  );
+  const latestImportErrors = useMemo(() => {
+    if (!lastImport) {
+      return [];
+    }
+    return lastImport.errors.slice(0, 5);
+  }, [lastImport]);
+  const remainingImportErrors =
+    lastImport && lastImport.errors.length > latestImportErrors.length
+      ? lastImport.errors.length - latestImportErrors.length
+      : 0;
 
   // 模型创建表单临时状态（界面提交时再转换）
   const [modelForm, setModelForm] = useState({
@@ -118,12 +255,12 @@ export default function SettingsPage() {
     }
   }, [setProfile]);
 
-  const [profileForm, setProfileForm] = useState({
+ const [profileForm, setProfileForm] = useState({
     username: profile?.user.username ?? "",
     email: profile?.user.email ?? "",
     avatar_url: profile?.user.avatar_url ?? "",
     preferred_model: profile?.settings.preferred_model ?? "",
-    sync_enabled: profile?.settings.sync_enabled ?? false,
+    enable_animations: profile?.settings.enable_animations ?? true,
   });
 
   const [profileErrors, setProfileErrors] = useState<{
@@ -159,7 +296,7 @@ export default function SettingsPage() {
       email: profile?.user.email ?? "",
       avatar_url: profile?.user.avatar_url ?? "",
       preferred_model: profile?.settings.preferred_model ?? "",
-      sync_enabled: profile?.settings.sync_enabled ?? false,
+      enable_animations: profile?.settings.enable_animations ?? true,
     });
     setProfileErrors({ username: undefined, email: undefined });
     setVerificationTargetEmail(profile?.user.email ?? "");
@@ -527,7 +664,7 @@ export default function SettingsPage() {
       username: profileForm.username.trim(),
       email: profileForm.email.trim(),
       preferred_model: profileForm.preferred_model.trim() || undefined,
-      sync_enabled: profileForm.sync_enabled,
+      enable_animations: profileForm.enable_animations,
     };
 
     const initialAvatar = profile?.user.avatar_url ?? "";
@@ -540,13 +677,27 @@ export default function SettingsPage() {
     mutation.mutate(payload);
   };
 
-  const syncLabel = useMemo(
+  const animationLabel = useMemo(
     () =>
-      profileForm.sync_enabled
-        ? t("settings.syncEnabledOn")
-        : t("settings.syncEnabledOff"),
-    [profileForm.sync_enabled, t],
+      profileForm.enable_animations
+        ? t("settings.animationsEnabledOn")
+        : t("settings.animationsEnabledOff"),
+    [profileForm.enable_animations, t],
   );
+
+  const handleToggleAnimations = useCallback(() => {
+    const previousValue = profileForm.enable_animations;
+    const nextValue = !previousValue;
+    setProfileForm((prev) => ({ ...prev, enable_animations: nextValue }));
+    mutation.mutate(
+      { enable_animations: nextValue },
+      {
+        onError: () => {
+          setProfileForm((prev) => ({ ...prev, enable_animations: previousValue }));
+        },
+      },
+    );
+  }, [mutation, profileForm.enable_animations]);
 
   const verificationMutation = useMutation({
     mutationFn: async () => {
@@ -994,25 +1145,6 @@ export default function SettingsPage() {
                 }
               />
             </div>
-
-            <div className="space-y-2">
-              <span className="text-sm font-medium text-slate-700 dark:text-slate-200">
-                {t("settings.profileCard.syncEnabled")}
-              </span>
-              <button
-                type="button"
-                className="flex w-full items-center justify-between rounded-xl border border-white/60 bg-white/70 px-4 py-2 text-left text-sm text-slate-700 shadow-sm transition hover:border-primary dark:border-slate-800 dark:bg-slate-900/70 dark:text-slate-200"
-                onClick={() =>
-                  setProfileForm((prev) => ({
-                    ...prev,
-                    sync_enabled: !prev.sync_enabled,
-                  }))
-                }
-              >
-                <span>{t("settings.profileCard.syncEnabledLabel")}</span>
-                <span className="text-xs text-primary">{syncLabel}</span>
-              </button>
-            </div>
           </div>
 
           <div className="flex justify-end">
@@ -1406,6 +1538,196 @@ export default function SettingsPage() {
 
       {activeTab === "app" ? (
       <>
+      <GlassCard className="space-y-4">
+        <div>
+          <h2 className="text-lg font-medium text-slate-800 dark:text-slate-100">
+            {t("settings.animationCard.title")}
+          </h2>
+          <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+            {t("settings.animationCard.description")}
+          </p>
+        </div>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="space-y-1 text-sm text-slate-500 dark:text-slate-400">
+            <p>{t("settings.animationCard.helper")}</p>
+            <p className="text-xs text-slate-400 dark:text-slate-500">
+              {t("settings.animationCard.note")}
+            </p>
+          </div>
+          <button
+            type="button"
+            className="flex w-full max-w-sm items-center justify-between rounded-xl border border-white/60 bg-white/80 px-4 py-2 text-left text-sm text-slate-700 shadow-sm transition hover:border-primary dark:border-slate-800 dark:bg-slate-900/70 dark:text-slate-200"
+            onClick={handleToggleAnimations}
+            disabled={mutation.isPending}
+          >
+            <span>{t("settings.animationCard.toggleLabel")}</span>
+            <span className="text-xs text-primary">{animationLabel}</span>
+          </button>
+        </div>
+      </GlassCard>
+      <GlassCard className="space-y-4">
+        <div>
+          <h2 className="text-lg font-medium text-slate-800 dark:text-slate-100">
+            {t("settings.backupCard.title")}
+          </h2>
+          <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+            {t("settings.backupCard.description")}
+          </p>
+        </div>
+        <div className="space-y-4">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div className="flex items-center gap-2 rounded-full border border-white/60 bg-white/80 px-3 py-1 shadow-sm transition-colors dark:border-slate-800 dark:bg-slate-900/70">
+              <label
+                className="text-xs font-medium text-slate-500 dark:text-slate-400"
+                htmlFor="backup-import-mode"
+              >
+                {t("settings.backupCard.importMode")}
+              </label>
+              <select
+                id="backup-import-mode"
+                className="rounded-md border border-transparent bg-white/90 px-2 py-1 text-xs text-slate-700 shadow-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary/40 dark:border-slate-700 dark:bg-slate-900/80 dark:text-slate-200 dark:shadow-none"
+                value={importMode}
+                onChange={(event) =>
+                  setImportMode(event.target.value as "merge" | "overwrite")
+                }
+                disabled={importMutation.isPending}
+              >
+                <option value="merge">{t("settings.backupCard.modeMerge")}</option>
+                <option value="overwrite">
+                  {t("settings.backupCard.modeOverwrite")}
+                </option>
+              </select>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={importMutation.isPending}
+                onClick={handleImportButtonClick}
+                className="shadow-sm dark:shadow-none"
+              >
+                {importMutation.isPending ? (
+                  <>
+                    <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
+                    {t("settings.backupCard.importLoading")}
+                  </>
+                ) : (
+                  <>
+                    <Upload className="mr-2 h-4 w-4" />
+                    {t("settings.backupCard.importButton")}
+                  </>
+                )}
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={exportMutation.isPending}
+                onClick={() => exportMutation.mutate()}
+                className="shadow-sm dark:shadow-none"
+              >
+                {exportMutation.isPending ? (
+                  <>
+                    <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
+                    {t("settings.backupCard.exportLoading")}
+                  </>
+                ) : (
+                  <>
+                    <Download className="mr-2 h-4 w-4" />
+                    {t("settings.backupCard.exportButton")}
+                  </>
+                )}
+              </Button>
+            </div>
+          </div>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="application/json"
+            className="hidden"
+            onChange={handleImportFileChange}
+          />
+          {lastExport ? (
+            <div className="rounded-3xl border border-primary/20 bg-white/80 px-4 py-3 text-sm text-slate-600 shadow-sm transition-colors dark:border-primary/25 dark:bg-slate-900/70 dark:text-slate-200">
+              <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                <div className="space-y-1">
+                  <span className="text-xs font-semibold uppercase tracking-[0.26em] text-primary dark:text-primary/80">
+                    {t("settings.backupCard.lastExport")}
+                  </span>
+                  <p className="font-mono text-xs text-slate-500 dark:text-slate-400">
+                    {t("settings.backupCard.filePath")}：
+                    <span className="ml-1 break-all text-slate-700 dark:text-slate-100">
+                      {lastExport.filePath}
+                    </span>
+                  </p>
+                  {exportTimestamp ? (
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                      {t("settings.backupCard.time", {
+                        date: exportTimestamp.date,
+                        time: exportTimestamp.time,
+                      })}
+                    </p>
+                  ) : null}
+                </div>
+                <Badge variant="outline" className="whitespace-nowrap text-xs">
+                  {t("settings.backupCard.promptCount", {
+                    count: lastExport.promptCount,
+                  })}
+                </Badge>
+              </div>
+            </div>
+          ) : null}
+
+          {lastImport ? (
+            <div className="rounded-3xl border border-emerald-200/60 bg-emerald-50/70 px-4 py-3 text-sm text-emerald-700 shadow-sm transition-colors dark:border-emerald-400/40 dark:bg-emerald-500/10 dark:text-emerald-200">
+              <div className="space-y-2">
+                <span className="text-xs font-semibold uppercase tracking-[0.26em] text-emerald-500 dark:text-emerald-300">
+                  {t("settings.backupCard.lastImport")}
+                </span>
+                <p className="text-xs">
+                  {t("settings.backupCard.importSummary", {
+                    count: lastImport.importedCount,
+                    skipped: lastImport.skippedCount,
+                  })}
+                </p>
+                {latestImportErrors.length > 0 ? (
+                  <div className="rounded-2xl border border-amber-200/60 bg-amber-50/80 px-3 py-2 text-xs text-amber-700 dark:border-amber-400/40 dark:bg-amber-500/10 dark:text-amber-200">
+                    <p className="font-medium">
+                      {t("settings.backupCard.importErrorsHeading", {
+                        count: lastImport.errors.length,
+                      })}
+                    </p>
+                    <ul className="mt-1 list-disc space-y-1 pl-5">
+                      {latestImportErrors.map((item, index) => (
+                        <li key={`${item.topic}-${index}`} className="break-all">
+                          <span className="font-semibold">
+                            {item.topic || t("settings.backupCard.unknownTopic")}
+                          </span>
+                          <span className="ml-1 text-slate-600 dark:text-slate-200">
+                            {item.reason}
+                          </span>
+                        </li>
+                      ))}
+                      {remainingImportErrors > 0 ? (
+                        <li className="italic text-slate-500 dark:text-slate-300">
+                          {t("settings.backupCard.moreErrors", {
+                            remaining: remainingImportErrors,
+                          })}
+                        </li>
+                      ) : null}
+                    </ul>
+                  </div>
+                ) : null}
+                <Badge variant="outline" className="w-max whitespace-nowrap text-xs">
+                  {t("settings.backupCard.importResultBadge", {
+                    count: lastImport.importedCount,
+                  })}
+                </Badge>
+              </div>
+            </div>
+          ) : null}
+        </div>
+      </GlassCard>
+
       <GlassCard className="space-y-4">
         <div>
           <h2 className="text-lg font-medium text-slate-800 dark:text-slate-100">

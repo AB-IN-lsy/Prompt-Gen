@@ -1,6 +1,10 @@
 {
   "app": {
-    "name": "PromptGen"
+    "name": "PromptGen",
+    "entryTransition": {
+      "welcome": "Welcome back",
+      "ready": "Bringing your workspace online…"
+    }
   },
   "nav": {
     "dashboard": "Dashboard",
@@ -71,10 +75,19 @@
           "Workbench not responding in local mode? Make sure port 9090 isn’t occupied by another app.",
           "Need more help? Reach us via the contacts below and attach your exported logs."
         ]
+      },
+      "contact": {
+        "title": "Contact",
+        "description": "Reach out whenever you need assistance.",
+        "items": [
+          "Attach exported logs so we can trace issues quickly.",
+          "Let us know which OS/version you’re running when reporting bugs.",
+          "GitHub issues and PRs are welcome – we actively review them."
+        ]
       }
     },
     "resources": {
-      "title": "More resources",
+      "title": "Contact",
       "description": "Discover community knowledge, source code, and support channels maintained by AB-IN.",
       "contacts": [
         {
@@ -93,7 +106,8 @@
           "type": "email"
         }
       ],
-      "note": "Questions or ideas? Open an issue or PR – contributions welcome."
+      "note": "Questions or ideas? Open an issue or PR – contributions welcome.",
+      "contactTitle": "Contact"
     },
     "sectionOrder": [
       "quickStart",
@@ -101,7 +115,8 @@
       "myPrompts",
       "workbench",
       "settings",
-      "troubleshooting"
+      "troubleshooting",
+      "contact"
     ]
   },
   "logsPage": {
@@ -306,6 +321,7 @@
     "title": "My prompts",
     "subtitle": "Search, filter, and revisit drafts or published prompts at any time.",
     "openWorkbench": "Open workbench",
+    "manageBackups": "Manage backups",
     "export": {
       "button": "Export prompts",
       "loading": "Exporting...",
@@ -610,6 +626,34 @@
       "models": "Model credentials",
       "app": "App preferences"
     },
+    "backupCard": {
+      "title": "Data backup & import",
+      "description": "Export prompts as JSON or restore an existing backup. We recommend creating a fresh export before importing.",
+      "importMode": "Mode",
+      "modeMerge": "Merge",
+      "modeOverwrite": "Overwrite",
+      "importLoading": "Importing...",
+      "importButton": "Import JSON",
+      "exportLoading": "Exporting...",
+      "exportButton": "Export JSON",
+      "exportSuccess": "Exported {{count}} prompts to {{path}}.",
+      "exportEmpty": "No prompts found. Created an empty backup at {{path}}.",
+      "exportFailed": "Failed to export prompts. Please try again later.",
+      "lastExport": "Latest export",
+      "filePath": "File path",
+      "time": "Exported at {{date}} {{time}}",
+      "promptCount": "Entries: {{count}}",
+      "lastImport": "Latest import",
+      "importSummary": "Imported {{count}} prompts, skipped {{skipped}}.",
+      "importSuccess": "Imported {{count}} prompts, skipped {{skipped}}.",
+      "importPartial": "Imported {{count}} prompts, skipped {{skipped}}. {{errorCount}} entries reported errors.",
+      "importFailed": "Failed to import prompts. Please try again later.",
+      "importErrorsHeading": "Failed entries ({{count}} total)",
+      "unknownTopic": "Untitled topic",
+      "moreErrors": "{{remaining}} more errors. Check notifications for details.",
+      "importResultBadge": "Imported: {{count}}",
+      "importErrorHint": "Some prompts could not be imported"
+    },
     "languageCardTitle": "Language",
     "languageCardDescription": "Switch the interface language between English and Simplified Chinese.",
     "languageSelectLabel": "Display language",
@@ -637,13 +681,18 @@
       "email": "Email",
       "preferredModel": "Preferred model",
       "preferredModelPlaceholder": "e.g. deepseek, gpt-4o, claude",
-      "syncEnabled": "Cloud sync",
-      "syncEnabledLabel": "Keep prompt settings in sync across devices",
       "save": "Save profile"
     },
     "profileSaveSuccess": "Profile updated",
-    "syncEnabledOn": "Enabled",
-    "syncEnabledOff": "Disabled",
+    "animationsEnabledOn": "Enabled",
+    "animationsEnabledOff": "Disabled",
+    "animationCard": {
+      "title": "UI animations",
+      "description": "Control the welcome transition and ambient lighting effects.",
+      "helper": "When disabled, the app uses static backgrounds and skips the entry splash.",
+      "note": "You can re-enable it anytime; the preference syncs across devices.",
+      "toggleLabel": "Enable UI animations"
+    },
     "verificationPending": {
       "notice": "Your email hasn’t been verified yet. Please verify to unlock the full experience.",
       "action": "Verify now",

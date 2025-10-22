@@ -62,15 +62,15 @@ func (UserModelCredential) TableName() string {
 
 // Settings 描述用户可自定义的配置项，会以 JSON 字符串形式持久化在 User.Settings 字段中。
 type Settings struct {
-	PreferredModel string `json:"preferred_model"`
-	SyncEnabled    bool   `json:"sync_enabled"`
+	PreferredModel   string `json:"preferred_model"`
+	EnableAnimations bool   `json:"enable_animations"`
 }
 
 // DefaultSettings 返回默认的用户设置。
 func DefaultSettings() Settings {
 	return Settings{
-		PreferredModel: "deepseek",
-		SyncEnabled:    false,
+		PreferredModel:   "deepseek",
+		EnableAnimations: true,
 	}
 }
 
@@ -79,11 +79,22 @@ func ParseSettings(raw string) (Settings, error) {
 	if raw == "" {
 		return DefaultSettings(), nil
 	}
-	var s Settings
-	if err := json.Unmarshal([]byte(raw), &s); err != nil {
+	type payload struct {
+		PreferredModel   string `json:"preferred_model"`
+		EnableAnimations *bool  `json:"enable_animations"`
+	}
+	var dto payload
+	if err := json.Unmarshal([]byte(raw), &dto); err != nil {
 		return Settings{}, err
 	}
-	return s, nil
+	settings := DefaultSettings()
+	if dto.PreferredModel != "" {
+		settings.PreferredModel = dto.PreferredModel
+	}
+	if dto.EnableAnimations != nil {
+		settings.EnableAnimations = *dto.EnableAnimations
+	}
+	return settings, nil
 }
 
 // SettingsJSON 将设置对象编码为 JSON 字符串，供数据库持久化使用。

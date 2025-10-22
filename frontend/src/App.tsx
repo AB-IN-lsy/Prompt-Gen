@@ -6,7 +6,7 @@
  */
 import { Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import { useEffect } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { AppShell } from "./components/layout/AppShell";
 import DashboardPage from "./pages/Dashboard";
@@ -24,6 +24,7 @@ import ChangelogAdminPage from "./pages/ChangelogAdmin";
 import PromptDetailPage from "./pages/PromptDetail";
 import { useAuth, useIsAuthenticated } from "./hooks/useAuth";
 import { isLocalMode } from "./lib/runtimeMode";
+import { EntryTransition } from "./components/visuals/EntryTransition";
 
 // 占位页面组件：在对应功能尚未实现时保持路由完整。
 function Placeholder({ titleKey }: { titleKey: string }) {
@@ -39,6 +40,7 @@ function Placeholder({ titleKey }: { titleKey: string }) {
 
 // 应用根路由容器，统一挂载外壳布局与子页面。
 export default function App() {
+    const profile = useAuth((state) => state.profile);
     const initialize = useAuth((state) => state.initialize);
     const isInitialized = useAuth((state) => state.isInitialized);
     const initializing = useAuth((state) => state.initializing);
@@ -46,6 +48,31 @@ export default function App() {
     const { t } = useTranslation();
     const location = useLocation();
     const localMode = isLocalMode();
+    const entryShownRef = useRef(false);
+    const [entryActive, setEntryActive] = useState(false);
+    const [entryVisible, setEntryVisible] = useState(false);
+    const animationsEnabled = profile?.settings.enable_animations ?? true;
+    useEffect(() => {
+        if (
+            animationsEnabled &&
+            isInitialized &&
+            !initializing &&
+            isAuthenticated &&
+            !entryShownRef.current
+        ) {
+            entryShownRef.current = true;
+            setEntryActive(true);
+            const raf = window.requestAnimationFrame(() => setEntryVisible(true));
+            const hideTimer = window.setTimeout(() => setEntryVisible(false), 900);
+            const cleanupTimer = window.setTimeout(() => setEntryActive(false), 1500);
+            return () => {
+                window.cancelAnimationFrame(raf);
+                window.clearTimeout(hideTimer);
+                window.clearTimeout(cleanupTimer);
+            };
+        }
+        return undefined;
+    }, [animationsEnabled, initializing, isAuthenticated, isInitialized]);
 
     // 首次挂载时触发认证初始化：校验 Token 并尝试拉取用户资料。
     useEffect(() => {
@@ -88,6 +115,10 @@ export default function App() {
     }
 
     return (
+        <>
+            {animationsEnabled ? (
+                <EntryTransition active={entryActive} visible={entryVisible} />
+            ) : null}
         <AppShell>
             <Routes>
                 <Route path="/" element={<DashboardPage />} />
@@ -102,5 +133,6 @@ export default function App() {
                 <Route path="*" element={<Navigate to="/prompt-workbench" replace />} />
             </Routes>
         </AppShell>
+        </>
     );
 }

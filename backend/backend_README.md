@@ -205,7 +205,7 @@ go run ./backend/cmd/sendmail -to you@example.com -name "测试账号"
 | `POST` | `/api/auth/refresh` | 刷新访问令牌 | JSON：`refresh_token` |
 | `POST` | `/api/auth/logout` | 撤销刷新令牌 | JSON：`refresh_token` |
 | `GET` | `/api/users/me` | 获取当前登录用户信息 | 需附带 `Authorization: Bearer <token>` |
-| `PUT` | `/api/users/me` | 更新当前用户信息与偏好设置 | JSON：`username`、`email`、`avatar_url`、`preferred_model`、`sync_enabled` |
+| `PUT` | `/api/users/me` | 更新当前用户信息与偏好设置 | JSON：`username`、`email`、`avatar_url`、`preferred_model`、`enable_animations` |
 | `POST` | `/api/uploads/avatar` | 上传头像文件并返回静态地址 | 需登录；multipart 表单：`avatar` 文件字段 |
 | `GET` | `/api/models` | 列出当前用户的模型凭据 | 需登录 |
 | `POST` | `/api/models` | 新增模型凭据并加密存储 | JSON：`provider`、`label`、`api_key`、`metadata` |
@@ -510,7 +510,7 @@ ALTER TABLE prompts
       },
       "settings": {
         "preferred_model": "gpt-4o-mini",
-        "sync_enabled": true
+        "enable_animations": true
       }
     }
   }
@@ -528,7 +528,7 @@ ALTER TABLE prompts
     "username": "alice-dev",
     "email": "alice.dev@example.com",
     "preferred_model": "deepseek",
-    "sync_enabled": false,
+    "enable_animations": false,
     "avatar_url": ""
   }
   ```

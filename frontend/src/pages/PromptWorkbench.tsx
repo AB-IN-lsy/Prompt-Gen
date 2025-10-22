@@ -2,7 +2,7 @@
  * @Author: NEFU AB-IN
  * @Date: 2025-10-09 22:47:19
  * @FilePath: \electron-go-app\frontend\src\pages\PromptWorkbench.tsx
- * @LastEditTime: 2025-10-14 16:16:50
+ * @LastEditTime: 2025-10-22 13:44:52
  */
 import {
   ChangeEvent,
@@ -1532,7 +1532,7 @@ export default function PromptWorkbenchPage() {
                 <Badge
                   key={option.key}
                   className={cn(
-                    "cursor-pointer px-3 py-1 transition",
+                    "workbench-pill group relative cursor-pointer overflow-hidden px-3 py-1 transition-colors",
                     option.disabled && "cursor-not-allowed opacity-60",
                     selected && "border-transparent bg-primary text-white",
                   )}
@@ -1542,7 +1542,9 @@ export default function PromptWorkbenchPage() {
                   }
                   aria-disabled={option.disabled}
                 >
-                  {option.label}
+                  <span className="relative z-10">
+                    {option.label}
+                  </span>
                 </Badge>
               );
             })}
@@ -1677,25 +1679,29 @@ export default function PromptWorkbenchPage() {
           <div className="mt-3 flex gap-2 text-xs">
             <Badge
               className={cn(
-                "cursor-pointer px-3 py-1",
+                "workbench-pill group relative cursor-pointer overflow-hidden px-3 py-1 transition-colors",
                 polarity === "positive" &&
                   "border-transparent bg-primary text-white",
               )}
               variant={polarity === "positive" ? "default" : "outline"}
               onClick={() => setPolarity("positive")}
             >
-              {t("promptWorkbench.positive", { defaultValue: "正向" })}
+              <span className="relative z-10">
+                {t("promptWorkbench.positive", { defaultValue: "正向" })}
+              </span>
             </Badge>
             <Badge
               className={cn(
-                "cursor-pointer px-3 py-1",
+                "workbench-pill group relative cursor-pointer overflow-hidden px-3 py-1 transition-colors",
                 polarity === "negative" &&
                   "border-transparent bg-secondary text-white",
               )}
               variant={polarity === "negative" ? "default" : "outline"}
               onClick={() => setPolarity("negative")}
             >
-              {t("promptWorkbench.negative", { defaultValue: "负向" })}
+              <span className="relative z-10">
+                {t("promptWorkbench.negative", { defaultValue: "负向" })}
+              </span>
             </Badge>
           </div>
           <div className="mt-4 flex flex-wrap items-center gap-3 text-sm text-slate-500 dark:text-slate-300">

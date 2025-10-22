@@ -27,7 +27,6 @@ import { Badge } from "../components/ui/badge";
 import { GlassCard } from "../components/ui/glass-card";
 import { Input } from "../components/ui/input";
 import { useAuth } from "../hooks/useAuth";
-import { PageHeader } from "../components/layout/PageHeader";
 import {
     fetchMyPrompts,
     fetchUserModels,
@@ -35,6 +34,7 @@ import {
     PromptListResponse
 } from "../lib/api";
 import { cn } from "../lib/utils";
+import { MagneticButton } from "../components/ui/magnetic-button";
 
 const SEARCH_HISTORY_STORAGE_KEY = "promptgen/dashboard/search-history";
 const SEARCH_HISTORY_LIMIT = 5;
@@ -77,6 +77,67 @@ function MetricCard({ icon: Icon, label, value, hint, trend }: Metric): JSX.Elem
             </div>
             <p className={cn("mt-4 text-xs font-medium", trendClass)}>{hint}</p>
         </GlassCard>
+    );
+}
+
+interface SpotlightHeroProps {
+    eyebrow: string;
+    title: string;
+    description: string;
+    ctaLabel: string;
+    onCtaClick: () => void;
+    metrics: Metric[];
+}
+
+function SpotlightHero({
+    eyebrow,
+    title,
+    description,
+    ctaLabel,
+    onCtaClick,
+    metrics
+}: SpotlightHeroProps) {
+    return (
+        <section className="relative overflow-hidden rounded-3xl border border-white/50 bg-white/80 px-8 py-12 shadow-lg transition-colors dark:border-slate-800/60 dark:bg-slate-900/70">
+            <div className="pointer-events-none absolute inset-0">
+                <div className="absolute -top-24 left-1/4 h-72 w-72 rounded-full bg-gradient-to-br from-indigo-400/40 via-sky-300/30 to-purple-400/30 blur-3xl" />
+                <div className="absolute -bottom-32 right-1/4 h-80 w-80 rounded-full bg-gradient-to-br from-emerald-300/35 via-cyan-300/25 to-blue-300/25 blur-[120px]" />
+                <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.65),transparent_60%)] dark:bg-[radial-gradient(circle_at_top_left,rgba(148,163,255,0.12),transparent_70%)]" />
+                <div className="absolute inset-0 opacity-[0.08] bg-noise" />
+            </div>
+
+            <div className="relative z-10 flex flex-col gap-8 text-slate-700 dark:text-slate-100">
+                <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
+                    <div className="max-w-2xl space-y-3">
+                        <span className="inline-flex items-center rounded-full border border-white/60 bg-white/40 px-3 py-1 text-xs font-medium uppercase tracking-[0.3em] text-slate-400 shadow-sm backdrop-blur-xl dark:border-slate-800/60 dark:bg-slate-900/50 dark:text-slate-500">
+                            {eyebrow}
+                        </span>
+                        <h1 className="text-3xl font-semibold tracking-tight text-slate-900 dark:text-white md:text-4xl">
+                            {title}
+                        </h1>
+                        <p className="text-sm text-slate-500 dark:text-slate-400">
+                            {description}
+                        </p>
+                    </div>
+                    <MagneticButton
+                        variant="outline"
+                        size="lg"
+                        className="group flex items-center gap-2 rounded-full border border-primary/40 bg-primary/10 px-5 py-3 text-sm font-medium text-primary shadow-[0_15px_35px_-12px_rgba(59,130,246,0.45)] transition hover:bg-primary hover:text-white dark:border-primary/30 dark:bg-primary/20"
+                        onClick={onCtaClick}
+                        intensity={18}
+                    >
+                        <Sparkles className="h-4 w-4 transition group-hover:scale-110" aria-hidden="true" />
+                        {ctaLabel}
+                    </MagneticButton>
+                </div>
+
+                <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                    {metrics.map((metric) => (
+                        <MetricCard key={metric.id} {...metric} />
+                    ))}
+                </div>
+            </div>
+        </section>
     );
 }
 
@@ -376,28 +437,14 @@ export default function DashboardPage(): JSX.Element {
 
     return (
         <div className="space-y-6 text-slate-700 transition-colors dark:text-slate-200">
-            <PageHeader
+            <SpotlightHero
                 eyebrow={t("dashboard.eyebrow")}
                 title={t("dashboard.welcome", { name: displayName })}
                 description={t("dashboard.subtitle")}
-                actions={
-                    <Button
-                        variant="secondary"
-                        size="sm"
-                        onClick={() => navigate("/prompt-workbench")}
-                        className="gap-2"
-                    >
-                        <Sparkles className="h-4 w-4" aria-hidden="true" />
-                        {t("dashboard.openWorkbench")}
-                    </Button>
-                }
+                ctaLabel={t("dashboard.openWorkbench")}
+                onCtaClick={() => navigate("/prompt-workbench")}
+                metrics={metrics}
             />
-
-            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-                {metrics.map((metric) => (
-                    <MetricCard key={metric.id} {...metric} />
-                ))}
-            </div>
 
             <div className="grid gap-4 lg:grid-cols-3">
                 <GlassCard className="lg:col-span-2 space-y-4">

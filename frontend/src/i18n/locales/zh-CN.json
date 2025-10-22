@@ -1,6 +1,10 @@
 {
   "app": {
-    "name": "PromptGen"
+    "name": "PromptGen",
+    "entryTransition": {
+      "welcome": "欢迎回来",
+      "ready": "正在唤醒工作台…"
+    }
   },
   "nav": {
     "dashboard": "Dashboard",
@@ -71,10 +75,19 @@
           "工作台无响应时，检查端口 9090 是否被其他程序占用。",
           "仍未解决？使用下方联系方式反馈，并附上导出的日志文件。"
         ]
+      },
+      "contact": {
+        "title": "联系我",
+        "description": "通过以下渠道反馈问题或寻求支持。",
+        "items": [
+          "附上导出的日志文件，可帮助更快定位问题。",
+          "发送邮件时请注明使用的操作系统和版本号。",
+          "欢迎在 GitHub 上提交 Issue 或 PR。"
+        ]
       }
     },
     "resources": {
-      "title": "更多资源",
+      "title": "联系我",
       "description": "探索由 AB-IN 维护的资料、源码与支持渠道。",
       "contacts": [
         {
@@ -93,7 +106,8 @@
           "type": "email"
         }
       ],
-      "note": "欢迎提交 Issue 与 PR，一起完善 PromptGen。"
+      "note": "欢迎提交 Issue 与 PR，一起完善 PromptGen。",
+      "contactTitle": "联系我"
     },
     "sectionOrder": [
       "quickStart",
@@ -101,7 +115,8 @@
       "myPrompts",
       "workbench",
       "settings",
-      "troubleshooting"
+      "troubleshooting",
+      "contact"
     ]
   },
   "logsPage": {
@@ -306,6 +321,7 @@
     "title": "我的 Prompt",
     "subtitle": "快速筛选、检索并继续编辑草稿或已发布的 Prompt。",
     "openWorkbench": "打开工作台",
+    "manageBackups": "备份与导入设置",
     "export": {
       "button": "导出 Prompt",
       "loading": "正在导出",
@@ -610,6 +626,34 @@
       "models": "模型凭据",
       "app": "应用设置"
     },
+    "backupCard": {
+      "title": "数据备份与导入",
+      "description": "在此导出 Prompt 备份或导入现有 JSON 文件，操作前建议先保存一份最新备份。",
+      "importMode": "导入模式",
+      "modeMerge": "合并",
+      "modeOverwrite": "覆盖",
+      "importLoading": "正在导入",
+      "importButton": "导入 JSON",
+      "exportLoading": "正在导出",
+      "exportButton": "导出 JSON",
+      "exportSuccess": "已导出 {{count}} 条 Prompt，文件保存到 {{path}}。",
+      "exportEmpty": "暂无 Prompt，已生成空白备份：{{path}}。",
+      "exportFailed": "导出 Prompt 时出现错误，请稍后重试。",
+      "lastExport": "最近一次导出",
+      "filePath": "文件路径",
+      "time": "导出时间：{{date}} {{time}}",
+      "promptCount": "包含条目：{{count}}",
+      "lastImport": "最近一次导入",
+      "importSummary": "成功导入 {{count}} 条 Prompt，跳过 {{skipped}} 条。",
+      "importSuccess": "成功导入 {{count}} 条 Prompt，跳过 {{skipped}} 条。",
+      "importPartial": "导入 {{count}} 条 Prompt，跳过 {{skipped}} 条，其中 {{errorCount}} 条出现错误。",
+      "importFailed": "导入 Prompt 时发生错误，请稍后重试。",
+      "importErrorsHeading": "以下条目导入失败（共 {{count}} 条）",
+      "unknownTopic": "未命名主题",
+      "moreErrors": "另外还有 {{remaining}} 条错误，详见通知。",
+      "importResultBadge": "导入成功：{{count}} 条",
+      "importErrorHint": "部分 Prompt 导入失败"
+    },
     "languageCardTitle": "界面语言",
     "languageCardDescription": "在英文与简体中文之间切换界面显示语言。",
     "languageSelectLabel": "显示语言",
@@ -637,13 +681,18 @@
       "email": "邮箱",
       "preferredModel": "偏好模型",
       "preferredModelPlaceholder": "例如 deepseek、gpt-4o 等",
-      "syncEnabled": "云同步",
-      "syncEnabledLabel": "在多设备之间同步提示词设置",
       "save": "保存资料"
     },
     "profileSaveSuccess": "资料已更新",
-    "syncEnabledOn": "已开启",
-    "syncEnabledOff": "已关闭",
+    "animationsEnabledOn": "已开启",
+    "animationsEnabledOff": "已关闭",
+    "animationCard": {
+      "title": "界面动效",
+      "description": "控制欢迎过场与背景光效的启用状态。",
+      "helper": "关闭后将使用静态背景并跳过入场动画。",
+      "note": "可随时恢复，该偏好会在设备间同步。",
+      "toggleLabel": "启用界面动效"
+    },
     "verificationPending": {
       "notice": "你的邮箱尚未完成验证，建议尽快验证以解锁全部功能。",
       "action": "立即验证",

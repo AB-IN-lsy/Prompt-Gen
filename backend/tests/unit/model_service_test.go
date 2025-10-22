@@ -347,7 +347,7 @@ func TestModelServiceDeleteClearsPreferred(t *testing.T) {
 		t.Fatalf("create credential: %v", err)
 	}
 
-	settings := domain.Settings{PreferredModel: "primary", SyncEnabled: true}
+	settings := domain.Settings{PreferredModel: "primary", EnableAnimations: true}
 	raw, _ := domain.SettingsJSON(settings)
 	if err := userRepo.UpdateSettings(ctx, userID, raw); err != nil {
 		t.Fatalf("assign preferred model: %v", err)
@@ -391,7 +391,7 @@ func TestModelServiceDisableClearsPreferred(t *testing.T) {
 		t.Fatalf("create credential: %v", err)
 	}
 
-	settings := domain.Settings{PreferredModel: "primary", SyncEnabled: false}
+	settings := domain.Settings{PreferredModel: "primary", EnableAnimations: true}
 	raw, _ := domain.SettingsJSON(settings)
 	if err := userRepo.UpdateSettings(ctx, userID, raw); err != nil {
 		t.Fatalf("assign preferred model: %v", err)
@@ -432,7 +432,7 @@ func TestModelServiceUpdateStatusNormalizesInput(t *testing.T) {
 		t.Fatalf("create credential: %v", err)
 	}
 
-	settings := domain.Settings{PreferredModel: "primary", SyncEnabled: true}
+	settings := domain.Settings{PreferredModel: "primary", EnableAnimations: true}
 	raw, _ := domain.SettingsJSON(settings)
 	if err := userRepo.UpdateSettings(ctx, userID, raw); err != nil {
 		t.Fatalf("assign preferred model: %v", err)
