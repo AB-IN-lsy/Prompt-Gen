@@ -1,21 +1,27 @@
 import { CSSProperties, useEffect, useMemo, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { toast } from "sonner";
-import { History, LoaderCircle } from "lucide-react";
+import { History, LoaderCircle, UploadCloud, X } from "lucide-react";
 
 import { PageHeader } from "../components/layout/PageHeader";
 import { GlassCard } from "../components/ui/glass-card";
 import { Button } from "../components/ui/button";
 import { Badge } from "../components/ui/badge";
+import { Input } from "../components/ui/input";
+import { Textarea } from "../components/ui/textarea";
 import {
   fetchPromptDetail,
   fetchPromptVersion,
   fetchPromptVersions,
   normaliseKeywordSource,
+  submitPublicPrompt,
+  type PublicPromptSubmitPayload,
+  type PublicPromptSubmitResult,
+  type KeywordSource,
   PromptDetailResponse,
   PromptListKeyword,
   type Keyword,
@@ -29,6 +35,21 @@ import {
   DEFAULT_KEYWORD_WEIGHT,
 } from "../config/prompt";
 import { usePromptWorkbench } from "../hooks/usePromptWorkbench";
+import { isLocalMode } from "../lib/runtimeMode";
+
+const summaryParagraphLimitRaw =
+  import.meta.env.VITE_PUBLIC_PROMPT_SUMMARY_PARAGRAPHS ?? "2";
+const parsedSummaryLimit = Number.parseInt(summaryParagraphLimitRaw, 10);
+const SUMMARY_PARAGRAPH_LIMIT = Number.isNaN(parsedSummaryLimit)
+  ? 2
+  : parsedSummaryLimit;
+const DEFAULT_PUBLIC_PROMPT_LANGUAGE =
+  import.meta.env.VITE_PUBLIC_PROMPT_DEFAULT_LANGUAGE ?? "zh-CN";
+const summaryRowsRaw = import.meta.env.VITE_PUBLIC_PROMPT_SUMMARY_ROWS ?? "4";
+const parsedSummaryRows = Number.parseInt(summaryRowsRaw, 10);
+const PUBLIC_PROMPT_SUMMARY_ROWS = Number.isNaN(parsedSummaryRows)
+  ? 4
+  : parsedSummaryRows;
 
 export default function PromptDetailPage(): JSX.Element {
   const { t, i18n } = useTranslation();
@@ -36,6 +57,16 @@ export default function PromptDetailPage(): JSX.Element {
   const { id } = useParams<{ id: string }>();
   const promptId = Number.parseInt(id ?? "", 10);
   const [selectedVersion, setSelectedVersion] = useState<number | null>(null);
+  const offlineMode = isLocalMode();
+  const [showSubmitPanel, setShowSubmitPanel] = useState(false);
+  const [submitTitle, setSubmitTitle] = useState("");
+  const [submitSummary, setSubmitSummary] = useState("");
+  const [submitTagsInput, setSubmitTagsInput] = useState("");
+  const [submitLanguage, setSubmitLanguage] = useState(
+    DEFAULT_PUBLIC_PROMPT_LANGUAGE,
+  );
+  const [submitUseSelectedVersion, setSubmitUseSelectedVersion] =
+    useState(false);
 
   const resetWorkbench = usePromptWorkbench((state) => state.reset);
   const setTopic = usePromptWorkbench((state) => state.setTopic);
@@ -114,6 +145,25 @@ export default function PromptDetailPage(): JSX.Element {
     selectedVersion !== null && versionDetail
       ? versionDetail.negative_keywords ?? []
       : detail?.negative_keywords ?? [];
+
+  const submitMutation = useMutation<
+    PublicPromptSubmitResult,
+    unknown,
+    PublicPromptSubmitPayload
+  >({
+    mutationFn: (payload: PublicPromptSubmitPayload) => submitPublicPrompt(payload),
+    onSuccess: () => {
+      toast.success(t("promptDetail.publicSubmit.success"));
+      setShowSubmitPanel(false);
+    },
+    onError: (error: unknown) => {
+      const message =
+        error instanceof Error
+          ? error.message
+          : t("promptDetail.publicSubmit.error");
+      toast.error(message);
+    },
+  });
 
   const versionSelectValue = selectedVersion === null ? "" : String(selectedVersion);
   const showLoadButton = versions.length > 0;
@@ -272,6 +322,70 @@ export default function PromptDetailPage(): JSX.Element {
     navigate("/prompt-workbench");
   };
 
+  const handleOpenSubmit = () => {
+    if (!detail) {
+      return;
+    }
+    setSubmitTitle(detail.topic);
+    setSubmitSummary(buildDefaultSummary(activeInstructionsRaw, activeBodyRaw));
+    setSubmitTagsInput(detail.tags.join(", "));
+    setSubmitLanguage(i18n.language || DEFAULT_PUBLIC_PROMPT_LANGUAGE);
+    setSubmitUseSelectedVersion(selectedVersion !== null);
+    setShowSubmitPanel(true);
+  };
+
+  const handleCloseSubmit = () => {
+    setShowSubmitPanel(false);
+  };
+
+  const handleSubmitPublic = () => {
+    if (!detail) {
+      return;
+    }
+    const wantSelected = submitUseSelectedVersion && selectedVersion !== null;
+    if (wantSelected && !versionDetail) {
+      toast.error(t("promptDetail.publicSubmit.versionMissing"));
+      return;
+    }
+    const sourceBlock = wantSelected && versionDetail ? versionDetail : null;
+    const instructionsForSubmission =
+      (sourceBlock?.instructions ?? detail.instructions ?? "").toString();
+    const bodyForSubmission = sourceBlock?.body ?? detail.body;
+    const positiveKeywordsForSubmission =
+      sourceBlock?.positive_keywords ?? detail.positive_keywords ?? [];
+    const negativeKeywordsForSubmission =
+      sourceBlock?.negative_keywords ?? detail.negative_keywords ?? [];
+    const summaryForSubmission =
+      submitSummary.trim() ||
+      buildDefaultSummary(instructionsForSubmission, bodyForSubmission);
+    const tagsForSubmission = normaliseTagsInput(
+      submitTagsInput,
+      detail.tags ?? [],
+    );
+
+    const payload: PublicPromptSubmitPayload = {
+      sourcePromptId: detail.id,
+      title: submitTitle.trim() || detail.topic,
+      topic: detail.topic,
+      summary: summaryForSubmission,
+      body: bodyForSubmission,
+      instructions: instructionsForSubmission,
+      positiveKeywords: serializeKeywordsForSubmission(
+        positiveKeywordsForSubmission,
+      ),
+      negativeKeywords: serializeKeywordsForSubmission(
+        negativeKeywordsForSubmission,
+      ),
+      tags: JSON.stringify(tagsForSubmission),
+      model: sourceBlock?.model || detail.model,
+      language:
+        submitLanguage.trim() ||
+        i18n.language ||
+        DEFAULT_PUBLIC_PROMPT_LANGUAGE,
+    };
+    submitMutation.mutate(payload);
+  };
+
   return (
     <div className="flex h-full flex-col gap-6">
       <PageHeader
@@ -295,6 +409,20 @@ export default function PromptDetailPage(): JSX.Element {
             >
               {t("promptDetail.actions.edit")}
             </Button>
+            {!offlineMode ? (
+              <Button
+                onClick={handleOpenSubmit}
+                disabled={!detail || submitMutation.isPending}
+                className="transition-transform hover:-translate-y-0.5"
+              >
+                {submitMutation.isPending ? (
+                  <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <UploadCloud className="mr-2 h-4 w-4" />
+                )}
+                {t("promptDetail.actions.submitPublic")}
+              </Button>
+            ) : null}
           </div>
         }
       />
@@ -307,8 +435,189 @@ export default function PromptDetailPage(): JSX.Element {
         <EmptyState />
       ) : (
         <div className="grid gap-6 lg:grid-cols-[320px,1fr]">
-          <GlassCard className="space-y-4 self-start">
-            <section className="space-y-2">
+          <div className="space-y-4 self-start">
+            {showSubmitPanel ? (
+              <GlassCard className="space-y-4 border border-primary/30 bg-white/80 shadow-[0_25px_45px_-30px_rgba(59,130,246,0.65)] dark:border-primary/40 dark:bg-slate-900/70">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="space-y-1">
+                    <p className="text-xs font-semibold uppercase tracking-[0.28em] text-primary">
+                      {t("promptDetail.publicSubmit.title")}
+                    </p>
+                    <p className="text-sm text-slate-600 dark:text-slate-300">
+                      {t("promptDetail.publicSubmit.description")}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    aria-label={t("promptDetail.publicSubmit.cancel")}
+                    className="rounded-full border border-transparent p-1 text-slate-400 transition hover:border-slate-200 hover:text-slate-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 dark:text-slate-500 dark:hover:text-slate-300"
+                    onClick={handleCloseSubmit}
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+
+                <div className="space-y-2">
+                  <p className="text-xs font-medium uppercase tracking-[0.24em] text-slate-400 dark:text-slate-500">
+                    {t("promptDetail.publicSubmit.versionLabel")}
+                  </p>
+                  <div className="flex flex-col gap-2">
+                    <label
+                      className={cn(
+                        "flex items-center gap-3 rounded-xl border px-3 py-2 text-sm transition-colors dark:border-slate-700",
+                        submitUseSelectedVersion
+                          ? "border-slate-200 text-slate-500 dark:text-slate-400"
+                          : "border-primary/40 bg-primary/10 text-primary dark:border-primary/40 dark:bg-primary/20 dark:text-primary-foreground",
+                      )}
+                    >
+                      <input
+                        type="radio"
+                        name="public-submit-version"
+                        className="sr-only"
+                        checked={!submitUseSelectedVersion}
+                        onChange={() => setSubmitUseSelectedVersion(false)}
+                      />
+                      <span>{t("promptDetail.publicSubmit.useLatest")}</span>
+                    </label>
+                    <label
+                      className={cn(
+                        "flex items-center gap-3 rounded-xl border px-3 py-2 text-sm transition-colors dark:border-slate-700",
+                        submitUseSelectedVersion
+                          ? "border-primary/40 bg-primary/10 text-primary dark:border-primary/40 dark:bg-primary/20 dark:text-primary-foreground"
+                          : "border-slate-200 text-slate-500 dark:text-slate-400",
+                      )}
+                    >
+                      <input
+                        type="radio"
+                        name="public-submit-version"
+                        className="sr-only"
+                        checked={submitUseSelectedVersion}
+                        onChange={() => setSubmitUseSelectedVersion(true)}
+                        disabled={versions.length === 0}
+                      />
+                      <span>
+                        {versions.length === 0
+                          ? t("promptDetail.publicSubmit.useSelectedDisabled")
+                          : t("promptDetail.publicSubmit.useSelected")}
+                      </span>
+                    </label>
+                  </div>
+                  {submitUseSelectedVersion && selectedVersion !== null ? (
+                    versionDetailQuery.isLoading ? (
+                      <p className="text-xs text-amber-500 dark:text-amber-300">
+                        {t("promptDetail.publicSubmit.versionLoading")}
+                      </p>
+                    ) : !versionDetail ? (
+                      <p className="text-xs text-rose-500 dark:text-rose-400">
+                        {t("promptDetail.publicSubmit.versionMissing")}
+                      </p>
+                    ) : (
+                      <p className="text-xs text-slate-500 dark:text-slate-400">
+                        {t("promptDetail.publicSubmit.versionReady", {
+                          version: versionDetail.versionNo,
+                        })}
+                      </p>
+                    )
+                  ) : null}
+                </div>
+
+                <div className="space-y-2">
+                  <label
+                    htmlFor="public-submit-title"
+                    className="text-xs font-medium uppercase tracking-[0.24em] text-slate-400 dark:text-slate-500"
+                  >
+                    {t("promptDetail.publicSubmit.titleLabel")}
+                  </label>
+                  <Input
+                    id="public-submit-title"
+                    value={submitTitle}
+                    onChange={(event) => setSubmitTitle(event.target.value)}
+                    placeholder={t("promptDetail.publicSubmit.titlePlaceholder")}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <label
+                    htmlFor="public-submit-summary"
+                    className="text-xs font-medium uppercase tracking-[0.24em] text-slate-400 dark:text-slate-500"
+                  >
+                    {t("promptDetail.publicSubmit.summaryLabel")}
+                  </label>
+                  <Textarea
+                    id="public-submit-summary"
+                    value={submitSummary}
+                    onChange={(event) => setSubmitSummary(event.target.value)}
+                    placeholder={t("promptDetail.publicSubmit.summaryPlaceholder")}
+                    rows={PUBLIC_PROMPT_SUMMARY_ROWS}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <label
+                    htmlFor="public-submit-tags"
+                    className="text-xs font-medium uppercase tracking-[0.24em] text-slate-400 dark:text-slate-500"
+                  >
+                    {t("promptDetail.publicSubmit.tagsLabel")}
+                  </label>
+                  <Input
+                    id="public-submit-tags"
+                    value={submitTagsInput}
+                    onChange={(event) => setSubmitTagsInput(event.target.value)}
+                    placeholder={t("promptDetail.publicSubmit.tagsPlaceholder")}
+                  />
+                  <p className="text-xs text-slate-400 dark:text-slate-500">
+                    {t("promptDetail.publicSubmit.tagsHint")}
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <label
+                    htmlFor="public-submit-language"
+                    className="text-xs font-medium uppercase tracking-[0.24em] text-slate-400 dark:text-slate-500"
+                  >
+                    {t("promptDetail.publicSubmit.languageLabel")}
+                  </label>
+                  <Input
+                    id="public-submit-language"
+                    value={submitLanguage}
+                    onChange={(event) => setSubmitLanguage(event.target.value)}
+                    placeholder={DEFAULT_PUBLIC_PROMPT_LANGUAGE}
+                  />
+                </div>
+
+                <div className="flex items-center justify-end gap-3">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    onClick={handleCloseSubmit}
+                    className="transition-transform hover:-translate-y-0.5"
+                  >
+                    {t("promptDetail.publicSubmit.cancel")}
+                  </Button>
+                  <Button
+                    type="button"
+                    onClick={handleSubmitPublic}
+                    disabled={
+                      submitMutation.isPending ||
+                      (submitUseSelectedVersion &&
+                        selectedVersion !== null &&
+                        !versionDetail)
+                    }
+                    className="transition-transform hover:-translate-y-0.5"
+                  >
+                    {submitMutation.isPending ? (
+                      <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
+                    ) : (
+                      <UploadCloud className="mr-2 h-4 w-4" />
+                    )}
+                    {t("promptDetail.publicSubmit.submit")}
+                  </Button>
+                </div>
+              </GlassCard>
+            ) : null}
+
+            <GlassCard className="space-y-4">
+              <section className="space-y-2">
               <h2 className="text-sm font-semibold text-slate-600 dark:text-slate-300">
                 {t("promptDetail.sections.meta")}
               </h2>
@@ -542,6 +851,7 @@ export default function PromptDetailPage(): JSX.Element {
             </section>
           </GlassCard>
 
+          </div>
           <GlassCard className="flex h-full flex-col gap-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
@@ -699,4 +1009,74 @@ function EmptyState() {
       {t("promptDetail.empty")}
     </div>
   );
+}
+
+function buildDefaultSummary(
+  instructionsValue: string | null | undefined,
+  bodyValue: string,
+): string {
+  const paragraphsFromInstructions = splitIntoParagraphs(
+    instructionsValue ?? "",
+  );
+  if (paragraphsFromInstructions.length > 0) {
+    return paragraphsFromInstructions
+      .slice(0, SUMMARY_PARAGRAPH_LIMIT)
+      .join(" ");
+  }
+  const bodyParagraphs = splitIntoParagraphs(bodyValue);
+  if (bodyParagraphs.length === 0) {
+    return bodyValue;
+  }
+  return bodyParagraphs.slice(0, SUMMARY_PARAGRAPH_LIMIT).join(" ");
+}
+
+function splitIntoParagraphs(source: string): string[] {
+  return source
+    .split(/\r?\n+/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function normaliseTagsInput(input: string, fallback: string[]): string[] {
+  const trimmed = input.trim();
+  if (!trimmed) {
+    return Array.from(new Set(fallback));
+  }
+  const segments = trimmed
+    .split(/[,，\n]/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+  if (segments.length === 0) {
+    return Array.from(new Set(fallback));
+  }
+  return Array.from(new Set(segments));
+}
+
+function serializeKeywordsForSubmission(
+  keywords: PromptListKeyword[],
+): string {
+  const mapped = keywords
+    .map((item) => {
+      const word = typeof item.word === "string" ? item.word.trim() : "";
+      if (!word) {
+        return null;
+      }
+      const weight =
+        typeof item.weight === "number" && Number.isFinite(item.weight)
+          ? item.weight
+          : DEFAULT_KEYWORD_WEIGHT;
+      return {
+        word,
+        weight,
+        source: normaliseKeywordSource(item.source),
+      };
+    })
+    .filter(
+      (item): item is {
+        word: string;
+        weight: number;
+        source: KeywordSource;
+      } => Boolean(item),
+    );
+  return JSON.stringify(mapped);
 }

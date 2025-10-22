@@ -255,6 +255,31 @@ export interface PublicPromptDownloadResult {
   status: string;
 }
 
+export interface PublicPromptSubmitPayload {
+  sourcePromptId?: number | null;
+  title: string;
+  topic: string;
+  summary: string;
+  body: string;
+  instructions: string;
+  positiveKeywords: string;
+  negativeKeywords: string;
+  tags: string;
+  model: string;
+  language?: string;
+}
+
+export interface PublicPromptSubmitResult {
+  id: number;
+  status: string;
+  created: string;
+}
+
+export interface PublicPromptReviewPayload {
+  status: "approved" | "rejected";
+  reason?: string;
+}
+
 export interface PromptExportResult {
   filePath: string;
   promptCount: number;
@@ -1060,6 +1085,53 @@ export async function downloadPublicPrompt(
   }
 }
 
+export async function submitPublicPrompt(
+  payload: PublicPromptSubmitPayload,
+): Promise<PublicPromptSubmitResult> {
+  try {
+    const response: AxiosResponse<{
+      id?: number;
+      status?: string;
+      created?: string;
+    }> = await http.post("/public-prompts", {
+      source_prompt_id:
+        typeof payload.sourcePromptId === "number" && payload.sourcePromptId > 0
+          ? payload.sourcePromptId
+          : undefined,
+      title: payload.title,
+      topic: payload.topic,
+      summary: payload.summary,
+      body: payload.body,
+      instructions: payload.instructions,
+      positive_keywords: payload.positiveKeywords,
+      negative_keywords: payload.negativeKeywords,
+      tags: payload.tags,
+      model: payload.model,
+      language: payload.language ?? "zh-CN",
+    });
+    return {
+      id: Number(response.data?.id ?? 0),
+      status: String(response.data?.status ?? "pending"),
+      created: String(response.data?.created ?? ""),
+    };
+  } catch (error) {
+    throw normaliseError(error);
+  }
+}
+
+export async function reviewPublicPrompt(
+  id: number,
+  payload: PublicPromptReviewPayload,
+): Promise<void> {
+  try {
+    await http.post(`/public-prompts/${id}/review`, {
+      status: payload.status,
+      reason: payload.reason,
+    });
+  } catch (error) {
+    throw normaliseError(error);
+  }
+}
 /** 导出当前用户的 Prompt 并返回生成的本地文件路径。 */
 export async function exportPrompts(): Promise<PromptExportResult> {
   try {

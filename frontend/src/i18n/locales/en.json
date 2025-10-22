@@ -14,6 +14,7 @@
     "settings": "Settings",
     "logs": "Activity Logs",
     "ipGuard": "IP Guard",
+    "publicPromptReview": "Public prompt review",
     "changelogAdmin": "Manage changelog",
     "help": "Help Center",
     "adminSection": "Admin console"
@@ -159,6 +160,40 @@
       "model": "Model: {{model}}",
       "updatedAt": "Updated: {{date}} {{time}}"
     }
+  },
+  "publicPromptReview": {
+    "eyebrow": "Public review",
+    "title": "Public Prompt Review",
+    "subtitle": "Review community submissions and keep the library high quality.",
+    "noPermission": "You do not have permission to access the review console. Contact an administrator if you need access.",
+    "searchPlaceholder": "Search submissions by keyword",
+    "status": {
+      "pending": "Pending",
+      "approved": "Approved",
+      "rejected": "Rejected",
+      "all": "All"
+    },
+    "empty": "No submissions matched your filters.",
+    "pagination": "Page {{page}} of {{totalPages}} ({{totalItems}} total)",
+    "prevPage": "Previous",
+    "nextPage": "Next",
+    "noSelection": "Select a submission on the left to review details.",
+    "detailError": "Failed to load submission details. Please try again later.",
+    "noSummary": "No summary provided.",
+    "noTags": "No tags",
+    "positiveKeywords": "Positive keywords",
+    "negativeKeywords": "Negative keywords",
+    "noKeywords": "No keywords",
+    "instructions": "Instructions",
+    "body": "Prompt body",
+    "rejectReason": "Rejection reason",
+    "rejectPlaceholder": "Optionally explain why the submission was rejected.",
+    "rejectHint": "Leave empty to reject without a reason. Use sparingly.",
+    "rejectAction": "Reject submission",
+    "approveAction": "Approve submission",
+    "approveSuccess": "Submission approved and moved into the public library.",
+    "rejectSuccess": "Submission rejected.",
+    "actionError": "Review action failed. Please try again later."
   },
   "logsPage": {
     "eyebrow": "Release notes",
@@ -623,7 +658,31 @@
       "back": "Go back",
       "edit": "Continue editing",
       "copyBody": "Copy body",
-      "copyMarkdown": "Copy Markdown"
+      "copyMarkdown": "Copy Markdown",
+      "submitPublic": "Submit to library"
+    },
+    "publicSubmit": {
+      "title": "Submit to the public prompt library",
+      "description": "Pick the version you want to share, refine the summary and tags, then send it for review.",
+      "versionLabel": "Submission version",
+      "useLatest": "Use latest version",
+      "useSelected": "Use the selected historical version",
+      "useSelectedDisabled": "No historical versions available",
+      "versionLoading": "Loading the selected version. Please wait…",
+      "versionMissing": "Unable to load the selected version. Try again later or switch back to the latest copy.",
+      "versionReady": "Version {{version}} will be submitted.",
+      "titleLabel": "Display title",
+      "titlePlaceholder": "e.g. AI customer support greeting template",
+      "summaryLabel": "Summary",
+      "summaryPlaceholder": "Describe what this prompt does, why it is useful and when to use it.",
+      "tagsLabel": "Tags",
+      "tagsPlaceholder": "e.g. support, onboarding, zh-CN",
+      "tagsHint": "Separate multiple tags with commas, such as \"support, onboarding\".",
+      "languageLabel": "Display language",
+      "cancel": "Cancel",
+      "submit": "Submit for review",
+      "success": "Submission created. Waiting for admin review.",
+      "error": "Submission failed. Please try again later."
     },
     "versions": {
       "title": "Version history",

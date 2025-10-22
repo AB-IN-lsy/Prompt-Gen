@@ -27,6 +27,8 @@
 - **优质 Prompt 库**：新增 “优质 Prompt 库” 页面，支持按关键词、状态筛选公共 Prompt，并一键导入到个人库（离线模式保留浏览与下载能力，投稿在在线模式开放）。
 - **帮助中心 Scroll Stack**：`Help.tsx` 采用滚动联动卡片布局，左侧章节索引与右侧卡片堆叠联动，逐步呈现操作指南。
 - **版本历史**：Prompt 详情页左侧新增“版本历史”卡片，可浏览、预览历史版本并一键加载到工作台继续编辑。
+- **Prompt 投稿按钮**：Prompt 详情页右上新增“投稿到公共库”入口，可基于当前或指定历史版本一键提交至公共库，支持自定义摘要、标签与展示语言。
+- **公共库审核面板**：管理后台追加“公共库审核”菜单，提供分页搜索、快速审批与驳回原因记录，配合 `/admin/public-prompts` 页面完成投稿审核流。
 
 ## 已实现功能概览
 
@@ -136,6 +138,7 @@ frontend/
    │  ├─ Register.tsx              # 注册表单，内置验证码刷新、自动重试与行内校验提示
    │  ├─ PromptWorkbench.tsx       # 提示词工作台，整合关键词管理与草稿编辑
    │  ├─ PublicPrompts.tsx         # 优质 Prompt 列表，支持搜索、筛选与下载/导入
+   │  ├─ AdminPublicPrompts.tsx    # 公共库审核页，管理员审批/驳回投稿
    │  ├─ Settings.tsx              # 设置页，管理账户资料、模型偏好与主题
    │  ├─ Help.tsx                  # 帮助中心，汇总使用指南与支持渠道
    │  ├─ Logs.tsx                  # 更新日志，展示并（管理员）维护 changelog
@@ -156,6 +159,12 @@ frontend/
    │  └─ locales/                  # 多语言文案资源（中文、英文）
    └─ lib/types 等其它业务文件
 ```
+
+### 公共 Prompt 审核流程
+
+- Prompt 详情页的“投稿到公共库”按钮会基于当前或选中的历史版本生成投稿载荷，支持自定义摘要、标签与展示语言并同步限流配置（`PUBLIC_PROMPT_SUBMIT_*`）。相关表单默认行为可通过以下变量微调：`VITE_PUBLIC_PROMPT_SUMMARY_PARAGRAPHS`、`VITE_PUBLIC_PROMPT_SUMMARY_ROWS`、`VITE_PUBLIC_PROMPT_DEFAULT_LANGUAGE`。
+- 侧边栏新增“公共库审核”入口（仅管理员可见），对应 `/admin/public-prompts` 页面，提供搜索、状态筛选、分页浏览与审批/驳回操作。页面分页与驳回输入框行数分别受 `VITE_PUBLIC_PROMPT_REVIEW_PAGE_SIZE` 与 `VITE_PUBLIC_PROMPT_REVIEW_REASON_ROWS` 控制。
+- 审核通过后会刷新公共库与个人库缓存；驳回时可选填原因（写入 `review_reason` 字段），空值代表静默驳回。所有操作即时反馈到 `react-query` 缓存，并提示操作结果。
 
 ## 核心模块说明
 

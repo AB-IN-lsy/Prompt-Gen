@@ -9,7 +9,7 @@ import { ReactNode, useCallback, useEffect, useLayoutEffect, useMemo, useRef, us
 import { useTranslation } from "react-i18next";
 import { cn, resolveAssetUrl } from "../../lib/utils";
 import { isLocalMode } from "../../lib/runtimeMode";
-import { Settings, HelpCircle, LayoutDashboard, Sparkles, LogOut, ListChecks, FileClock, Rocket, ShieldAlert, ScrollText, Library } from "lucide-react";
+import { Settings, HelpCircle, LayoutDashboard, Sparkles, LogOut, ListChecks, FileClock, Rocket, ShieldAlert, ScrollText, Library, ClipboardCheck } from "lucide-react";
 import { Button } from "../ui/button";
 import { useAuth } from "../../hooks/useAuth";
 import { TitleBar } from "./TitleBar";
@@ -30,6 +30,7 @@ const baseNavItems = [
 // 仅管理员显示的额外导航项。
 const adminNavItems = [
     { labelKey: "nav.ipGuard", icon: ShieldAlert, to: "/ip-guard" },
+    { labelKey: "nav.publicPromptReview", icon: ClipboardCheck, to: "/admin/public-prompts" },
     { labelKey: "nav.changelogAdmin", icon: ScrollText, to: "/admin/changelog" }
 ];
 

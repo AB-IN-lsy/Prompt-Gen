@@ -14,6 +14,7 @@
     "settings": "设置",
     "logs": "更新日志",
     "ipGuard": "IP 防护",
+    "publicPromptReview": "公共库审核",
     "changelogAdmin": "管理更新日志",
     "help": "帮助中心",
     "adminSection": "管理后台"
@@ -159,6 +160,40 @@
       "model": "使用模型：{{model}}",
       "updatedAt": "最近更新：{{date}} {{time}}"
     }
+  },
+  "publicPromptReview": {
+    "eyebrow": "公共库审核",
+    "title": "公共 Prompt 审核",
+    "subtitle": "核查用户投稿的 Prompt，确保内容质量与安全。",
+    "noPermission": "当前账号无权访问公共库审核功能，请联系管理员开通权限。",
+    "searchPlaceholder": "按关键词搜索投稿",
+    "status": {
+      "pending": "待审核",
+      "approved": "已通过",
+      "rejected": "已驳回",
+      "all": "全部"
+    },
+    "empty": "暂无符合条件的投稿。",
+    "pagination": "第 {{page}} / {{totalPages}} 页，共 {{totalItems}} 条",
+    "prevPage": "上一页",
+    "nextPage": "下一页",
+    "noSelection": "请选择左侧的投稿查看详情。",
+    "detailError": "加载投稿详情失败，请稍后重试。",
+    "noSummary": "暂无摘要说明。",
+    "noTags": "未设置标签",
+    "positiveKeywords": "正向关键词",
+    "negativeKeywords": "负向关键词",
+    "noKeywords": "暂无关键词",
+    "instructions": "补充说明",
+    "body": "正文内容",
+    "rejectReason": "驳回原因",
+    "rejectPlaceholder": "可简要说明驳回原因，便于投稿者调整。",
+    "rejectHint": "留空则直接驳回且不返回原因，请谨慎操作。",
+    "rejectAction": "驳回投稿",
+    "approveAction": "通过审核",
+    "approveSuccess": "审核通过，条目已移入公共库。",
+    "rejectSuccess": "已驳回投稿。",
+    "actionError": "操作失败，请稍后再试。"
   },
   "logsPage": {
     "eyebrow": "版本更新",
@@ -623,7 +658,31 @@
       "back": "返回上一页",
       "edit": "继续编辑",
       "copyBody": "复制正文",
-      "copyMarkdown": "复制 Markdown"
+      "copyMarkdown": "复制 Markdown",
+      "submitPublic": "投稿到公共库"
+    },
+    "publicSubmit": {
+      "title": "投稿至公共 Prompt 库",
+      "description": "选择要投稿的版本，完善摘要与标签后提交审核。",
+      "versionLabel": "投稿版本",
+      "useLatest": "使用最新版本",
+      "useSelected": "使用当前选择的历史版本",
+      "useSelectedDisabled": "暂无可用历史版本",
+      "versionLoading": "正在加载所选版本内容，请稍候…",
+      "versionMissing": "未能加载所选版本，请稍后重试或改用最新版本。",
+      "versionReady": "已选中版本 {{version}} 作为投稿内容。",
+      "titleLabel": "展示标题",
+      "titlePlaceholder": "示例：AI 客服首轮问候模版",
+      "summaryLabel": "摘要说明",
+      "summaryPlaceholder": "简要说明该 Prompt 的用途、亮点与适用场景。",
+      "tagsLabel": "标签",
+      "tagsPlaceholder": "示例：客服, 入门, 中文",
+      "tagsHint": "使用逗号分隔多个标签，例如「客服, 入门」。",
+      "languageLabel": "展示语言",
+      "cancel": "取消",
+      "submit": "提交审核",
+      "success": "投稿已提交，等待管理员审核。",
+      "error": "投稿失败，请稍后再试。"
     },
     "versions": {
       "title": "版本历史",
