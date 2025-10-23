@@ -5,16 +5,40 @@
  * @LastEditTime: 2025-10-12 02:29:45
  */
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
-import { ReactNode, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import {
+    ReactNode,
+    useCallback,
+    useEffect,
+    useLayoutEffect,
+    useMemo,
+    useRef,
+    useState,
+    type ChangeEvent,
+    type KeyboardEvent
+} from "react";
 import { useTranslation } from "react-i18next";
 import { cn, resolveAssetUrl } from "../../lib/utils";
 import { isLocalMode } from "../../lib/runtimeMode";
-import { Settings, HelpCircle, LayoutDashboard, Sparkles, LogOut, ListChecks, FileClock, Rocket, ShieldAlert, ScrollText, Library, ClipboardCheck } from "lucide-react";
+import {
+    Settings,
+    HelpCircle,
+    LayoutDashboard,
+    Sparkles,
+    LogOut,
+    ListChecks,
+    FileClock,
+    Rocket,
+    ShieldAlert,
+    ScrollText,
+    Library,
+    ClipboardCheck
+} from "lucide-react";
 import { Button } from "../ui/button";
 import { useAuth } from "../../hooks/useAuth";
 import { TitleBar } from "./TitleBar";
 import { DesktopContextMenu } from "../system/DesktopContextMenu";
 import { AuroraBackdrop } from "../visuals/AuroraBackdrop";
+import { SpotlightSearch } from "../ui/spotlight-search";
 
 // 侧边导航基础配置：labelKey 与翻译 key 对应，icon 控制导航图标。
 const baseNavItems = [
@@ -63,6 +87,7 @@ export function AppShell({ children, rightSlot }: AppShellProps) {
     );
     const [showScrollTop, setShowScrollTop] = useState(false);
     const [fading, setFading] = useState(false);
+    const [globalSearchValue, setGlobalSearchValue] = useState("");
 
     const handleLogout = useCallback(async () => {
         await logout();
@@ -121,6 +146,32 @@ export function AppShell({ children, rightSlot }: AppShellProps) {
         }
         node.scrollTo({ top: 0, behavior: "smooth" });
     }, []);
+
+    useEffect(() => {
+        const params = new URLSearchParams(location.search);
+        const nextValue = params.get("q") ?? "";
+        setGlobalSearchValue((prev) => (prev === nextValue ? prev : nextValue));
+    }, [location.pathname, location.search]);
+
+    const handleGlobalSearchChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
+        setGlobalSearchValue(event.target.value);
+    }, []);
+
+    const handleGlobalSearchSubmit = useCallback(() => {
+        const trimmed = globalSearchValue.trim();
+        const targetSearch = trimmed ? `?q=${encodeURIComponent(trimmed)}` : "";
+        navigate({
+            pathname: "/public-prompts",
+            search: targetSearch
+        });
+    }, [globalSearchValue, navigate]);
+
+    const handleGlobalSearchKeyDown = useCallback((event: KeyboardEvent<HTMLInputElement>) => {
+        if (event.key === "Enter") {
+            event.preventDefault();
+            handleGlobalSearchSubmit();
+        }
+    }, [handleGlobalSearchSubmit]);
 
     const animationsEnabled = profile?.settings?.enable_animations ?? true;
 
@@ -198,9 +249,21 @@ export function AppShell({ children, rightSlot }: AppShellProps) {
                 </aside>
                 <main className="flex flex-1 flex-col overflow-hidden">
                     {/* 顶部工具栏：包含全局操作按钮和头像占位 */}
-                    <header className="glass sticky top-0 z-10 flex h-16 items-center justify-between border-b border-white/60 bg-white/70 px-6 backdrop-blur-lg transition-colors dark:border-slate-800/70 dark:bg-slate-900/60">
-                        <div className="flex items-center gap-3 text-sm text-slate-500 dark:text-slate-400">
-                            {rightSlot}
+                    <header className="glass sticky top-0 z-10 flex h-16 items-center justify-between gap-4 border-b border-white/60 bg-white/70 px-6 backdrop-blur-lg transition-colors dark:border-slate-800/70 dark:bg-slate-900/60">
+                        <div className="flex flex-1 items-center gap-3">
+                            <SpotlightSearch
+                                placeholder={t("appShell.globalSearch.placeholder")}
+                                value={globalSearchValue}
+                                onChange={handleGlobalSearchChange}
+                                onKeyDown={handleGlobalSearchKeyDown}
+                                aria-label={t("appShell.globalSearch.ariaLabel")}
+                                className="max-w-xl flex-1"
+                            />
+                            {rightSlot ? (
+                                <div className="flex items-center gap-3 text-sm text-slate-500 dark:text-slate-400">
+                                    {rightSlot}
+                                </div>
+                            ) : null}
                         </div>
                         <div className="flex items-center gap-3">
                             <button

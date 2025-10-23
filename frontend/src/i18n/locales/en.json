@@ -279,6 +279,10 @@
   },
   "appShell": {
     "searchPlaceholder": "Search topics or keywords...",
+    "globalSearch": {
+      "placeholder": "Search premium prompts…",
+      "ariaLabel": "Enter keywords and press Enter to open premium prompts"
+    },
     "logout": "Sign out",
     "logoutSuccess": "Signed out successfully",
     "backToTop": "Back to top"

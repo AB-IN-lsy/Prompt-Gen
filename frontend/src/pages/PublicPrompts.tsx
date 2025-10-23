@@ -5,6 +5,7 @@
  * @LastEditTime: 2025-10-20 02:12:17
  */
 import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
@@ -63,6 +64,9 @@ const ensureUniqueIntegers = (values: (number | null | undefined)[]) =>
 
 export default function PublicPromptsPage(): JSX.Element {
   const { t, i18n } = useTranslation();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const searchParamsString = searchParams.toString();
+  const queryFromUrl = searchParams.get("q") ?? "";
   const queryClient = useQueryClient();
   const profile = useAuth((state) => state.profile);
   const isAdmin = Boolean(profile?.user?.is_admin);
@@ -70,8 +74,8 @@ export default function PublicPromptsPage(): JSX.Element {
 
   const [page, setPage] = useState(1);
   const [selectedId, setSelectedId] = useState<number | null>(null);
-  const [searchInput, setSearchInput] = useState("");
-  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [searchInput, setSearchInput] = useState(queryFromUrl);
+  const [debouncedSearch, setDebouncedSearch] = useState(queryFromUrl);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>(
     isAdmin ? "all" : "approved",
   );
@@ -83,6 +87,40 @@ export default function PublicPromptsPage(): JSX.Element {
     }, 280);
     return () => window.clearTimeout(timer);
   }, [searchInput]);
+
+  useEffect(() => {
+    let changed = false;
+    setSearchInput((prev) => {
+      if (prev === queryFromUrl) {
+        return prev;
+      }
+      changed = true;
+      return queryFromUrl;
+    });
+    setDebouncedSearch((prev) => {
+      if (prev === queryFromUrl) {
+        return prev;
+      }
+      changed = true;
+      return queryFromUrl;
+    });
+    if (changed) {
+      setPage(1);
+    }
+  }, [queryFromUrl]);
+
+  useEffect(() => {
+    if (debouncedSearch === queryFromUrl) {
+      return;
+    }
+    const nextParams = new URLSearchParams(searchParamsString);
+    if (debouncedSearch) {
+      nextParams.set("q", debouncedSearch);
+    } else {
+      nextParams.delete("q");
+    }
+    setSearchParams(nextParams, { replace: true });
+  }, [debouncedSearch, queryFromUrl, searchParamsString, setSearchParams]);
 
   const listQuery = useQuery<PublicPromptListResponse>({
     queryKey: [

@@ -5,6 +5,7 @@
 ## 近期前端调整
 
 - **窗口外壳**：Electron 渲染进程默认启动在 1100×720 的固定比例窗口中，禁用边框拖拽；Windows / Linux 保留自定义的最小化、最大化与关闭按钮，macOS 则让位于系统左上角交通灯，仅保留置顶（Pin）按钮以避免与原生控件冲突。网页模式下会自动隐藏桌面专属按钮并显示 “Web Preview” 提示。
+- **全局 Spotlight 搜索**：应用顶部新增 Spotlight 风格的全局搜索栏，输入关键词后按下回车即可跳转到“优质 Prompt 库”并带着同样的查询文案，方便跨页面快速检索。
 - **关键词配置**：根目录 `.env(.local)` 支持 `VITE_KEYWORD_ROW_LIMIT`（默认 3）与 `VITE_DEFAULT_KEYWORD_WEIGHT`（默认 5）等字段，可快速调节前端关键词与权重默认值。
 - **请求与生成等待**：
   - `VITE_API_REQUEST_TIMEOUT_MS`（默认 60000）用于控制 Axios 请求超时时间，AI 生成等耗时操作可按需放宽。

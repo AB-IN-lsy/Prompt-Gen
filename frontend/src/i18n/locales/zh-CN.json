@@ -279,6 +279,10 @@
   },
   "appShell": {
     "searchPlaceholder": "搜索主题或关键词...",
+    "globalSearch": {
+      "placeholder": "全局搜索优质 Prompt…",
+      "ariaLabel": "输入关键词后按回车跳转优质 Prompt"
+    },
     "logout": "退出登录",
     "logoutSuccess": "已安全退出登录",
     "backToTop": "回到顶部"
