@@ -834,6 +834,13 @@ export default function PromptWorkbenchPage() {
   }, [modelsQuery.data]);
 
   useEffect(() => {
+    const preferred = profile?.settings?.preferred_model ?? "";
+    if (!model && preferred) {
+      setModel(preferred);
+    }
+  }, [model, profile?.settings?.preferred_model, setModel]);
+
+  useEffect(() => {
     if (modelsQuery.isLoading || modelsQuery.isFetching) {
       return;
     }
@@ -1188,30 +1195,89 @@ export default function PromptWorkbenchPage() {
     },
   });
 
+  const validatePublishRequirements = useCallback((): boolean => {
+    const missingMessages: string[] = [];
+    const trimmedTopic = topic.trim();
+    const trimmedPrompt = prompt.trim();
+    const trimmedInstructions = instructions.trim();
+    if (!trimmedTopic) {
+      missingMessages.push(
+        t("promptWorkbench.publishValidation.topic", {
+          defaultValue: "发布前需要填写主题",
+        }),
+      );
+    }
+    if (!trimmedPrompt) {
+      missingMessages.push(
+        t("promptWorkbench.publishValidation.body", {
+          defaultValue: "发布前需要填写提示词正文",
+        }),
+      );
+    }
+    if (!trimmedInstructions) {
+      missingMessages.push(
+        t("promptWorkbench.publishValidation.instructions", {
+          defaultValue: "发布前需要补充要求",
+        }),
+      );
+    }
+    if (!model) {
+      missingMessages.push(
+        t("promptWorkbench.publishValidation.model", {
+          defaultValue: "发布前需要选择模型",
+        }),
+      );
+    }
+    if (positiveKeywords.length === 0) {
+      missingMessages.push(
+        t("promptWorkbench.publishValidation.positiveKeywords", {
+          defaultValue: "发布前至少保留一个正向关键词",
+        }),
+      );
+    }
+    if (negativeKeywords.length === 0) {
+      missingMessages.push(
+        t("promptWorkbench.publishValidation.negativeKeywords", {
+          defaultValue: "发布前至少保留一个负向关键词",
+        }),
+      );
+    }
+    if (tags.length === 0) {
+      missingMessages.push(
+        t("promptWorkbench.publishValidation.tags", {
+          defaultValue: "发布前至少设置一个标签",
+        }),
+      );
+    }
+    if (missingMessages.length > 0) {
+      missingMessages.forEach((message) => toast.warning(message));
+      return false;
+    }
+    return true;
+  }, [instructions, model, negativeKeywords, positiveKeywords, prompt, t, tags, toast, topic]);
+
   const savePromptMutation = useMutation({
     mutationFn: async (publish: boolean) => {
-      if (!topic) {
-        throw new ApiError({
-          message: t("promptWorkbench.topicMissing", {
-            defaultValue: "请先填写主题",
-          }),
-        });
-      }
-      if (!prompt.trim()) {
-        throw new ApiError({
-          message: t("promptWorkbench.promptEmpty", {
-            defaultValue: "提示词内容不能为空",
-          }),
-        });
+      const trimmedTopic = topic.trim();
+      const trimmedPrompt = prompt.trim();
+      const trimmedInstructions = instructions.trim();
+      if (publish) {
+        if (!trimmedTopic || !trimmedPrompt) {
+          throw new ApiError({
+            message: t("promptWorkbench.publishValidation.failed", {
+              defaultValue: "发布条件未满足，请补全必填项",
+            }),
+          });
+        }
       }
       setSaving(true);
       const payload: SavePromptRequest = {
         prompt_id:
           promptId && Number(promptId) > 0 ? Number(promptId) : undefined,
-        topic,
-        body: prompt,
+        topic: publish ? trimmedTopic : topic,
+        body: publish ? trimmedPrompt : prompt,
         model,
-        instructions: instructions.trim() || undefined,
+        instructions: trimmedInstructions || undefined,
         publish,
         status: publish ? "published" : "draft",
         tags: tags.map((tag) => tag.value),
@@ -1398,7 +1464,12 @@ export default function PromptWorkbenchPage() {
   const handleAugment = () => augmentMutation.mutate();
   const handleGenerate = () => generateMutation.mutate();
   const handleSaveDraft = () => savePromptMutation.mutate(false);
-  const handlePublish = () => savePromptMutation.mutate(true);
+  const handlePublish = () => {
+    if (!validatePublishRequirements()) {
+      return;
+    }
+    savePromptMutation.mutate(true);
+  };
 
   const handleAddTag = () => {
     const value = tagInput.trim();

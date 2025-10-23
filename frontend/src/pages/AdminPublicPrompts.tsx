@@ -9,6 +9,7 @@ import {
   LoaderCircle,
   ShieldBan,
   Tags,
+  Trash2,
 } from "lucide-react";
 
 import { PageHeader } from "../components/layout/PageHeader";
@@ -18,6 +19,7 @@ import { Badge } from "../components/ui/badge";
 import { SpotlightSearch } from "../components/ui/spotlight-search";
 import { Textarea } from "../components/ui/textarea";
 import {
+  deletePublicPrompt,
   fetchPublicPromptDetail,
   fetchPublicPrompts,
   reviewPublicPrompt,
@@ -142,6 +144,27 @@ export default function AdminPublicPromptsPage(): JSX.Element {
     },
   });
 
+  const deleteMutation = useMutation<void, unknown, number>({
+    mutationFn: (id: number) => deletePublicPrompt(id),
+    onSuccess: (_, id) => {
+      toast.success(t("publicPromptReview.deleteSuccess"));
+      setRejectReason("");
+      setSelectedId(null);
+      void queryClient.invalidateQueries({ queryKey: ["admin-public-prompts"] });
+      void queryClient.invalidateQueries({ queryKey: ["public-prompts"] });
+      void queryClient.invalidateQueries({
+        queryKey: ["admin-public-prompts", "detail", id],
+      });
+    },
+    onError: (error: unknown) => {
+      const message =
+        error instanceof Error
+          ? error.message
+          : t("publicPromptReview.deleteError");
+      toast.error(message);
+    },
+  });
+
   const formatDateTime = useMemo(() => {
     return new Intl.DateTimeFormat(i18n.language, {
       dateStyle: "medium",
@@ -166,14 +189,14 @@ export default function AdminPublicPromptsPage(): JSX.Element {
   }
 
   const handleApprove = () => {
-    if (!selectedId) {
+    if (!selectedId || deleteMutation.isPending) {
       return;
     }
     reviewMutation.mutate({ id: selectedId, status: "approved" });
   };
 
   const handleReject = () => {
-    if (!selectedId) {
+    if (!selectedId || deleteMutation.isPending) {
       return;
     }
     reviewMutation.mutate({
@@ -333,7 +356,13 @@ export default function AdminPublicPromptsPage(): JSX.Element {
               onRejectReasonChange={setRejectReason}
               onApprove={handleApprove}
               onReject={handleReject}
+              onDelete={() => {
+                if (detailQuery.data) {
+                  deleteMutation.mutate(detailQuery.data.id);
+                }
+              }}
               isSubmitting={reviewMutation.isPending}
+              isDeleting={deleteMutation.isPending}
               formatDateTime={formatDateTime}
               t={t}
             />
@@ -350,7 +379,9 @@ function PublicPromptDetailPanel({
   onRejectReasonChange,
   onApprove,
   onReject,
+  onDelete,
   isSubmitting,
+  isDeleting,
   formatDateTime,
   t,
 }: {
@@ -359,10 +390,27 @@ function PublicPromptDetailPanel({
   onRejectReasonChange: (value: string) => void;
   onApprove: () => void;
   onReject: () => void;
+  onDelete: () => void;
   isSubmitting: boolean;
+  isDeleting: boolean;
   formatDateTime: Intl.DateTimeFormat;
   t: (key: string, options?: Record<string, unknown>) => string;
 }): JSX.Element {
+  const handleDeleteClick = () => {
+    if (isSubmitting || isDeleting) {
+      return;
+    }
+    const confirmed = window.confirm(
+      t("publicPromptReview.deleteConfirm", {
+        defaultValue: "确认删除该公共 Prompt 吗？此操作不可撤销。",
+      }),
+    );
+    if (!confirmed) {
+      return;
+    }
+    onDelete();
+  };
+
   return (
     <div className="flex h-full flex-col gap-4">
       <div className="space-y-1">
@@ -475,8 +523,22 @@ function PublicPromptDetailPanel({
         <Button
           type="button"
           variant="outline"
+          onClick={handleDeleteClick}
+          disabled={isSubmitting || isDeleting}
+          className="border-rose-200 text-rose-500 transition-transform hover:-translate-y-0.5 hover:bg-rose-500/10 dark:border-rose-500/40 dark:text-rose-300 dark:hover:bg-rose-500/20"
+        >
+          {isDeleting ? (
+            <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
+          ) : (
+            <Trash2 className="mr-2 h-4 w-4" />
+          )}
+          {t("publicPromptReview.deleteAction")}
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
           onClick={onReject}
-          disabled={isSubmitting}
+          disabled={isSubmitting || isDeleting}
           className="transition-transform hover:-translate-y-0.5"
         >
           {isSubmitting ? (
@@ -489,7 +551,7 @@ function PublicPromptDetailPanel({
         <Button
           type="button"
           onClick={onApprove}
-          disabled={isSubmitting}
+          disabled={isSubmitting || isDeleting}
           className="transition-transform hover:-translate-y-0.5"
         >
           {isSubmitting ? (

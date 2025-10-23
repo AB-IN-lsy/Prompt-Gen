@@ -146,6 +146,8 @@
     "instructions": "Instructions",
     "noInstructions": "No additional instructions",
     "body": "Prompt body",
+    "reviewReasonTitle": "Rejection reason",
+    "reviewReasonBadge": "Reason: {{reason}}",
     "status": {
       "approved": "Approved",
       "pending": "Pending",
@@ -193,7 +195,11 @@
     "approveAction": "Approve submission",
     "approveSuccess": "Submission approved and moved into the public library.",
     "rejectSuccess": "Submission rejected.",
-    "actionError": "Review action failed. Please try again later."
+    "actionError": "Review action failed. Please try again later.",
+    "deleteAction": "Delete submission",
+    "deleteSuccess": "Public prompt deleted.",
+    "deleteError": "Failed to delete the public prompt. Please try again later.",
+    "deleteConfirm": "Delete this public prompt? This action cannot be undone."
   },
   "logsPage": {
     "eyebrow": "Release notes",
@@ -349,6 +355,16 @@
     },
     "topicMissing": "Please provide a topic first.",
     "promptEmpty": "Prompt can't be empty.",
+    "publishValidation": {
+      "topic": "Please provide a topic before publishing.",
+      "body": "Please provide the prompt content before publishing.",
+      "instructions": "Please add additional instructions before publishing.",
+      "model": "Please select a model before publishing.",
+      "positiveKeywords": "Keep at least one positive keyword before publishing.",
+      "negativeKeywords": "Keep at least one negative keyword before publishing.",
+      "tags": "Add at least one tag before publishing.",
+      "failed": "Publishing requirements are not met. Please complete the required fields."
+    },
     "keywordsTitle": "Keyword governance",
     "keywordsSubtitle": "Sharpen your prompt focus",
     "addKeyword": "Add keyword",
@@ -682,7 +698,8 @@
       "cancel": "Cancel",
       "submit": "Submit for review",
       "success": "Submission created. Waiting for admin review.",
-      "error": "Submission failed. Please try again later."
+      "error": "Submission failed. Please try again later.",
+      "onlyPublished": "Only published prompts can be submitted to the public library."
     },
     "versions": {
       "title": "Version history",
@@ -780,7 +797,8 @@
       "username": "Username",
       "email": "Email",
       "preferredModel": "Preferred model",
-      "preferredModelPlaceholder": "e.g. deepseek, gpt-4o, claude",
+      "preferredModelPlaceholder": "e.g. deepseek, volcengine",
+      "preferredModelReadonlyHint": "The preferred model is managed from model credentials or the workbench and is read-only here.",
       "save": "Save profile"
     },
     "profileSaveSuccess": "Profile updated",

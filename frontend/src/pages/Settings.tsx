@@ -1133,17 +1133,19 @@ export default function SettingsPage() {
               </label>
               <Input
                 id="profile-model"
-                value={profileForm.preferred_model}
-                onChange={(event) =>
-                  setProfileForm((prev) => ({
-                    ...prev,
-                    preferred_model: event.target.value,
-                  }))
-                }
+                value={profileForm.preferred_model || ""}
+                readOnly
+                disabled
                 placeholder={
                   t("settings.profileCard.preferredModelPlaceholder") ?? ""
                 }
               />
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                {t("settings.profileCard.preferredModelReadonlyHint", {
+                  defaultValue:
+                    "偏好模型会在模型凭据页或工作台中更新，这里仅展示当前选项。",
+                })}
+              </p>
             </div>
           </div>
 

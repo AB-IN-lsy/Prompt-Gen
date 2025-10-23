@@ -85,6 +85,8 @@ export default function PromptDetailPage(): JSX.Element {
   });
 
   const detail = detailQuery.data;
+  const canSubmitPublic =
+    !offlineMode && detail?.status === "published";
 
   const versionsQuery = useQuery<PromptVersionSummary[]>({
     queryKey: ["prompt-versions", promptId],
@@ -322,8 +324,16 @@ export default function PromptDetailPage(): JSX.Element {
     navigate("/prompt-workbench");
   };
 
-  const handleOpenSubmit = () => {
+const handleOpenSubmit = () => {
     if (!detail) {
+      return;
+    }
+    if (detail.status !== "published") {
+      toast.error(
+        t("promptDetail.publicSubmit.onlyPublished", {
+          defaultValue: "仅已发布的 Prompt 才能投稿至公共库",
+        }),
+      );
       return;
     }
     setSubmitTitle(detail.topic);
@@ -409,7 +419,7 @@ export default function PromptDetailPage(): JSX.Element {
             >
               {t("promptDetail.actions.edit")}
             </Button>
-            {!offlineMode ? (
+            {canSubmitPublic ? (
               <Button
                 onClick={handleOpenSubmit}
                 disabled={!detail || submitMutation.isPending}

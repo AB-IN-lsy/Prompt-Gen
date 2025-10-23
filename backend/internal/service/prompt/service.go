@@ -978,18 +978,19 @@ type GenerateOutput struct {
 
 // SaveInput 描述保存草稿或发布 Prompt 的参数。
 type SaveInput struct {
-	UserID           uint
-	PromptID         uint
-	Topic            string
-	Body             string
-	Instructions     string
-	Model            string
-	Status           string
-	PositiveKeywords []KeywordItem
-	NegativeKeywords []KeywordItem
-	Tags             []string
-	Publish          bool
-	WorkspaceToken   string
+	UserID                   uint
+	PromptID                 uint
+	Topic                    string
+	Body                     string
+	Instructions             string
+	Model                    string
+	Status                   string
+	PositiveKeywords         []KeywordItem
+	NegativeKeywords         []KeywordItem
+	Tags                     []string
+	Publish                  bool
+	WorkspaceToken           string
+	EnforcePublishValidation bool
 }
 
 // SaveOutput 返回保存后的 Prompt 元数据。
@@ -1714,6 +1715,7 @@ func (s *Service) persistKeywords(ctx context.Context, userID uint, topic string
 }
 
 // processPersistenceTask 消费异步队列任务，将 Redis 工作区内容（含标签）持久化回数据库。
+// 把快照和任务里的字段合成一个完整的 SaveInput，补齐标签去重、关键词列表之类的细节，然后再调用 persistPrompt
 func (s *Service) processPersistenceTask(ctx context.Context, task promptdomain.PersistenceTask) error {
 	if s.workspace == nil {
 		return errors.New("workspace store not configured")
@@ -1728,17 +1730,18 @@ func (s *Service) processPersistenceTask(ctx context.Context, task promptdomain.
 		return fmt.Errorf("load workspace snapshot: %w", err)
 	}
 	input := SaveInput{
-		UserID:           task.UserID,
-		PromptID:         task.PromptID,
-		Topic:            firstNonEmpty(task.Topic, snapshot.Topic),
-		Body:             firstNonEmpty(task.Body, snapshot.DraftBody),
-		Instructions:     firstNonEmpty(task.Instructions, extractInstructionsFromAttributes(snapshot.Attributes)),
-		Model:            firstNonEmpty(task.Model, snapshot.ModelKey),
-		Status:           task.Status,
-		PositiveKeywords: s.keywordItemsFromWorkspace(snapshot.Positive),
-		NegativeKeywords: s.keywordItemsFromWorkspace(snapshot.Negative),
-		Tags:             task.Tags,
-		Publish:          task.Publish,
+		UserID:                   task.UserID,
+		PromptID:                 task.PromptID,
+		Topic:                    firstNonEmpty(task.Topic, snapshot.Topic),
+		Body:                     firstNonEmpty(task.Body, snapshot.DraftBody),
+		Instructions:             firstNonEmpty(task.Instructions, extractInstructionsFromAttributes(snapshot.Attributes)),
+		Model:                    firstNonEmpty(task.Model, snapshot.ModelKey),
+		Status:                   task.Status,
+		PositiveKeywords:         s.keywordItemsFromWorkspace(snapshot.Positive),
+		NegativeKeywords:         s.keywordItemsFromWorkspace(snapshot.Negative),
+		Tags:                     task.Tags,
+		Publish:                  task.Publish,
+		EnforcePublishValidation: true,
 	}
 	if len(input.Tags) == 0 {
 		if tags := extractTagsFromAttributes(snapshot.Attributes); len(tags) > 0 {
@@ -1786,14 +1789,12 @@ func (s *Service) processPersistenceTask(ctx context.Context, task promptdomain.
 }
 
 // persistPrompt 根据动作类型创建或更新 Prompt 主记录，同时保持关键词与版本一致。
+// persistPrompt 是 Prompt 服务里的核心持久化方法。它负责把一次“保存/发布”请求整理成落库动作：先清洗 Topic、正文、补充要求、模型、标签，再在需要发布时触发字段校验（比如主题、正文、补充要求、模型、正/负关键词、标签是否齐全），最后根据动作类型调用 createPromptRecord 或 updatePromptRecord 去写入主表、关键词表和版本信息。
 func (s *Service) persistPrompt(ctx context.Context, input SaveInput, status, action string) (SaveOutput, error) {
-	if strings.TrimSpace(input.Topic) == "" {
-		return SaveOutput{}, errors.New("topic required")
-	}
-	if strings.TrimSpace(input.Body) == "" {
-		return SaveOutput{}, errors.New("body required")
-	}
+	input.Topic = strings.TrimSpace(input.Topic)
+	input.Body = strings.TrimSpace(input.Body)
 	input.Instructions = strings.TrimSpace(input.Instructions)
+	input.Model = strings.TrimSpace(input.Model)
 	if err := enforceKeywordLimit(s.keywordLimit, input.PositiveKeywords, input.NegativeKeywords); err != nil {
 		return SaveOutput{}, err
 	}
@@ -1802,6 +1803,14 @@ func (s *Service) persistPrompt(ctx context.Context, input SaveInput, status, ac
 		return SaveOutput{}, err
 	}
 	input.Tags = cleanedTags
+	// 只有当这次保存的最终状态是 published，并且调用方显式要求执行发布校验（EnforcePublishValidation == true）时，才会去跑
+	// validatePublishInput。validatePublishInput 会检查发布必须具备的字段，例如主题、正文、补充要求、模型、正/负向关键词、标签等。一旦缺少，就返回错误，
+	// 阻止这次发布
+	if status == promptdomain.PromptStatusPublished && input.EnforcePublishValidation {
+		if err := s.validatePublishInput(input); err != nil {
+			return SaveOutput{}, err
+		}
+	}
 	action = strings.TrimSpace(action)
 	if action == "" {
 		if input.PromptID == 0 {
@@ -1832,7 +1841,7 @@ func (s *Service) createPromptRecord(ctx context.Context, input SaveInput, statu
 	if err != nil {
 		return SaveOutput{}, fmt.Errorf("encode tags: %w", err)
 	}
-	topic := normalizeMixedLanguageSpacing(strings.TrimSpace(input.Topic))
+	topic := normalizeMixedLanguageSpacing(input.Topic)
 	entity := &promptdomain.Prompt{
 		UserID:           input.UserID,
 		Topic:            topic,
@@ -1978,6 +1987,36 @@ func (s *Service) upsertPromptKeywords(ctx context.Context, userID uint, topic s
 		})
 	}
 	return relations, nil
+}
+
+// validatePublishInput 会在发布前检查必要字段，缺失时返回可读的错误提示。
+func (s *Service) validatePublishInput(input SaveInput) error {
+	missing := make([]string, 0, 6)
+	if strings.TrimSpace(input.Topic) == "" {
+		missing = append(missing, "主题")
+	}
+	if strings.TrimSpace(input.Body) == "" {
+		missing = append(missing, "正文")
+	}
+	if strings.TrimSpace(input.Instructions) == "" {
+		missing = append(missing, "补充要求")
+	}
+	if strings.TrimSpace(input.Model) == "" {
+		missing = append(missing, "模型")
+	}
+	if len(input.PositiveKeywords) == 0 {
+		missing = append(missing, "正向关键词")
+	}
+	if len(input.NegativeKeywords) == 0 {
+		missing = append(missing, "负向关键词")
+	}
+	if len(input.Tags) == 0 {
+		missing = append(missing, "标签")
+	}
+	if len(missing) == 0 {
+		return nil
+	}
+	return fmt.Errorf("发布失败：缺少%s", strings.Join(missing, "、"))
 }
 
 // recordPromptVersion 写入 Prompt 的历史版本，便于后续回滚。

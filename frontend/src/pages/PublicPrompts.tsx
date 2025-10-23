@@ -144,11 +144,10 @@ export default function PublicPromptsPage(): JSX.Element {
   });
 
   const statusOptions = useMemo(() => {
-    const base: StatusFilter[] = ["approved"];
     if (isAdmin) {
       return ["all", "approved", "pending", "rejected"] as StatusFilter[];
     }
-    return base;
+    return ["approved", "pending", "rejected"] as StatusFilter[];
   }, [isAdmin]);
 
   const selectedDetail: PublicPromptDetail | undefined = detailQuery.data;
@@ -292,19 +291,26 @@ export default function PublicPromptsPage(): JSX.Element {
               onClick={() => setSelectedId((prev) => (prev === item.id ? null : item.id))}
             >
               <div className="flex items-start justify-between gap-3">
-                <div className="flex flex-col gap-1">
-                  <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100">
-                    {item.title || item.topic}
-                  </h3>
-                  <span className="text-xs uppercase tracking-[0.25em] text-slate-400">
-                    {item.language.toUpperCase()}
-                  </span>
-                </div>
-                <Badge className={className}>{label}</Badge>
+              <div className="flex flex-col gap-1">
+                <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100">
+                  {item.title || item.topic}
+                </h3>
+                <span className="text-xs uppercase tracking-[0.25em] text-slate-400">
+                  {item.language.toUpperCase()}
+                </span>
               </div>
-              <p className="line-clamp-3 text-sm text-slate-600 dark:text-slate-400">
-                {item.summary || t("publicPrompts.noSummary")}
+              <Badge className={className}>{label}</Badge>
+            </div>
+            <p className="line-clamp-3 text-sm text-slate-600 dark:text-slate-400">
+              {item.summary || t("publicPrompts.noSummary")}
+            </p>
+            {item.status === "rejected" && item.review_reason ? (
+              <p className="text-xs text-amber-600 dark:text-amber-300">
+                {t("publicPrompts.reviewReasonBadge", {
+                  reason: item.review_reason,
+                })}
               </p>
+            ) : null}
               <div className="flex flex-wrap items-center gap-2">
                 {item.tags.slice(0, 4).map((tag) => (
                   <Badge key={`${item.id}-${tag}`} variant="outline" className="border-slate-200 text-slate-500 dark:border-slate-700 dark:text-slate-300">
@@ -370,6 +376,16 @@ export default function PublicPromptsPage(): JSX.Element {
                 <p className="text-sm text-slate-500 dark:text-slate-400">
                   {selectedDetail.summary || t("publicPrompts.noSummary")}
                 </p>
+                {selectedDetail.review_reason ? (
+                  <div className="mt-2 rounded-xl border border-amber-200 bg-amber-50/80 p-3 text-xs text-amber-700 dark:border-amber-400/40 dark:bg-amber-400/10 dark:text-amber-200">
+                    <p className="font-semibold uppercase tracking-[0.3em]">
+                      {t("publicPrompts.reviewReasonTitle")}
+                    </p>
+                    <p className="mt-1 whitespace-pre-wrap">
+                      {selectedDetail.review_reason}
+                    </p>
+                  </div>
+                ) : null}
               </div>
               <MagneticButton
                 type="button"
@@ -470,12 +486,6 @@ export default function PublicPromptsPage(): JSX.Element {
                   })}
                 </span>
               </div>
-              {selectedDetail.review_reason ? (
-                <div className="flex items-center gap-2 text-amber-500 dark:text-amber-300">
-                  <AlertCircle className="h-4 w-4" />
-                  <span>{selectedDetail.review_reason}</span>
-                </div>
-              ) : null}
             </div>
           </div>
         </GlassCard>

@@ -146,6 +146,8 @@
     "instructions": "补充说明",
     "noInstructions": "暂无补充说明",
     "body": "Prompt 正文",
+    "reviewReasonTitle": "驳回原因",
+    "reviewReasonBadge": "驳回说明：{{reason}}",
     "status": {
       "approved": "已通过",
       "pending": "待审核",
@@ -193,7 +195,11 @@
     "approveAction": "通过审核",
     "approveSuccess": "审核通过，条目已移入公共库。",
     "rejectSuccess": "已驳回投稿。",
-    "actionError": "操作失败，请稍后再试。"
+    "actionError": "操作失败，请稍后再试。",
+    "deleteAction": "删除投稿",
+    "deleteSuccess": "已删除该公共 Prompt。",
+    "deleteError": "删除失败，请稍后再试。",
+    "deleteConfirm": "确认删除该公共 Prompt 吗？此操作不可撤销。"
   },
   "logsPage": {
     "eyebrow": "版本更新",
@@ -349,6 +355,16 @@
     },
     "topicMissing": "请先填写主题",
     "promptEmpty": "提示词内容不能为空",
+    "publishValidation": {
+      "topic": "发布前需要填写主题",
+      "body": "发布前需要填写提示词正文",
+      "instructions": "发布前需要补充要求",
+      "model": "发布前需要选择模型",
+      "positiveKeywords": "发布前至少保留一个正向关键词",
+      "negativeKeywords": "发布前至少保留一个负向关键词",
+      "tags": "发布前至少设置一个标签",
+      "failed": "发布条件未满足，请补全必填项"
+    },
     "keywordsTitle": "关键词治理",
     "keywordsSubtitle": "调优提示词焦点",
     "addKeyword": "添加关键词",
@@ -682,7 +698,8 @@
       "cancel": "取消",
       "submit": "提交审核",
       "success": "投稿已提交，等待管理员审核。",
-      "error": "投稿失败，请稍后再试。"
+      "error": "投稿失败，请稍后再试。",
+      "onlyPublished": "仅已发布的 Prompt 才能投稿至公共库"
     },
     "versions": {
       "title": "版本历史",
@@ -780,7 +797,8 @@
       "username": "用户名",
       "email": "邮箱",
       "preferredModel": "偏好模型",
-      "preferredModelPlaceholder": "例如 deepseek、gpt-4o 等",
+      "preferredModelPlaceholder": "例如 deepseek、volcengine 等",
+      "preferredModelReadonlyHint": "偏好模型由模型凭据或工作台设置，这里仅提供查看。",
       "save": "保存资料"
     },
     "profileSaveSuccess": "资料已更新",

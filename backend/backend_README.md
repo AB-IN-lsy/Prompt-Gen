@@ -843,7 +843,7 @@ ALTER TABLE prompts
 #### GET /api/public-prompts
 
 - **用途**：获取公共 Prompt 列表，用于优质 Prompt 浏览。离线模式下接口保持可用但仅支持只读，投稿入口会被前端隐藏。
-- **查询参数**：`q`（关键词模糊搜索标题、主题、标签）、`status`（管理员可传 `pending`/`rejected` 查看待审条目，普通用户仅返回 `approved`）、`page`、`page_size`。
+- **查询参数**：`q`（关键词模糊搜索标题、主题、标签）、`status`（管理员可传 `pending`/`rejected` 查看待审条目；普通用户在传入 `pending`/`rejected` 时仅返回自己的投稿，默认返回全量 `approved` 数据）、`page`、`page_size`。
 - **成功响应**：`200`
 
   ```json
@@ -876,6 +876,8 @@ ALTER TABLE prompts
     }
   }
   ```
+
+- **访问控制**：非管理员用户传入 `status=pending` 或 `status=rejected` 时，仅返回其本人投稿的记录；默认或 `status=approved` 场景下返回全量已通过条目。
 
 #### GET /api/public-prompts/:id
 
@@ -910,6 +912,8 @@ ALTER TABLE prompts
   }
   ```
 
+- **访问控制**：仅条目作者或管理员可以查看待审核或已驳回的详情，其余用户访问将返回 `403 Forbidden`；响应体在作者或管理员访问时会包含 `review_reason` 字段。
+
 #### POST /api/public-prompts/:id/download
 
 - **用途**：将公共 Prompt 复制到当前用户的个人 Prompt 列表，同时自增公共库的下载次数。
@@ -920,6 +924,8 @@ ALTER TABLE prompts
 
 - **用途**：提交公共 Prompt 供管理员审核，默认状态为 `pending`。离线模式下返回 `403 Forbidden`。
 - **请求体**：`title`、`topic`、`summary`、`body`、`instructions`、`model`、`language`、`tags[]` 以及 `positive_keywords`/`negative_keywords`（支持字符串数组或对象数组）；可选 `source_prompt_id` 指向原始私有 Prompt。
+- **校验规则**：当携带 `source_prompt_id` 时，必须引用当前用户名下且状态为 `published` 的 Prompt，否则返回 `400`。
+- **重投逻辑**：若作者此前的同主题投稿处于 `pending`/`rejected` 状态，将复用原记录并重置为 `pending`，同时清空驳回信息，避免唯一约束冲突；已通过的条目仍视为只读。
 - **成功响应**：`201`，返回新建公共 Prompt 的 `id` 与 `status`。
 - **限流说明**：受 `PUBLIC_PROMPT_SUBMIT_LIMIT` / `PUBLIC_PROMPT_SUBMIT_WINDOW` 约束，默认 30 分钟内最多 5 次投稿。
 
@@ -928,6 +934,12 @@ ALTER TABLE prompts
 - **用途**：管理员审核公共 Prompt，支持通过（`approved`）或驳回（`rejected`）；可选 `reason` 字段会记录驳回原因，便于前端展示。
 - **成功响应**：`204`。
 - **常见错误**：记录不存在 → `404`；状态非法 → `400`。
+
+#### DELETE /api/public-prompts/:id
+
+- **用途**：管理员删除指定公共 Prompt 及其统计信息，用于移除不合规内容。
+- **成功响应**：`204`。
+- **常见错误**：记录不存在或已被删除 → `404`。
 
 #### POST /api/prompts/generate
 
@@ -969,7 +981,8 @@ ALTER TABLE prompts
   ```
 
 - **成功响应**：`200`，返回 `prompt_id`、`status`、`version`。当 `publish=true` 时生成历史版本并更新 `published_at`；关键字权重会一起落库，便于后续回滚与再生成。
-- **常见错误**：缺少 body/topic → `400`；目标 Prompt 不存在 → `404`。
+- **校验规则**：当 `publish=true` 或 `status=published` 时，必须同时提供主题、正文、补充要求、模型、至少 1 个正向关键词、1 个负向关键词以及至少 1 个标签；保存草稿时上述字段允许为空。
+- **常见错误**：发布时缺少必填字段 → `400`（错误信息形如“发布失败：缺少主题、标签”）；目标 Prompt 不存在 → `404`。
 
 #### GET /api/changelog
 

@@ -149,6 +149,7 @@ func NewRouter(opts RouterOptions) *gin.Engine {
 			publicPrompts.GET("", opts.PublicPromptHandler.List)
 			publicPrompts.GET("/:id", opts.PublicPromptHandler.Get)
 			publicPrompts.POST("/:id/download", opts.PublicPromptHandler.Download)
+			publicPrompts.DELETE("/:id", opts.PublicPromptHandler.Delete)
 			publicPrompts.POST("", opts.PublicPromptHandler.Submit)
 			publicPrompts.POST("/:id/review", opts.PublicPromptHandler.Review)
 		}

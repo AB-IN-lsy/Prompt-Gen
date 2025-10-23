@@ -142,10 +142,56 @@ func (s *Service) Submit(ctx context.Context, input SubmitInput) (*promptdomain.
 	if strings.TrimSpace(input.Title) == "" || strings.TrimSpace(input.Topic) == "" {
 		return nil, errors.New("标题或主题不能为空")
 	}
+	if input.SourcePromptID != nil && *input.SourcePromptID != 0 {
+		promptRepo := repository.NewPromptRepository(s.db)
+		prompt, err := promptRepo.FindByID(ctx, input.AuthorUserID, *input.SourcePromptID)
+		if err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return nil, errors.New("仅能投稿当前账户下的 Prompt")
+			}
+			return nil, fmt.Errorf("查询原 Prompt 失败: %w", err)
+		}
+		if prompt.Status != promptdomain.PromptStatusPublished {
+			return nil, errors.New("仅发布后的 Prompt 可以投稿到公共库")
+		}
+	}
+	topic := strings.TrimSpace(input.Topic)
+	lang := strings.TrimSpace(input.Language)
+	if lang == "" {
+		lang = "zh-CN"
+	}
+
+	if existing, err := s.repo.FindByAuthorAndTopic(ctx, input.AuthorUserID, topic); err == nil {
+		if existing.Status == promptdomain.PublicPromptStatusApproved {
+			return nil, errors.New("该主题已在公共库发布，可直接编辑已发布条目")
+		}
+		existing.Title = strings.TrimSpace(input.Title)
+		existing.Topic = topic
+		existing.Summary = strings.TrimSpace(input.Summary)
+		existing.Body = input.Body
+		existing.Instructions = input.Instructions
+		existing.PositiveKeywords = input.PositiveKeywords
+		existing.NegativeKeywords = input.NegativeKeywords
+		existing.Tags = input.Tags
+		existing.Model = strings.TrimSpace(input.Model)
+		existing.Language = lang
+		existing.Status = promptdomain.PublicPromptStatusPending
+		existing.ReviewerUserID = nil
+		existing.ReviewReason = ""
+		existing.SourcePromptID = input.SourcePromptID
+		existing.UpdatedAt = time.Now()
+		if err := s.repo.Update(ctx, existing); err != nil {
+			return nil, err
+		}
+		return existing, nil
+	} else if !errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, err
+	}
+
 	entity := &promptdomain.PublicPrompt{
 		AuthorUserID:     input.AuthorUserID,
 		Title:            strings.TrimSpace(input.Title),
-		Topic:            strings.TrimSpace(input.Topic),
+		Topic:            topic,
 		Summary:          strings.TrimSpace(input.Summary),
 		Body:             input.Body,
 		Instructions:     input.Instructions,
@@ -153,14 +199,11 @@ func (s *Service) Submit(ctx context.Context, input SubmitInput) (*promptdomain.
 		NegativeKeywords: input.NegativeKeywords,
 		Tags:             input.Tags,
 		Model:            strings.TrimSpace(input.Model),
-		Language:         strings.TrimSpace(input.Language),
+		Language:         lang,
 		Status:           promptdomain.PublicPromptStatusPending,
 	}
 	if input.SourcePromptID != nil && *input.SourcePromptID != 0 {
 		entity.SourcePromptID = input.SourcePromptID
-	}
-	if entity.Language == "" {
-		entity.Language = "zh-CN"
 	}
 	if err := s.repo.Create(ctx, entity); err != nil {
 		return nil, err
@@ -270,4 +313,18 @@ func (s *Service) Download(ctx context.Context, input DownloadInput) (*promptdom
 // AllowSubmission 返回当前是否支持提交公共 Prompt。
 func (s *Service) AllowSubmission() bool {
 	return s.allowSubmission
+}
+
+// Delete 删除公共 Prompt 记录，仅限管理员流程调用。
+func (s *Service) Delete(ctx context.Context, id uint) error {
+	if id == 0 {
+		return errors.New("缺少公共 Prompt 编号")
+	}
+	if err := s.repo.Delete(ctx, id); err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return ErrPublicPromptNotFound
+		}
+		return err
+	}
+	return nil
 }

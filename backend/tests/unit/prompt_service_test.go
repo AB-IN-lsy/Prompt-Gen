@@ -685,6 +685,69 @@ func TestPromptServiceSave(t *testing.T) {
 	}
 }
 
+// TestPromptServiceSavePublishValidation 验证发布时缺少必填字段会返回明确错误，而草稿存储仍可接受不完整内容。
+func TestPromptServiceSavePublishValidation(t *testing.T) {
+	service, _, _, db, _ := setupPromptService(t)
+	defer func() {
+		sqlDB, _ := db.DB()
+		sqlDB.Close()
+	}()
+
+	ctx := context.Background()
+	// 发布时缺少补充要求、负向关键词与标签，应返回错误。
+	_, err := service.Save(ctx, promptsvc.SaveInput{
+		UserID:                   1,
+		Topic:                    "发布校验",
+		Body:                     "生成内容",
+		Model:                    "deepseek-chat",
+		Publish:                  true,
+		PositiveKeywords:         []promptsvc.KeywordItem{{Word: "React"}},
+		NegativeKeywords:         nil,
+		Tags:                     nil,
+		EnforcePublishValidation: true,
+	})
+	if err == nil || !strings.Contains(err.Error(), "发布失败") {
+		t.Fatalf("expected publish validation error, got %v", err)
+	}
+
+	// 保存草稿时允许字段缺失。
+	draft, err := service.Save(ctx, promptsvc.SaveInput{
+		UserID:           1,
+		Topic:            "",
+		Body:             "",
+		Model:            "",
+		Publish:          false,
+		Status:           promptdomain.PromptStatusDraft,
+		PositiveKeywords: []promptsvc.KeywordItem{},
+		NegativeKeywords: []promptsvc.KeywordItem{},
+		Tags:             []string{},
+	})
+	if err != nil {
+		t.Fatalf("unexpected draft error: %v", err)
+	}
+	if draft.Status != promptdomain.PromptStatusDraft {
+		t.Fatalf("draft status mismatch: %s", draft.Status)
+	}
+
+	// 补全必要字段再次发布应成功。
+	_, err = service.Save(ctx, promptsvc.SaveInput{
+		UserID:                   1,
+		PromptID:                 draft.PromptID,
+		Topic:                    "发布校验",
+		Body:                     "生成内容",
+		Instructions:             "请使用 STAR 框架",
+		Model:                    "deepseek-chat",
+		Publish:                  true,
+		PositiveKeywords:         []promptsvc.KeywordItem{{Word: "React"}},
+		NegativeKeywords:         []promptsvc.KeywordItem{{Word: "过时框架"}},
+		Tags:                     []string{"面试"},
+		EnforcePublishValidation: true,
+	})
+	if err != nil {
+		t.Fatalf("expected publish success, got %v", err)
+	}
+}
+
 // TestPromptServiceImportPromptsMerge 验证导入默认采用合并模式并正确更新/新增 Prompt。
 func TestPromptServiceImportPromptsMerge(t *testing.T) {
 	service, promptRepo, keywordRepo, db, _ := setupPromptService(t)

@@ -83,6 +83,18 @@ func (r *PublicPromptRepository) FindByID(ctx context.Context, id uint) (*prompt
 	return &entity, nil
 }
 
+// FindByAuthorAndTopic 根据作者和主题查找公共 Prompt，忽略状态。
+func (r *PublicPromptRepository) FindByAuthorAndTopic(ctx context.Context, authorID uint, topic string) (*promptdomain.PublicPrompt, error) {
+	var entity promptdomain.PublicPrompt
+	if err := r.db.WithContext(ctx).
+		Where("author_user_id = ? AND topic = ?", authorID, topic).
+		Order("created_at DESC").
+		First(&entity).Error; err != nil {
+		return nil, err
+	}
+	return &entity, nil
+}
+
 // Create 新增公共库记录。
 func (r *PublicPromptRepository) Create(ctx context.Context, entity *promptdomain.PublicPrompt) error {
 	if entity == nil {
@@ -101,6 +113,20 @@ func (r *PublicPromptRepository) Update(ctx context.Context, entity *promptdomai
 	}
 	if err := r.db.WithContext(ctx).Save(entity).Error; err != nil {
 		return fmt.Errorf("update public prompt: %w", err)
+	}
+	return nil
+}
+
+// Delete 根据主键删除公共 Prompt 记录。
+func (r *PublicPromptRepository) Delete(ctx context.Context, id uint) error {
+	res := r.db.WithContext(ctx).
+		Where("id = ?", id).
+		Delete(&promptdomain.PublicPrompt{})
+	if res.Error != nil {
+		return fmt.Errorf("delete public prompt: %w", res.Error)
+	}
+	if res.RowsAffected == 0 {
+		return gorm.ErrRecordNotFound
 	}
 	return nil
 }

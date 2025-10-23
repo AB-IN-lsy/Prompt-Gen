@@ -1132,6 +1132,14 @@ export async function reviewPublicPrompt(
     throw normaliseError(error);
   }
 }
+
+export async function deletePublicPrompt(id: number): Promise<void> {
+  try {
+    await http.delete(`/public-prompts/${id}`);
+  } catch (error) {
+    throw normaliseError(error);
+  }
+}
 /** 导出当前用户的 Prompt 并返回生成的本地文件路径。 */
 export async function exportPrompts(): Promise<PromptExportResult> {
   try {

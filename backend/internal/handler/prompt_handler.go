@@ -797,18 +797,19 @@ func (h *PromptHandler) SavePrompt(c *gin.Context) {
 	}
 
 	result, err := h.service.Save(c.Request.Context(), promptsvc.SaveInput{
-		UserID:           userID,
-		PromptID:         req.PromptID,
-		Topic:            req.Topic,
-		Body:             req.Body,
-		Instructions:     req.Instructions,
-		Model:            req.Model,
-		Status:           req.Status,
-		Publish:          req.Publish,
-		Tags:             req.Tags,
-		PositiveKeywords: toServiceKeywords(req.PositiveKeywords),
-		NegativeKeywords: toServiceKeywords(req.NegativeKeywords),
-		WorkspaceToken:   strings.TrimSpace(req.WorkspaceToken),
+		UserID:                   userID,
+		PromptID:                 req.PromptID,
+		Topic:                    req.Topic,
+		Body:                     req.Body,
+		Instructions:             req.Instructions,
+		Model:                    req.Model,
+		Status:                   req.Status,
+		Publish:                  req.Publish,
+		Tags:                     req.Tags,
+		PositiveKeywords:         toServiceKeywords(req.PositiveKeywords),
+		NegativeKeywords:         toServiceKeywords(req.NegativeKeywords),
+		WorkspaceToken:           strings.TrimSpace(req.WorkspaceToken),
+		EnforcePublishValidation: true,
 	})
 	if err != nil {
 		if errors.Is(err, promptsvc.ErrPositiveKeywordLimit) {

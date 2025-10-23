@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	promptdomain "electron-go-app/backend/internal/domain/prompt"
 	response "electron-go-app/backend/internal/infra/common"
 	appLogger "electron-go-app/backend/internal/infra/logger"
 	"electron-go-app/backend/internal/infra/ratelimit"
@@ -107,7 +108,7 @@ func (h *PublicPromptHandler) allow(c *gin.Context, key string, limit int, windo
 // List 公共库列表查询，普通用户仅能看到已审核通过的条目。
 func (h *PublicPromptHandler) List(c *gin.Context) {
 	log := h.scope("list")
-	_, ok := extractUserID(c)
+	userID, ok := extractUserID(c)
 	if !ok {
 		response.Fail(c, http.StatusUnauthorized, response.ErrUnauthorized, "missing user id", nil)
 		return
@@ -130,15 +131,26 @@ func (h *PublicPromptHandler) List(c *gin.Context) {
 		Page:     page,
 		PageSize: pageSize,
 	}
+	statusParam := strings.TrimSpace(c.Query("status"))
 	if isAdmin(c) {
-		filter.Status = strings.TrimSpace(c.Query("status"))
+		if statusParam != "" && statusParam != "all" {
+			filter.Status = statusParam
+		}
 		if author := strings.TrimSpace(c.Query("author_id")); author != "" {
 			if authorID, convErr := strconv.Atoi(author); convErr == nil && authorID > 0 {
 				filter.AuthorUserID = uint(authorID)
 			}
 		}
 	} else {
-		filter.OnlyApproved = true
+		switch statusParam {
+		case "", "all", promptdomain.PublicPromptStatusApproved:
+			filter.OnlyApproved = true
+		case promptdomain.PublicPromptStatusPending, promptdomain.PublicPromptStatusRejected:
+			filter.Status = statusParam
+			filter.AuthorUserID = userID
+		default:
+			filter.OnlyApproved = true
+		}
 	}
 
 	result, err := h.service.List(c.Request.Context(), filter)
@@ -150,6 +162,10 @@ func (h *PublicPromptHandler) List(c *gin.Context) {
 
 	items := make([]gin.H, 0, len(result.Items))
 	for _, item := range result.Items {
+		reviewReason := ""
+		if isAdmin(c) || item.AuthorUserID == userID {
+			reviewReason = item.ReviewReason
+		}
 		items = append(items, gin.H{
 			"id":             item.ID,
 			"title":          item.Title,
@@ -162,6 +178,7 @@ func (h *PublicPromptHandler) List(c *gin.Context) {
 			"tags":           item.Tags,
 			"created_at":     item.CreatedAt,
 			"updated_at":     item.UpdatedAt,
+			"review_reason":  reviewReason,
 			"author_user_id": item.AuthorUserID,
 			"reviewer_user_id": func() *uint {
 				if item.ReviewerUserID == nil {
@@ -189,7 +206,7 @@ func (h *PublicPromptHandler) List(c *gin.Context) {
 // Get 返回公共 Prompt 详情。
 func (h *PublicPromptHandler) Get(c *gin.Context) {
 	log := h.scope("detail")
-	_, ok := extractUserID(c)
+	userID, ok := extractUserID(c)
 	if !ok {
 		response.Fail(c, http.StatusUnauthorized, response.ErrUnauthorized, "missing user id", nil)
 		return
@@ -211,9 +228,15 @@ func (h *PublicPromptHandler) Get(c *gin.Context) {
 		response.Fail(c, http.StatusInternalServerError, response.ErrInternal, "获取公共 Prompt 详情失败", nil)
 		return
 	}
-	if entity.Status != "approved" && !isAdmin(c) {
-		response.Fail(c, http.StatusForbidden, response.ErrForbidden, "公共 Prompt 尚未通过审核", nil)
-		return
+	if entity.Status != promptdomain.PublicPromptStatusApproved {
+		if !isAdmin(c) && entity.AuthorUserID != userID {
+			response.Fail(c, http.StatusForbidden, response.ErrForbidden, "公共 Prompt 尚未通过审核", nil)
+			return
+		}
+	}
+	reviewReason := ""
+	if isAdmin(c) || entity.AuthorUserID == userID {
+		reviewReason = entity.ReviewReason
 	}
 	response.Success(c, http.StatusOK, gin.H{
 		"id":                entity.ID,
@@ -231,6 +254,7 @@ func (h *PublicPromptHandler) Get(c *gin.Context) {
 		"download_count":    entity.DownloadCount,
 		"created_at":        entity.CreatedAt,
 		"updated_at":        entity.UpdatedAt,
+		"review_reason":     reviewReason,
 		"author_user_id":    entity.AuthorUserID,
 	}, nil)
 }
@@ -397,4 +421,35 @@ func (h *PublicPromptHandler) Download(c *gin.Context) {
 		"prompt_id": prompt.ID,
 		"status":    prompt.Status,
 	}, nil)
+}
+
+// Delete 删除指定公共 Prompt，需管理员权限。
+func (h *PublicPromptHandler) Delete(c *gin.Context) {
+	log := h.scope("delete")
+	if !isAdmin(c) {
+		response.Fail(c, http.StatusForbidden, response.ErrForbidden, "仅管理员可操作", nil)
+		return
+	}
+	if _, ok := extractUserID(c); !ok {
+		response.Fail(c, http.StatusUnauthorized, response.ErrUnauthorized, "missing user id", nil)
+		return
+	}
+	idVal := strings.TrimSpace(c.Param("id"))
+	idNum, err := strconv.Atoi(idVal)
+	if err != nil || idNum <= 0 {
+		response.Fail(c, http.StatusBadRequest, response.ErrBadRequest, "invalid id", nil)
+		return
+	}
+
+	if err := h.service.Delete(c.Request.Context(), uint(idNum)); err != nil {
+		if errors.Is(err, publicpromptsvc.ErrPublicPromptNotFound) {
+			response.Fail(c, http.StatusNotFound, response.ErrNotFound, "公共 Prompt 不存在", nil)
+			return
+		}
+		log.Errorw("delete public prompt failed", "error", err, "id", idNum)
+		response.Fail(c, http.StatusInternalServerError, response.ErrInternal, "删除公共 Prompt 失败", nil)
+		return
+	}
+
+	response.NoContent(c)
 }
