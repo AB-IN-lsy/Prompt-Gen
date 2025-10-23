@@ -9,7 +9,7 @@ set -euo pipefail
 
 TARGET=AB-IN                             # 服务器 SSH 别名
 TMP_DIR=/opt/promptgen/tmp               # 服务器暂存目录
-REMOTE_SCRIPT=/opt/promptgen/Prompt-Gen/deploy.sh
+REMOTE_SCRIPT=/opt/promptgen/Prompt-Gen/scripts/deploy-server.sh
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 BUILD_DIR="$ROOT/deploy"                 # 临时输出目录
