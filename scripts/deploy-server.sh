@@ -3,7 +3,7 @@
  # @Author: NEFU AB-IN
  # @Date: 2025-10-23 22:21:50
  # @FilePath: \electron-go-app\scripts\deploy-server.sh
- # @LastEditTime: 2025-10-23 22:40:05
+ # @LastEditTime: 2025-10-23 23:25:54
 ### 
 set -euo pipefail
 
@@ -17,6 +17,7 @@ log "停止服务"
 systemctl stop "$SERVICE" || true
 
 log "替换后端"
+mkdir -p "${REPO}/bin"
 install -m 0755 "$TMP/server" "$REPO/bin/server"
 
 log "替换前端静态资源"
