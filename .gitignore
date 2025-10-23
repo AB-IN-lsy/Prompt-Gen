@@ -23,6 +23,7 @@ node_modules/
 
 # Build output
 # build/
+deploy/
 dist/
 out/
 release/
