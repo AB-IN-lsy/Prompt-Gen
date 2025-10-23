@@ -3,7 +3,7 @@
  # @Author: NEFU AB-IN
  # @Date: 2025-10-23 22:21:37
  # @FilePath: \electron-go-app\scripts\deploy-online.sh
- # @LastEditTime: 2025-10-23 22:57:58
+ # @LastEditTime: 2025-10-23 23:35:59
 ### 
 set -euo pipefail
 
@@ -24,7 +24,7 @@ mkdir -p "$BUILD_DIR"
 log "构建后端二进制 (Linux/amd64)"
 go env -w GOPROXY=https://proxy.golang.com.cn,direct
 go mod download
-GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o "$BUILD_DIR/server" ./backend/cmd/server
+CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o "$BUILD_DIR/server" ./backend/cmd/server
 
 log "仅安装前端依赖并构建"
 npm --prefix frontend ci
