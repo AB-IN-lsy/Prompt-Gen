@@ -71,18 +71,9 @@ export function AppShell({ children, rightSlot }: AppShellProps) {
     const location = useLocation();
     const scrollContainerRef = useRef<HTMLDivElement>(null);
     const localMode = isLocalMode();
-    const primaryNavItems = useMemo(
-        () =>
-            localMode
-                ? baseNavItems.filter((item) => item.to !== "/logs")
-                : baseNavItems,
-        [localMode]
-    );
+    const primaryNavItems = baseNavItems;
     const adminNavList = useMemo(
-        () =>
-            localMode
-                ? adminNavItems.filter((item) => item.to !== "/admin/changelog")
-                : adminNavItems,
+        () => (localMode ? adminNavItems.filter((item) => item.to !== "/admin/changelog") : adminNavItems),
         [localMode]
     );
     const [showScrollTop, setShowScrollTop] = useState(false);

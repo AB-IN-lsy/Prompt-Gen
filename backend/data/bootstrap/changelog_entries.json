@@ -1,0 +1,480 @@
+[
+  {
+    "author_id": 9,
+    "badge": "Backend",
+    "items": [
+      "Added POST /api/prompts/export endpoint to export current account's Prompts as local JSON files, with support for custom storage directory via PROMPT_EXPORT_DIR.",
+      "\"My Prompts\" page now features an \"Export Prompt\" button, displaying local file path and timestamp after export for quick offline archive location.",
+      "Launched Prompt details page, supporting navigation from list to view content, keywords, tags, and one-click return to workspace for continued editing.",
+      "Added offline mode"
+    ],
+    "locale": "en",
+    "published_at": "2025-10-18",
+    "summary": "Support offline export of Prompts and viewing complete details",
+    "title": "Prompt Export and Details Page Enhancement"
+  },
+  {
+    "author_id": 9,
+    "badge": "后端",
+    "items": [
+      "新增 POST /api/prompts/export 接口，可将当前账号的 Prompt 导出为本地 JSON 文件，并支持通过 PROMPT_EXPORT_DIR 自定义存放目录。",
+      "“我的 Prompt” 页面新增“导出 Prompt”按钮，导出完成后会展示本地文件路径和时间，方便离线模式快速定位存档。",
+      "上线 Prompt 详情页，支持从列表跳转查看正文、关键词、标签等信息，并可一键返回工作台继续编辑。",
+      "添加离线模式"
+    ],
+    "locale": "zh-CN",
+    "published_at": "2025-10-18",
+    "summary": "支持离线导出 Prompt 并查看完整详情信息",
+    "title": "Prompt 导出与详情页增强"
+  },
+  {
+    "author_id": 9,
+    "badge": "Frontend",
+    "items": [
+      "Generated session-unique drag-and-drop IDs for workspace keywords to prevent conflicts between positive and negative list IDs.",
+      "Only returned actual keywordId upon submission to eliminate duplicate rendering and sorting errors."
+    ],
+    "locale": "en",
+    "published_at": "2025-10-17",
+    "summary": "Resolved the issue where keywords always dragged to the first position after draft backfilling and could not be sorted across columns.",
+    "title": "Fixed Prompt Workspace Keyword Drag-and-Drop Anomaly"
+  },
+  {
+    "author_id": 9,
+    "badge": "前端",
+    "items": [
+      "为工作台关键词生成会话级唯一拖拽 ID，避免正负向列表 ID 冲突。",
+      "提交时仅回传真实 keywordId，消除重复渲染与排序错误。"
+    ],
+    "locale": "zh-CN",
+    "published_at": "2025-10-17",
+    "summary": "解决草稿回填后关键词总是拖动首项、无法跨列排序的问题。",
+    "title": "修复 Prompt 工作台关键词拖拽异常"
+  },
+  {
+    "author_id": 9,
+    "badge": "Frontend",
+    "items": [
+      "Electron rendering window is fixed at 1100×720 with drag-to-zoom disabled, ensuring visual stability on desktop; window control buttons are automatically hidden in web preview.",
+      "Added VITE_KEYWORD_ROW_LIMIT and VITE_DEFAULT_KEYWORD_WEIGHT environment variables, defaulting to display 3 keywords with an initial weight value of 5.",
+      "In the Prompt workspace, the requirement and label areas are rearranged vertically, and the 'Add Label' button is widened to prevent line breaks on small screens."
+    ],
+    "locale": "en",
+    "published_at": "2025-10-16",
+    "summary": "Fixed Electron shell proportions and optimized keyword editing experience.",
+    "title": "Desktop Window and Workspace Experience Adjustments"
+  },
+  {
+    "author_id": 9,
+    "badge": "前端",
+    "items": [
+      "Electron 渲染窗口固定为 1100×720，并禁用拖拽缩放，确保桌面端视觉稳定；网页预览自动隐藏窗口控制按钮。",
+      "新增 VITE_KEYWORD_ROW_LIMIT 与 VITE_DEFAULT_KEYWORD_WEIGHT 环境变量，默认展示 3 个关键词并保留权重 5 的初始值。",
+      "Prompt 工作台中补充要求与标签区域改为上下排列，并拉宽“添加标签”按钮，避免小屏布局换行。"
+    ],
+    "locale": "zh-CN",
+    "published_at": "2025-10-16",
+    "summary": "固化 Electron 外壳比例并优化关键词编辑体验。",
+    "title": "桌面端窗口与工作台体验调整"
+  },
+  {
+    "author_id": 9,
+    "badge": "Prompt Workbench",
+    "items": [
+      "Added tag input and deletion controls in the workbench right sidebar, supporting deduplication, limit reminders, and shortcut submission",
+      "Backend uniformly cleans tags and writes to MySQL when saving prompts, while synchronizing to Redis workspace attributes",
+      "Tags are automatically repopulated when restoring drafts from Redis or asynchronous persistence queues to prevent data drift",
+      "Added `PROMPT_TAG_LIMIT` / `VITE_PROMPT_TAG_LIMIT` configuration items to constrain tag quantity via environment variables"
+    ],
+    "locale": "en",
+    "published_at": "2025-10-15",
+    "summary": "Prompt Workbench introduces a new tag editor with unified backend validation and persistence rules.",
+    "title": "Tag Management and Persistence Optimization"
+  },
+  {
+    "author_id": 9,
+    "badge": "Prompt 工作台",
+    "items": [
+      "工作台右栏新增标签输入与删除控件，支持去重、上限提醒与快捷键提交",
+      "保存 Prompt 时后端统一清洗标签并写入 MySQL，同时同步到 Redis 工作区 attributes",
+      "从 Redis 恢复草稿或异步持久化队列时会自动回填标签，防止数据漂移",
+      "新增 `PROMPT_TAG_LIMIT` / `VITE_PROMPT_TAG_LIMIT` 配置项，以环境变量方式约束标签数量"
+    ],
+    "locale": "zh-CN",
+    "published_at": "2025-10-15",
+    "summary": "Prompt 工作台新增标签编辑器，并在后端统一校验与持久化规则。",
+    "title": "标签管理与持久化优化"
+  },
+  {
+    "author_id": 9,
+    "badge": "Prompt Workbench",
+    "items": [
+      "Added PROMPT_KEYWORD_MAX_LENGTH / PROMPT_TAG_MAX_LENGTH configurations, automatically truncating and deduplicating upon save",
+      "Both manual entries and AI-generated content in the Workbench display ...(+N) prompts, with Toast notifications for excessive length",
+      "\"My Prompts\" list and the Workbench's right-side tags maintain consistent abbreviated display"
+    ],
+    "locale": "en",
+    "published_at": "2025-10-14",
+    "summary": "Limit character count for keywords and tags with overflow prompts to prevent display issues in lists.",
+    "title": "New Length Constraints for Keywords and Tags"
+  },
+  {
+    "author_id": 9,
+    "badge": "Prompt 工作台",
+    "items": [
+      "新增 PROMPT_KEYWORD_MAX_LENGTH / PROMPT_TAG_MAX_LENGTH 配置，保存时自动截断并去重",
+      "Workbench 手动录入与 AI 产出都显示 …(+N) 提示，超长会 Toast 提示",
+      "“我的 Prompt” 列表与工作台右侧标签保持同样的缩略显示"
+    ],
+    "locale": "zh-CN",
+    "published_at": "2025-10-14",
+    "summary": "限制关键词、标签字符数并提供超长提示，避免列表显示溢出。",
+    "title": "关键词与标签新增长度约束"
+  },
+  {
+    "author_id": 9,
+    "badge": "Backend",
+    "items": [
+      "Opened /api/ip-guard/bans management interface, allowing administrators to query ban lists and call DELETE /api/ip-guard/bans/:ip to lift bans.",
+      "Supported IP_GUARD_ADMIN_SCAN_COUNT and IP_GUARD_ADMIN_MAX_ENTRIES environment variables to configure scan batch size and return limits, avoiding hardcoding.",
+      "Supplemented Redis verification code/rate limiting related environment variable descriptions for convenient adjustment of windows and thresholds as needed."
+    ],
+    "locale": "en",
+    "published_at": "2025-10-14",
+    "summary": "Added IP Guard management interface and organized verification code rate limiting environment variables for dynamic control.",
+    "title": "IPv4 Blacklist and Redis Rate Limiting Configuration"
+  },
+  {
+    "author_id": 9,
+    "badge": "后端",
+    "items": [
+      "开放 /api/ip-guard/bans 管理接口，管理员可查询封禁列表并调用 DELETE /api/ip-guard/bans/:ip 解除封禁。",
+      "支持 IP_GUARD_ADMIN_SCAN_COUNT、IP_GUARD_ADMIN_MAX_ENTRIES 环境变量配置扫描批量与返回上限，避免硬编码。",
+      "补充 Redis 验证码/限流相关环境变量说明，方便按需调整窗口与阈值。"
+    ],
+    "locale": "zh-CN",
+    "published_at": "2025-10-14",
+    "summary": "新增 IP Guard 管理接口并梳理验证码限流环境变量，便于动态管控。",
+    "title": "IPv4 黑名单与 Redis 限流配置"
+  },
+  {
+    "author_id": 9,
+    "badge": "Keyword Operation Update",
+    "items": [
+      "Loading Toast pops up at the start of parsing descriptions, AI keyword completion, and Prompt generation, automatically closing upon completion or failure, allowing users to track progress in real-time.",
+      "Added 'No inspiration? Try AI keyword completion' prompt with accompanying button in the manual keyword addition area for quick access to completion capabilities.",
+      "Added relevant i18n copy and updated README to document interaction changes."
+    ],
+    "locale": "en",
+    "published_at": "2025-10-14",
+    "summary": "Added Toast progress bar prompts for parsing, keyword completion, and generation workflows to enhance waiting experience.",
+    "title": "Long-Running Operation Prompt Optimization"
+  },
+  {
+    "author_id": 9,
+    "badge": "关键词操作更新",
+    "items": [
+      "解析描述、AI 补词、Prompt 生成在开始时弹出 loading Toast，完成或失败后自动关闭，用户能实时掌握进度。",
+      "关键词手动添加区域补充“没有灵感？试试让 AI 补充关键词”提示并配套按钮，方便快速唤起补词能力。",
+      "新增相关 i18n 文案并更新 README 记录交互变化。"
+    ],
+    "locale": "zh-CN",
+    "published_at": "2025-10-14",
+    "summary": "解析、补词与生成流程新增 Toast 进度条提示，提升等待体验。",
+    "title": "长耗时操作提示优化"
+  },
+  {
+    "author_id": 9,
+    "badge": "Keyword Update",
+    "items": [
+      "The workspace is now split into three columns: the panel after requirement analysis directly provides manual addition and 'AI-supplemented keywords', with positive/negative keyword pools in separate columns for a clearer layout.",
+      "Added a 'Sort by Weight' button to the positive/negative keyword header row, always aligned at the end for easy weight organization.",
+      "Drag-and-drop now displays an insertion position indicator and elevates item z-index, preventing obstruction during cross-column moves; sync via /api/prompts/keywords/sync only triggers on actual sorting or weight changes."
+    ],
+    "locale": "en",
+    "published_at": "2025-10-14",
+    "summary": "Redesigned keyword governance layout and enhanced visual feedback for drag-and-drop sorting.",
+    "title": "Keyword Workspace Interaction Upgrade"
+  },
+  {
+    "author_id": 9,
+    "badge": "关键词更新",
+    "items": [
+      "工作台拆分为三列：需求解析后的面板直接提供手动添加与“AI 补充关键词”，正/负向关键词池单独成列，布局更清晰。",
+      "正负向关键词标题行新增“按权重排序”按钮，始终对齐在行尾，便于随手整理权重。",
+      "拖拽时提供插入位置指示条并提升条目 z-index，跨列移动时不再遮挡；仅在真实排序或权重变化时才触发 /api/prompts/keywords/sync。"
+    ],
+    "locale": "zh-CN",
+    "published_at": "2025-10-14",
+    "summary": "重构关键词治理布局并强化拖拽排序的可视反馈。",
+    "title": "关键词工作台交互升级"
+  },
+  {
+    "author_id": 9,
+    "badge": "Frontend",
+    "items": [
+      "Direct manual addition and 'AI Keyword Supplement' guidance provided below requirement analysis, with only positive/negative keyword lists retained in the middle column and sort buttons fixed at row ends.",
+      "Insertion indicator bar displayed during drag-and-drop with increased item z-index, syncing to /api/prompts/keywords/sync only upon detecting actual changes.",
+      "Added loading Toast for description analysis, AI keyword supplementation, and Prompt generation to centrally indicate progress; 'No inspiration' prompt text appended to the keyword supplement panel."
+    ],
+    "locale": "en",
+    "published_at": "2025-10-13",
+    "summary": "Refactored keyword governance layout and enhanced drag-and-drop feedback, with new Toast progress indicators for long-running operations.",
+    "title": "Keyword Workspace and Interaction Detail Optimization"
+  },
+  {
+    "author_id": 9,
+    "badge": "前端",
+    "items": [
+      "需求解析下方直接提供手动添加与“AI 补充关键词”引导，中列仅保留正/负关键词列表，排序按钮固定在行尾。",
+      "拖拽时显示插入指示条并提高条目 z-index，仅在检测到实际变动时同步 /api/prompts/keywords/sync。",
+      "解析描述、AI 补词、Prompt 生成新增 loading Toast，集中提示进度；补词面板附加“无灵感”提示文案。"
+    ],
+    "locale": "zh-CN",
+    "published_at": "2025-10-13",
+    "summary": "重构关键词治理布局并强化拖拽反馈，长耗时操作新增 Toast 进度提示。",
+    "title": "关键词工作台与交互细节优化"
+  },
+  {
+    "author_id": 9,
+    "badge": "Identity Verification",
+    "items": [
+      "The input field supports automatic recognition of email or username, with backend matching in order.",
+      "Added a 'Remember this account' checkbox, saved in browser localStorage.",
+      "Automatically fills in the account after successful login; records are not retained when unchecked.",
+      "Sidebar adjustment: Placed 'Update Log' before 'Settings'."
+    ],
+    "locale": "en",
+    "published_at": "2025-10-12",
+    "summary": "The login form now allows using email or username, and provides an option to remember the account.",
+    "title": "Support for Username Login and Remember Account"
+  },
+  {
+    "author_id": 9,
+    "badge": "身份认证",
+    "items": [
+      "输入框支持自动识别邮箱或用户名，后端按顺序匹配。",
+      "新增“记住此账号”复选框，保存在浏览器 localStorage 中。",
+      "登录成功后自动回填账号；未勾选时不会保留记录。",
+      "侧边栏调整：将“更新日志”放在“设置”之前。"
+    ],
+    "locale": "zh-CN",
+    "published_at": "2025-10-12",
+    "summary": "登录表单现在允许使用邮箱或用户名，并提供记住账号选项。",
+    "title": "支持用户名登录与记住账号"
+  },
+  {
+    "author_id": 9,
+    "badge": "Release",
+    "items": [
+      "Administrators select 'Auto-translate' on the frontend and submit.",
+      "The backend calls DeepSeek to translate the content into English and stores it in the database.",
+      "The English version is displayed alongside the original Chinese entry."
+    ],
+    "locale": "en",
+    "published_at": "2025-10-12",
+    "summary": "Verify that the automatic translation feature is functioning correctly.",
+    "title": "Translation Test Log"
+  },
+  {
+    "author_id": 9,
+    "badge": "发布",
+    "items": [
+      "管理员在前端勾选“自动翻译”后提交。",
+      "后端调用 DeepSeek 将内容翻译成英文并一同入库。",
+      "英文版会与原始中文条目同时展示。"
+    ],
+    "locale": "zh-CN",
+    "published_at": "2025-10-12",
+    "summary": "验证自动翻译功能是否正常工作。",
+    "title": "翻译测试日志"
+  },
+  {
+    "author_id": 9,
+    "badge": "发布",
+    "items": [
+      "新增受 JWT 管理员权限保护的 /api/changelog CRUD 接口。",
+      "更新日志页面优先展示数据库数据，当记录为空时自动回退 i18n 文案。",
+      "内置编辑器支持切换语言、重置草稿并即时发布。"
+    ],
+    "locale": "zh-CN",
+    "published_at": "2025-10-12",
+    "summary": "管理员现在可以在应用内直接发布版本更新说明。",
+    "title": "后台更新日志管理上线"
+  },
+  {
+    "author_id": 9,
+    "badge": "Release",
+    "items": [
+      "Added a protected /api/changelog CRUD API guarded by JWT admin claims.",
+      "Logs page renders data from the database with i18n fallback when empty.",
+      "Inline editor supports locale switching, draft reset, and immediate publishing."
+    ],
+    "locale": "en",
+    "published_at": "2025-10-12",
+    "summary": "Admins can now publish release notes directly inside the app.",
+    "title": "Admin changelog management live"
+  },
+  {
+    "author_id": 9,
+    "badge": "文档",
+    "items": [
+      "新增帮助中心，覆盖快速上手、排障与支持渠道。",
+      "首次发布应用内更新日志，梳理身份、后端与前端的主要改动。",
+      "增加全局页脚，展示 AB-IN 品牌、备案号与 CSDN 博客链接。"
+    ],
+    "locale": "zh-CN",
+    "published_at": "2025-10-12",
+    "summary": "把新手指引与更新记录集中在客户端内浏览。",
+    "title": "应用内帮助与日志上线"
+  },
+  {
+    "author_id": 9,
+    "badge": "Docs",
+    "items": [
+      "Introduced a help center with quick start guidance, troubleshooting, and support links.",
+      "Published an in-app changelog outlining identity, backend, and front-end improvements.",
+      "Added a global footer with AB-IN branding, ICP license, and CSDN blog reference."
+    ],
+    "locale": "en",
+    "published_at": "2025-10-12",
+    "summary": "Centralized onboarding knowledge and change tracking inside the app.",
+    "title": "New help center \u0026 logs"
+  },
+  {
+    "author_id": 9,
+    "badge": "Feature",
+    "items": [
+      "Simply check 'Auto Translate' in the log editor to generate other languages with one click.",
+      "The backend will call the configured model (e.g., deepseek-chat or doubao-1-5-thinking-pro-250415).",
+      "After creation, both the original and translated versions will be displayed, with a toast indicating the number of translated entries."
+    ],
+    "locale": "en",
+    "published_at": "2025-10-11",
+    "summary": "When creating update logs, supports automatic translation and simultaneous publishing of multilingual versions.",
+    "title": "New Log Auto-Translation Capability"
+  },
+  {
+    "author_id": 9,
+    "badge": "功能",
+    "items": [
+      "在日志编辑器勾选“自动翻译”即可一键生成其他语言。",
+      "后端会调用配置好的模型（例如 deepseek-chat 或 doubao-1-5-thinking-pro-250415）。",
+      "创建成功后会同时显示原文和翻译版本，toast 会提示翻译条目数量。"
+    ],
+    "locale": "zh-CN",
+    "published_at": "2025-10-11",
+    "summary": "在创建更新日志时，支持自动翻译并同步发布多语言版本。",
+    "title": "新增日志自动翻译能力"
+  },
+  {
+    "author_id": 9,
+    "badge": "前端",
+    "items": [
+      "新增自动保存提示，并在偏好模型被禁用时优雅回退并提示用户。",
+      "关键词建议接入 React Query 缓存与重试机制，提高请求稳定性。",
+      "统一界面玻璃拟态样式，暗色模式与亮色模式体验一致。",
+      "完善仪表盘与关键词洞察的多语言文案，保持数据卡片一致性。"
+    ],
+    "locale": "zh-CN",
+    "published_at": "2025-10-11",
+    "summary": "持续优化创作流程与状态恢复能力。",
+    "title": "Prompt 工作台体验升级"
+  },
+  {
+    "author_id": 9,
+    "badge": "Frontend",
+    "items": [
+      "Introduced autosave feedback and graceful fallbacks when preferred models are disabled.",
+      "Hooked keyword suggestions into React Query with caching and retry behaviour.",
+      "Unified theme-aware layouts with refreshed glassmorphism styling across pages.",
+      "Delivered locale-aware copy updates for dashboard metrics and keyword insights."
+    ],
+    "locale": "en",
+    "published_at": "2025-10-11",
+    "summary": "Improved authoring experience and state resilience.",
+    "title": "Prompt workbench refinements"
+  },
+  {
+    "author_id": 9,
+    "badge": "后端",
+    "items": [
+      "新增基于 MODEL_CREDENTIAL_MASTER_KEY 的 AES-256-GCM 加密。",
+      "完善 /api/models 接口，可创建、更新、删除与测试模型凭据。",
+      "当模型被禁用或删除时，自动清空首选模型避免指向无效配置。",
+      "拓展模型启用/禁用节点的审计日志，方便后续追踪。"
+    ],
+    "locale": "zh-CN",
+    "published_at": "2025-10-10",
+    "summary": "为 DeepSeek 接入提供加密存储保障。",
+    "title": "模型凭据保险库"
+  },
+  {
+    "author_id": 9,
+    "badge": "Backend",
+    "items": [
+      "Added AES-256-GCM encryption guarded by MODEL_CREDENTIAL_MASTER_KEY.",
+      "Expanded /api/models endpoints for create, update, delete, and connection tests.",
+      "Automatically resets preferred_model when a credential is disabled or removed.",
+      "Expanded audit logging hooks to capture model enable/disable lifecycle events."
+    ],
+    "locale": "en",
+    "published_at": "2025-10-10",
+    "summary": "Secured DeepSeek integrations behind encrypted storage.",
+    "title": "Model credential vault"
+  },
+  {
+    "author_id": 9,
+    "badge": "身份认证",
+    "items": [
+      "注册流程会发送一次性邮箱验证令牌，未验证账号无法登录。",
+      "验证码与验证接口返回剩余尝试次数与冷却时间，便于前端提示。",
+      "集成 Redis 限流器，并提供内存实现满足本地开发需求。",
+      "登录成功统一触发客户端 Toast，无论是桌面端还是浏览器。"
+    ],
+    "locale": "zh-CN",
+    "published_at": "2025-10-09",
+    "summary": "强化注册与限流策略，保障账号安全。",
+    "title": "验证优先的登录链路"
+  },
+  {
+    "author_id": 9,
+    "badge": "Identity",
+    "items": [
+      "Registration now issues one-time email verification tokens before login is allowed.",
+      "Captcha and verification endpoints expose remaining attempts and retry-after hints.",
+      "Integrated Redis-backed limiters with in-memory fallbacks for development.",
+      "Hooked login success to unified toast messaging for desktop and web runtimes."
+    ],
+    "locale": "en",
+    "published_at": "2025-10-09",
+    "summary": "Strengthened onboarding and rate limiting policies.",
+    "title": "Verification-first auth flow"
+  },
+  {
+    "author_id": 9,
+    "badge": "监控",
+    "items": [
+      "启用带请求 ID 的结构化 Zap 日志，中间件贯穿 HTTP 全链路。",
+      "后端 logs 目录分离滚动日志文件，便于分析与归档。",
+      "在 backend_README 中补充日志级别与采样策略说明，指导上线部署。"
+    ],
+    "locale": "zh-CN",
+    "published_at": "2025-10-08",
+    "summary": "为后续运维监控奠定日志与指标基础。",
+    "title": "可观测性基础搭建"
+  },
+  {
+    "author_id": 9,
+    "badge": "Monitoring",
+    "items": [
+      "Enabled structured Zap logging with request IDs threaded through the HTTP middleware.",
+      "Provisioned separate rotating log files under backend/logs for easier export and sharing.",
+      "Documented log levels and sampling strategy in backend_README to guide production rollout."
+    ],
+    "locale": "en",
+    "published_at": "2025-10-08",
+    "summary": "Laid the foundation for observability across services.",
+    "title": "Operational telemetry groundwork"
+  }
+]

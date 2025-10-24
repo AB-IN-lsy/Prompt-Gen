@@ -16,6 +16,7 @@ import (
 	"strings"
 	"time"
 
+	bootstrapdata "electron-go-app/backend/internal/bootstrapdata"
 	"electron-go-app/backend/internal/config"
 	changelog "electron-go-app/backend/internal/domain/changelog"
 	promptdomain "electron-go-app/backend/internal/domain/prompt"
@@ -158,6 +159,19 @@ func initLocalResources(ctx context.Context, flags config.RuntimeFlags) (*Resour
 
 	if _, err := ensureLocalUser(ctx, gormDB, flags.Local); err != nil {
 		return nil, fmt.Errorf("ensure local user: %w", err)
+	}
+
+	var reviewerID *uint
+	if flags.Local.IsAdmin {
+		reviewerID = &flags.Local.UserID
+	}
+
+	if err := bootstrapdata.SeedLocalDatabase(ctx, gormDB, bootstrapdata.Options{
+		AuthorUserID:   flags.Local.UserID,
+		ReviewerUserID: reviewerID,
+		Logger:         appLogger.S().With("component", "bootstrapdata"),
+	}); err != nil {
+		return nil, fmt.Errorf("seed local database: %w", err)
 	}
 
 	appLogger.S().Infow("local mode enabled", "db_path", dbPath, "user_id", flags.Local.UserID)

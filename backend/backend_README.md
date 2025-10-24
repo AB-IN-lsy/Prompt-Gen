@@ -56,6 +56,7 @@
 - 设置 `APP_MODE=local` 即可启用离线模式，后端将自动跳过 MySQL、Redis、Nacos 连接并使用本地 SQLite 文件。
 - SQLite 路径通过 `LOCAL_SQLITE_PATH` 控制，支持 `~` 前缀，默认值写入 `data/promptgen-local.db`；首次启动会自动创建目录与数据库。
 - `LOCAL_USER_ID`、`LOCAL_USER_USERNAME`、`LOCAL_USER_EMAIL`、`LOCAL_USER_ADMIN` 控制离线模式下的默认账号信息；后端会在启动时写入/更新该账号，并在没有 JWT 的情况下直接注入该用户身份。
+- 可通过 `LOCAL_BOOTSTRAP_DATA_DIR` 指定预置数据目录，默认读取 `backend/data/bootstrap`，表为空时会自动导入公共 Prompt 与更新日志示例。
 - 离线模式仍然需要 `MODEL_CREDENTIAL_MASTER_KEY` 用于模型凭据加密；未配置 `JWT_SECRET` 时会自动回退到内置的本地密钥，避免开发时额外填写。
 
 #### 离线模式快速上手
@@ -68,6 +69,13 @@
 3. 启动前端：`npm run dev:frontend`（Electron 启动流程不变）
 4. 登录页点击“离线模式”按钮即可直接进入工作台；此时所有数据仅保存在上一步配置的 SQLite 文件中，邮箱验证等依赖在线服务的功能会自动禁用。
 5. 若要恢复在线模式，将 `APP_MODE` 改回 `online` 并按照原有方式配置数据库/Redis/Nacos。
+6. 需要在 CI 或本地生成离线数据库时，可执行 `go run ./backend/cmd/offline-bootstrap -output ./release/assets/promptgen-offline.db`，命令会依据 `LOCAL_BOOTSTRAP_DATA_DIR` 自动导入示例数据。
+
+#### 离线数据更新
+
+- 当需要同步线上 MySQL 中的最新公共 Prompt、更新日志时，运行 `go run ./backend/cmd/export-offline-data -output-dir backend/data/bootstrap`。命令会根据环境变量连接数据库，并写入同名 JSON 文件，后续打包可直接复用。
+- 导出完成后再执行 `go run ./backend/cmd/offline-bootstrap -output ./release/assets/promptgen-offline.db` 生成最新的 SQLite，确保离线安装包携带最新数据。
+- 客户端启动时会按 `badge+locale`、`author_user_id+topic` 的组合键增量合并 JSON 数据，不会覆盖已有本地条目，仅插入或更新新版本内容。
 
 ### 验证码与 Redis
 
