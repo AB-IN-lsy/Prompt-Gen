@@ -2,6 +2,7 @@ package server
 
 import (
 	"fmt"
+	"net/http"
 	"strings"
 	"time"
 
@@ -23,6 +24,7 @@ type RouterOptions struct {
 	AuthMW              middleware.Authenticator
 	IPGuard             *middleware.IPGuardMiddleware
 	IPGuardHandler      *handler.IPGuardHandler
+	StaticFS            http.FileSystem
 }
 
 // NewRouter 构建应用的 Gin Engine，汇总所有 REST 接口与公共中间件配置。
@@ -73,7 +75,11 @@ func NewRouter(opts RouterOptions) *gin.Engine {
 		}),
 	}))
 
-	r.Static("/static", "./public")
+	if opts.StaticFS != nil {
+		r.StaticFS("/static", opts.StaticFS)
+	} else {
+		r.Static("/static", "./public")
+	}
 
 	api := r.Group("/api")
 	{

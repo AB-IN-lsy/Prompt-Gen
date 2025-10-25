@@ -15,6 +15,7 @@ import {
     CheckCircle,
     FileText,
     History,
+    Library,
     LoaderCircle,
     LucideIcon,
     Sparkles,
@@ -29,6 +30,7 @@ import { SpotlightSearch } from "../components/ui/spotlight-search";
 import { useAuth } from "../hooks/useAuth";
 import {
     fetchMyPrompts,
+    fetchPublicPrompts,
     fetchUserModels,
     PromptListItem,
     PromptListResponse
@@ -109,17 +111,21 @@ function MetricCard({ icon: Icon, label, value, hint, trend }: Metric): JSX.Elem
                 : "text-slate-500 dark:text-slate-400";
 
     return (
-        <GlassCard className="relative overflow-hidden">
-            <div className="flex items-start justify-between gap-4">
+        <GlassCard className="group relative overflow-hidden border border-white/60 bg-white/80 transition-all duration-300 hover:-translate-y-1 hover:border-primary/40 hover:shadow-[0_18px_45px_-24px_rgba(59,130,246,0.5)] dark:border-slate-800/60 dark:bg-slate-900/70 dark:hover:border-primary/40">
+            <div className="pointer-events-none absolute inset-0 opacity-0 transition-opacity duration-300 group-hover:opacity-100">
+                <div className="absolute -top-16 right-4 h-24 w-24 rounded-full bg-primary/30 blur-3xl" />
+                <div className="absolute -bottom-20 left-6 h-28 w-28 rounded-full bg-sky-400/25 blur-[90px]" />
+            </div>
+            <div className="relative flex items-start justify-between gap-4">
                 <div>
-                    <p className="text-sm text-slate-500 dark:text-slate-400">{label}</p>
-                    <p className="mt-3 text-3xl font-semibold text-slate-900 dark:text-slate-100">{value}</p>
+                    <p className="text-sm text-slate-500 transition-colors duration-200 group-hover:text-primary dark:text-slate-400 dark:group-hover:text-primary-200">{label}</p>
+                    <p className="mt-3 text-3xl font-semibold text-slate-900 transition-colors duration-200 group-hover:text-primary dark:text-slate-100 dark:group-hover:text-primary-200">{value}</p>
                 </div>
-                <div className="rounded-2xl bg-primary/10 p-3 text-primary shadow-glow">
+                <div className="rounded-2xl bg-primary/10 p-3 text-primary shadow-glow transition-all duration-200 group-hover:scale-110 group-hover:bg-primary group-hover:text-white">
                     <Icon className="h-6 w-6" aria-hidden="true" />
                 </div>
             </div>
-            <p className={cn("mt-4 text-xs font-medium", trendClass)}>{hint}</p>
+            <p className={cn("mt-4 text-xs font-medium transition-colors duration-200 group-hover:text-primary dark:group-hover:text-primary-200", trendClass)}>{hint}</p>
         </GlassCard>
     );
 }
@@ -175,9 +181,11 @@ function SpotlightHero({
                     </MagneticButton>
                 </div>
 
-                <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                <div className="flex gap-4 overflow-x-auto pb-1">
                     {metrics.map((metric) => (
-                        <MetricCard key={metric.id} {...metric} />
+                        <div key={metric.id} className="min-w-[220px] flex-1 lg:min-w-0">
+                            <MetricCard {...metric} />
+                        </div>
                     ))}
                 </div>
             </div>
@@ -351,9 +359,24 @@ export default function DashboardPage(): JSX.Element {
         staleTime: 60_000
     });
 
+
+    const {
+        data: publicPromptsData
+    } = useQuery({
+        queryKey: ["dashboard", "public-prompts"],
+        queryFn: () =>
+            fetchPublicPrompts({
+                page: 1,
+                pageSize: 1,
+                status: "approved"
+            }),
+        staleTime: 60_000
+    });
+
     const totalPrompts = allPromptsData?.meta.total_items ?? 0;
     const draftCount = draftData?.meta.total_items ?? 0;
     const publishedCount = publishedData?.meta.total_items ?? 0;
+    const publicPromptCount = publicPromptsData?.meta.total_items ?? 0;
     const successRate =
         totalPrompts > 0 ? Math.round((publishedCount / totalPrompts) * 100) : null;
 
@@ -376,6 +399,14 @@ export default function DashboardPage(): JSX.Element {
                 trend: draftCount > 0 ? "down" : "neutral"
             },
             {
+                id: "publicPrompts",
+                label: t("dashboard.metrics.publicPrompts"),
+                value: String(publicPromptCount),
+                hint: t("dashboard.metrics.publicPromptsHint", { count: publicPromptCount }),
+                icon: Library,
+                trend: publicPromptCount > 0 ? "up" : "neutral"
+            },
+            {
                 id: "successRate",
                 label: t("dashboard.metrics.successRate"),
                 value: successRate !== null ? `${successRate}%` : t("dashboard.metrics.noData"),
@@ -384,7 +415,7 @@ export default function DashboardPage(): JSX.Element {
                 trend: successRate !== null && successRate >= 60 ? "up" : "neutral"
             }
         ],
-        [draftCount, publishedCount, successRate, t, totalPrompts]
+        [draftCount, publicPromptCount, publishedCount, successRate, t, totalPrompts]
     );
 
     const recentPrompts = allPromptsData?.items ?? [];

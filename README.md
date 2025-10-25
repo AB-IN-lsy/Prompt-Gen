@@ -73,7 +73,7 @@ Prompt Gen Desktop 是一套以 Electron 为外壳、Go 为后端、Vite/React �
 
 1. 打开仓库的 “Releases” 页面，下载对应平台的最新安装程序。
 2. 按安装向导操作，默认会安装到 `%LOCALAPPDATA%\Programs\PromptGen`（Windows）或 `/Applications`（macOS）。
-3. 安装完成后即可直接启动客户端。若需要长期保留数据，建议将 `LOCAL_SQLITE_PATH` 配置到个人目录（如 `~/.promptgen/`），避免因卸载而丢失数据库。
+3. 安装完成后即可直接启动客户端。若需要长期保留数据，建议将 `LOCAL_SQLITE_PATH` 配置到个人目录（如 `~/.promptgen/`），避免因卸载而丢失数据库和头像。
 
 ## 开发者指南
 

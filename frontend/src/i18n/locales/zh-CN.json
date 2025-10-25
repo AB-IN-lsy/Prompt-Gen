@@ -638,7 +638,9 @@
       "noData": "暂无数据",
       "activeHint": "共 {{count}} 条记录",
       "draftHint": "待处理草稿 {{count}} 条",
-      "successRateHint": "发布成功占比"
+      "successRateHint": "发布成功占比",
+      "publicPrompts": "优质 Prompt 数量",
+      "publicPromptsHint": "精选库共 {{count}} 条"
     },
     "trend": {
       "up": "较上周提升 {{value}}",

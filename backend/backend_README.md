@@ -400,7 +400,7 @@ ALTER TABLE prompts
 
 ### 静态资源与上传目录
 
-- 服务器启动时会将 `/static/**` 映射到项目内的 `backend/public` 目录，头像上传默认写入 `backend/public/avatars`。
+- 服务器启动时会将 `/static/**` 映射到项目内的 `backend/public` 目录，头像上传默认写入 `backend/public/avatars`；本地/离线模式下会改写到 SQLite 同级目录的 `avatars/` 中，覆盖安装也不会丢失。
 - 可以根据需要挂载到对象存储或 CDN，只需替换 `UploadHandler` 的写入逻辑并调整返回的 URL。
 - 若运行在容器环境，请确保挂载该目录或改为外部存储，以免应用重启后上传内容丢失。
 

@@ -180,10 +180,17 @@ func BuildApplication(ctx context.Context, logger *zap.SugaredLogger, resources 
 	changelogService := changelogsrv.NewService(changelogRepo)
 	changelogHandler := handler.NewChangelogHandler(changelogService, modelService)
 
-	// 上传服务目前仅用于头像上传，且不依赖任何持久化存储。
-	// 文件直接存储在本地的 public 目录下，后续可扩展至云存储。
-	uploadStorage := filepath.Join("public", "avatars")
-	uploadHandler := handler.NewUploadHandler(uploadStorage)
+	// 上传服务目前仅用于头像上传，默认写入 public/avatars，可在本地模式下改为用户数据目录。
+	avatarStorage := filepath.Join("public", "avatars")
+	if isLocalMode {
+		dbDir := filepath.Dir(cfg.LocalUser.DBPath)
+		if dbDir == "" {
+			dbDir = "."
+		}
+		avatarStorage = filepath.Join(dbDir, "avatars")
+	}
+	uploadHandler := handler.NewUploadHandler(avatarStorage)
+	staticFS := server.NewHybridStaticFS("public", avatarStorage)
 
 	// 构建路由与中间件。
 	var authenticator middleware.Authenticator
@@ -205,6 +212,7 @@ func BuildApplication(ctx context.Context, logger *zap.SugaredLogger, resources 
 		AuthMW:              authenticator,
 		IPGuard:             ipGuard,
 		IPGuardHandler:      ipGuardHandler,
+		StaticFS:            staticFS,
 	})
 
 	return &Application{
