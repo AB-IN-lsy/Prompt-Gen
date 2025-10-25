@@ -211,7 +211,7 @@ func ensureLocalUser(ctx context.Context, db *gorm.DB, local config.LocalRuntime
 			needsUpdate = true
 		}
 
-		if local.IsAdmin && !user.IsAdmin {
+		if !user.IsAdmin {
 			user.IsAdmin = true
 			needsUpdate = true
 		}
@@ -232,7 +232,7 @@ func ensureLocalUser(ctx context.Context, db *gorm.DB, local config.LocalRuntime
 			Username:        local.Username,
 			Email:           local.Email,
 			PasswordHash:    "LOCAL_ONLY",
-			IsAdmin:         local.IsAdmin,
+			IsAdmin:         true,
 			Settings:        settingsJSON,
 			EmailVerifiedAt: &now,
 		}
