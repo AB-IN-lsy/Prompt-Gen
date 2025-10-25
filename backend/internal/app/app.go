@@ -197,16 +197,22 @@ func ensureLocalUser(ctx context.Context, db *gorm.DB, local config.LocalRuntime
 	switch {
 	case err == nil:
 		needsUpdate := false
-		if user.Username != local.Username {
-			user.Username = local.Username
+		currentUsername := strings.TrimSpace(user.Username)
+		desiredUsername := strings.TrimSpace(local.Username)
+		if desiredUsername != "" && currentUsername == "" {
+			user.Username = desiredUsername
 			needsUpdate = true
 		}
-		if user.Email != local.Email {
-			user.Email = local.Email
+
+		currentEmail := strings.TrimSpace(user.Email)
+		desiredEmail := strings.TrimSpace(local.Email)
+		if desiredEmail != "" && currentEmail == "" {
+			user.Email = desiredEmail
 			needsUpdate = true
 		}
-		if user.IsAdmin != local.IsAdmin {
-			user.IsAdmin = local.IsAdmin
+
+		if local.IsAdmin && !user.IsAdmin {
+			user.IsAdmin = true
 			needsUpdate = true
 		}
 		if needsUpdate {

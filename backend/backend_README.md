@@ -1145,7 +1145,6 @@ go test -tags integration ./tests/integration
 ```
 
 > **说明：** 单元测试会使用内存版 SQLite 驱动，避免依赖外部数据库，同时也用于验证自动迁移能正确创建 `user_model_credentials` 等表结构。
-
 > **提示：** 若运行环境禁止绑定本地端口，依赖 `httptest`/`miniredis` 的测试会自动标记为 Skip；如遇默认缓存目录不可写，可改用 `GOCACHE=$(pwd)/.gocache go test ./...`。
 
 如需运行带外部依赖的集成测试，请确保 Nacos / MySQL 就绪并补全对应环境变量。

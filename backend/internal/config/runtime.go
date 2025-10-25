@@ -46,7 +46,7 @@ func LoadRuntimeFlags() RuntimeFlags {
 		UserID:   defaultLocalUserID,
 		Username: defaultLocalUsername,
 		Email:    defaultLocalEmail,
-		IsAdmin:  false,
+		IsAdmin:  true,
 	}
 
 	if rawPath := strings.TrimSpace(os.Getenv("LOCAL_SQLITE_PATH")); rawPath != "" {

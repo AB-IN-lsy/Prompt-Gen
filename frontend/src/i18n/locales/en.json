@@ -51,6 +51,15 @@
           "Export JSON backups anytime\u2014deletes include a confirmation step to avoid mistakes."
         ]
       },
+      "publicPrompts": {
+        "title": "Explore the Public Prompt Library",
+        "description": "Browse curated community prompts and pull them into your workspace.",
+        "items": [
+          "Use filters and search to quickly locate topics or languages.",
+          "The detail drawer lets you copy the full text or download into My Prompts.",
+          "Offline mode still lists curated entries; administrators can remove submissions."
+        ]
+      },
       "workbench": {
         "title": "Prompt Workbench tips",
         "description": "Shape keywords and drafts with confidence.",
@@ -115,6 +124,7 @@
       "quickStart",
       "dashboard",
       "myPrompts",
+      "publicPrompts",
       "workbench",
       "settings",
       "troubleshooting",

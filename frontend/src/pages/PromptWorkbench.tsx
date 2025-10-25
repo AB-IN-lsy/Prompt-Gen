@@ -1603,7 +1603,7 @@ export default function PromptWorkbenchPage() {
               type="button"
               variant="ghost"
               size="sm"
-              className="gap-1.5"
+              className="gap-1.5 rounded-full border border-primary/50 bg-primary/5 px-4 text-primary shadow-[0_18px_40px_-24px_rgba(59,130,246,0.6)] transition hover:bg-primary/10 hover:text-primary/90 focus-visible:ring-primary/50 dark:border-primary/40 dark:bg-primary/10 dark:text-primary-100 dark:hover:bg-primary/20"
               onClick={handleCancel}
               disabled={isGenerating || interpretMutation.isPending}
             >

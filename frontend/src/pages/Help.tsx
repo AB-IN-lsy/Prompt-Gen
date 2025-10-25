@@ -14,6 +14,7 @@ import {
     LayoutDashboard,
     Rocket,
     Settings,
+    Library,
     Sparkles
 } from "lucide-react";
 
@@ -31,6 +32,7 @@ const sectionIcons = {
     quickStart: Rocket,
     dashboard: LayoutDashboard,
     myPrompts: ClipboardList,
+    publicPrompts: Library,
     workbench: Sparkles,
     settings: Settings,
     troubleshooting: LifeBuoy,
@@ -51,7 +53,7 @@ export default function HelpPage() {
     const sectionKeys = useMemo<SectionKey[]>(() => {
         const order = t("helpPage.sectionOrder", {
             returnObjects: true,
-            defaultValue: ["quickStart", "dashboard", "myPrompts", "workbench", "settings", "troubleshooting", "contact"]
+            defaultValue: ["quickStart", "dashboard", "myPrompts", "publicPrompts", "workbench", "settings", "troubleshooting", "contact"]
         }) as string[];
         const keys = order.filter((key): key is SectionKey => key in sectionIcons);
         if (!keys.includes("contact")) {

@@ -51,6 +51,15 @@
           "随时导出 JSON 备份，删除前会进行确认以免误操作。"
         ]
       },
+      "publicPrompts": {
+        "title": "探索优质 Prompt 库",
+        "description": "浏览社区精选 Prompt，并一键导入或查看详情。",
+        "items": [
+          "使用筛选与搜索快速找到目标主题或语言。",
+          "详情抽屉支持复制正文与下载至“我的 Prompt”。",
+          "离线模式也可浏览精选条目，管理员可直接删除。"
+        ]
+      },
       "workbench": {
         "title": "掌握 Prompt 工作台",
         "description": "关键词治理与自动草稿的核心舞台。",
@@ -115,6 +124,7 @@
       "quickStart",
       "dashboard",
       "myPrompts",
+      "publicPrompts",
       "workbench",
       "settings",
       "troubleshooting",

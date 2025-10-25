@@ -266,9 +266,10 @@ func seedChangelogEntries(ctx context.Context, db *gorm.DB, opts Options, logger
 			}
 
 			var existing changelog.Entry
-			err = tx.Where("badge = ? AND locale = ?", entry.Badge, entry.Locale).First(&existing).Error
+			err = tx.Where("locale = ? AND title = ?", entry.Locale, entry.Title).First(&existing).Error
 			switch {
 			case err == nil:
+				existing.Badge = entry.Badge
 				existing.Title = entry.Title
 				existing.Summary = entry.Summary
 				existing.Items = entry.Items

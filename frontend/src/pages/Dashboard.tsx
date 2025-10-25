@@ -56,6 +56,50 @@ interface FormattedDateTime {
     time: string;
 }
 
+
+interface TypewriterTextProps {
+    text: string;
+    speed?: number;
+    startDelay?: number;
+    className?: string;
+}
+
+function TypewriterText({ text, speed = 38, startDelay = 160, className }: TypewriterTextProps) {
+    const [display, setDisplay] = useState(text);
+
+    useEffect(() => {
+        if (typeof window === "undefined") {
+            setDisplay(text);
+            return;
+        }
+        if (!text) {
+            setDisplay("");
+            return;
+        }
+        let index = 0;
+        let typingTimer: number | undefined;
+        const kickoff = window.setTimeout(() => {
+            setDisplay("");
+            const tick = () => {
+                index += 1;
+                setDisplay(text.slice(0, index));
+                if (index < text.length) {
+                    typingTimer = window.setTimeout(tick, speed);
+                }
+            };
+            tick();
+        }, startDelay);
+        return () => {
+            window.clearTimeout(kickoff);
+            if (typingTimer !== undefined) {
+                window.clearTimeout(typingTimer);
+            }
+        };
+    }, [text, speed, startDelay]);
+
+    return <span className={className}>{display}</span>;
+}
+
 function MetricCard({ icon: Icon, label, value, hint, trend }: Metric): JSX.Element {
     const trendClass =
         trend === "up"
@@ -113,7 +157,7 @@ function SpotlightHero({
                             {eyebrow}
                         </span>
                         <h1 className="text-3xl font-semibold tracking-tight text-slate-900 dark:text-white md:text-4xl">
-                            {title}
+                            <TypewriterText text={title} className="block" />
                         </h1>
                         <p className="text-sm text-slate-500 dark:text-slate-400">
                             {description}
