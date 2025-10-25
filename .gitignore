@@ -87,6 +87,7 @@ backend/public/avatars/*
 docs/*
 !docs/assets/
 !docs/assets/**
+public/
 
 # certificate files
 mycert*
