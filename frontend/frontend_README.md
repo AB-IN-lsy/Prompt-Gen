@@ -81,7 +81,6 @@ npm run preview
 
 > 提示：若需与桌面壳同步调试，请在仓库根目录执行 `npm start`，脚本会通过 `scripts/start-electron.cjs` 调用本地安装的 Electron，避免 Windows 环境出现 `'electron' 不是内部或外部命令'` 的报错。
 
-
 - `5173`：Vite 开发服务器默认端口。执行 `npm run dev` 时，浏览器或 Electron 渲染进程会从该端口加载最新的热更新页面。
 - `4173`：`npm run preview` 使用的预览端口，用于本地验证生产构建的效果。
 
