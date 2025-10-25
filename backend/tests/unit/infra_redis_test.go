@@ -8,7 +8,10 @@ package unit
 
 import (
 	"context"
+	"errors"
+	"net"
 	"strconv"
+	"syscall"
 	"testing"
 	"time"
 
@@ -78,6 +81,10 @@ func TestNewDefaultRedisOptions_MissingEndpoint(t *testing.T) {
 func TestNewRedisClient(t *testing.T) {
 	server, err := miniredis.Run()
 	if err != nil {
+		var opErr *net.OpError
+		if errors.As(err, &opErr) && (errors.Is(opErr.Err, syscall.EPERM) || errors.Is(opErr.Err, syscall.EACCES)) {
+			t.Skipf("当前环境禁止监听端口: %v", err)
+		}
 		t.Fatalf("start miniredis: %v", err)
 	}
 	defer server.Close()

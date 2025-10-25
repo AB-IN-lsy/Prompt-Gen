@@ -291,6 +291,7 @@
 | 帮助与日志 | 左侧导航 | FAQ、错误日志、导出按钮、联系客服入口 | 整合系统日志查看与反馈渠道。|
 
 - **分页提示**：公共 Prompt 列表统一 9 条/页，`meta.current_count` 用于驱动“本页条目数”提示；`My Prompts` 底部同样展示 `current_count`，帮助用户在离线安装包或导入数据后快速核对展示数量。默认值可通过环境变量 `PUBLIC_PROMPT_LIST_PAGE_SIZE` / `PROMPT_LIST_PAGE_SIZE`（后端）与 `VITE_PUBLIC_PROMPT_LIST_PAGE_SIZE` / `VITE_MY_PROMPTS_PAGE_SIZE`（前端）覆盖。
+- **快捷发布**：`My Prompts` 列表提供“立即发布”按钮，直接复用工作台的发布校验逻辑（主题、正文、补充要求、模型、关键词、标签必填），满足快速上线需求。
 
 ### 6.2 关键 UX 原则
 

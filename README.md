@@ -34,6 +34,18 @@ Prompt Gen Desktop 是一套以 Electron 为外壳、Go 为后端、Vite/React �
 
 > 若在 GitHub 页面无法直接播放，请右键链接选择“在新标签页打开”，或至本地仓库的 `docs/assets/` 目录离线查看。
 
+### 界面预览
+
+![仪表盘概览](docs/assets/dashboard.png)
+
+![优质 Prompt 库](docs/assets/优质prompt.png)
+
+![我的 Prompt 列表](docs/assets/我的prompt.png)
+
+![Prompt 工作台](docs/assets/prompt工作台.png)
+
+![帮助中心界面示意](docs/assets/帮助中心.png)
+
 ## 发布形态
 
 | 形态 | 说明 |
@@ -114,6 +126,8 @@ npm run dev:frontend
 # 启动 Electron 桌面壳（加载 Vite Dev URL）
 npm start
 ```
+
+> 提示：`npm start` 通过 `scripts/start-electron.cjs` 调用本地安装的 Electron，可避免 Windows 上 `'electron' 不是内部命令'` 的报错；首次运行请确保已执行 `npm install`。
 
 构建生产资源：
 

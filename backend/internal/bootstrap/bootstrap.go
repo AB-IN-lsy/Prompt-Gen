@@ -121,6 +121,13 @@ func BuildApplication(ctx context.Context, logger *zap.SugaredLogger, resources 
 	} else {
 		publicPromptLimiter = ratelimit.NewMemoryLimiter()
 	}
+	// 本地模式下禁用所有限流器，方便开发与测试。
+	if isLocalMode {
+		logger.Infow("disabling rate limiters in local mode")
+		limiter = nil
+		promptLimiter = nil
+		publicPromptLimiter = nil
+	}
 
 	// 支持通过环境变量自定义验证邮件的频率限制。
 	verificationLimit, verificationWindow := loadEmailVerificationRateConfig(logger)

@@ -5,17 +5,38 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"syscall"
 	"testing"
 
 	"electron-go-app/backend/internal/infra/model/deepseek"
 	modelsvc "electron-go-app/backend/internal/service/model"
 )
 
+// newIPv4TestServer 用于强制单测使用 IPv4，避免在不支持 IPv6 的环境下失败。
+func newIPv4TestServer(t *testing.T, handler http.Handler) *httptest.Server {
+	t.Helper()
+	listener, err := net.Listen("tcp4", "127.0.0.1:0")
+	if err != nil {
+		var opErr *net.OpError
+		if errors.As(err, &opErr) && (errors.Is(opErr.Err, syscall.EPERM) || errors.Is(opErr.Err, syscall.EACCES)) {
+			t.Skipf("当前环境禁止监听端口: %v", err)
+		}
+		t.Fatalf("监听IPv4地址失败: %v", err)
+	}
+	server := &httptest.Server{
+		Listener: listener,
+		Config:   &http.Server{Handler: handler},
+	}
+	server.Start()
+	return server
+}
+
 func TestDeepSeekClientChatCompletion(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := newIPv4TestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			t.Fatalf("expected POST method, got %s", r.Method)
 		}
@@ -90,7 +111,7 @@ func TestDeepSeekClientChatCompletion(t *testing.T) {
 }
 
 func TestDeepSeekClientAPIError(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := newIPv4TestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusUnauthorized)
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"error": map[string]any{
@@ -134,7 +155,7 @@ func TestInvokeDeepSeekChatCompletion(t *testing.T) {
 	}
 	os.Setenv("MODEL_CREDENTIAL_MASTER_KEY", base64.StdEncoding.EncodeToString(key))
 
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := newIPv4TestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var payload map[string]any
 		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
 			t.Fatalf("decode request payload: %v", err)
@@ -216,7 +237,7 @@ func TestServiceTestConnection(t *testing.T) {
 	}
 	os.Setenv("MODEL_CREDENTIAL_MASTER_KEY", base64.StdEncoding.EncodeToString(key))
 
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := newIPv4TestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var payload map[string]any
 		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
 			t.Fatalf("decode request payload: %v", err)
@@ -327,7 +348,7 @@ func TestInvokeVolcengineChatCompletion(t *testing.T) {
 	}
 	os.Setenv("MODEL_CREDENTIAL_MASTER_KEY", base64.StdEncoding.EncodeToString(key))
 
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := newIPv4TestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/chat/completions" {
 			t.Fatalf("unexpected path: %s", r.URL.Path)
 		}

@@ -5,6 +5,8 @@
 ## 最近进展
 
 - 调整 Prompt 工作台：前端仅在检测到关键词顺序或权重实际变化时才调用 `POST /api/prompts/keywords/sync`，显著降低接口调用频率，后端无需额外改动即可受益。
+- 本地离线模式下会自动关闭邮箱验证、Prompt 生成与公共库的限流器，避免开发或演示环境频繁操作触发限流提示。
+- `/api/users/me` 响应新增 `runtime_mode` 字段，标记后端当前运行在本地（`local`）还是在线（`online`）模式，供前端自动切换离线特性。
 - 新增用户头像字段 `avatar_url`，支持上传后通过 `PUT /api/users/me` 保存。
 - 新增 `POST /api/uploads/avatar` 接口，可接收 multipart 头像并返回可访问的静态地址。
 - 默认开放 `/static/**` 路由映射到 `backend/public` 目录，供头像等资源直接访问。
@@ -558,7 +560,8 @@ ALTER TABLE prompts
       "settings": {
         "preferred_model": "gpt-4o-mini",
         "enable_animations": true
-      }
+      },
+      "runtime_mode": "online"
     }
   }
   ```
@@ -1142,6 +1145,8 @@ go test -tags integration ./tests/integration
 ```
 
 > **说明：** 单元测试会使用内存版 SQLite 驱动，避免依赖外部数据库，同时也用于验证自动迁移能正确创建 `user_model_credentials` 等表结构。
+
+> **提示：** 若运行环境禁止绑定本地端口，依赖 `httptest`/`miniredis` 的测试会自动标记为 Skip；如遇默认缓存目录不可写，可改用 `GOCACHE=$(pwd)/.gocache go test ./...`。
 
 如需运行带外部依赖的集成测试，请确保 Nacos / MySQL 就绪并补全对应环境变量。
 

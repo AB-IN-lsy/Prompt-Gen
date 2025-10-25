@@ -28,13 +28,17 @@ import {
   deletePrompt,
   fetchMyPrompts,
   fetchPromptDetail,
+  savePrompt,
   normaliseKeywordSource,
   PromptDetailResponse,
   PromptListItem,
   PromptListKeyword,
   PromptListResponse,
   PromptListMeta,
+  PromptKeywordInput,
+  SavePromptRequest,
 } from "../lib/api";
+import { ApiError } from "../lib/errors";
 import { usePromptWorkbench } from "../hooks/usePromptWorkbench";
 import type { Keyword } from "../lib/api";
 import { nanoid } from "nanoid";
@@ -91,6 +95,7 @@ export default function MyPromptsPage(): JSX.Element {
   const [searchInput, setSearchInput] = useState("");
   const [committedSearch, setCommittedSearch] = useState("");
   const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null);
+  const [publishingId, setPublishingId] = useState<number | null>(null);
 
   const listQuery = useQuery<PromptListResponse>({
     queryKey: ["my-prompts", { status, page, committedSearch }],
@@ -139,6 +144,114 @@ export default function MyPromptsPage(): JSX.Element {
       toast.error(
         error instanceof Error ? error.message : t("errors.generic"),
       );
+    },
+  });
+
+  const publishMutation = useMutation({
+    mutationFn: async (promptId: number) => {
+      const detail = await fetchPromptDetail(promptId);
+      const trimmedTopic = detail.topic.trim();
+      const trimmedBody = detail.body.trim();
+      const trimmedInstructions = (detail.instructions ?? "").trim();
+      const missingMessages: string[] = [];
+      if (!trimmedTopic) {
+        missingMessages.push(
+          t("promptWorkbench.publishValidation.topic", {
+            defaultValue: "发布前需要填写主题",
+          }),
+        );
+      }
+      if (!trimmedBody) {
+        missingMessages.push(
+          t("promptWorkbench.publishValidation.body", {
+            defaultValue: "发布前需要填写提示词正文",
+          }),
+        );
+      }
+      if (!trimmedInstructions) {
+        missingMessages.push(
+          t("promptWorkbench.publishValidation.instructions", {
+            defaultValue: "发布前需要补充要求",
+          }),
+        );
+      }
+      if (!detail.model) {
+        missingMessages.push(
+          t("promptWorkbench.publishValidation.model", {
+            defaultValue: "发布前需要选择模型",
+          }),
+        );
+      }
+      if (detail.positive_keywords.length === 0) {
+        missingMessages.push(
+          t("promptWorkbench.publishValidation.positiveKeywords", {
+            defaultValue: "发布前至少保留一个正向关键词",
+          }),
+        );
+      }
+      if (detail.negative_keywords.length === 0) {
+        missingMessages.push(
+          t("promptWorkbench.publishValidation.negativeKeywords", {
+            defaultValue: "发布前至少保留一个负向关键词",
+          }),
+        );
+      }
+      if (detail.tags.length === 0) {
+        missingMessages.push(
+          t("promptWorkbench.publishValidation.tags", {
+            defaultValue: "发布前至少设置一个标签",
+          }),
+        );
+      }
+      if (missingMessages.length > 0) {
+        missingMessages.forEach((message) => toast.warning(message));
+        throw new ApiError({
+          message: t("promptWorkbench.publishValidation.failed", {
+            defaultValue: "发布条件未满足，请补全必填项",
+          }),
+        });
+      }
+
+      const payload: SavePromptRequest = {
+        prompt_id: detail.id,
+        topic: trimmedTopic,
+        body: trimmedBody,
+        model: detail.model,
+        instructions: trimmedInstructions || undefined,
+        publish: true,
+        status: "published",
+        tags: detail.tags ?? [],
+        positive_keywords: detail.positive_keywords.map((keyword) =>
+          promptListKeywordToInput(keyword, "positive"),
+        ),
+        negative_keywords: detail.negative_keywords.map((keyword) =>
+          promptListKeywordToInput(keyword, "negative"),
+        ),
+        workspace_token: detail.workspace_token ?? undefined,
+      };
+      return savePrompt(payload);
+    },
+    onMutate: (id: number) => {
+      setPublishingId(id);
+    },
+    onSuccess: () => {
+      toast.success(
+        t("myPrompts.publishSuccess", {
+          defaultValue: "已发布，状态已更新为“已发布”。",
+        }),
+      );
+      void queryClient.invalidateQueries({ queryKey: ["my-prompts"] });
+      void queryClient.invalidateQueries({ queryKey: ["public-prompts"] });
+    },
+    onError: (error: unknown) => {
+      if (error instanceof ApiError) {
+        toast.error(error.message ?? t("myPrompts.publishFailed"));
+      } else {
+        toast.error(t("myPrompts.publishFailed"));
+      }
+    },
+    onSettled: () => {
+      setPublishingId(null);
     },
   });
 
@@ -347,24 +460,33 @@ export default function MyPromptsPage(): JSX.Element {
               </thead>
               <tbody className="divide-y divide-white/60 dark:divide-slate-800">
                 {items.map((item: PromptListItem) => (
-                  <PromptRow
-                    key={item.id}
-                    item={item}
-                    locale={i18n.language}
-                    onView={() => navigate(`/prompts/${item.id}`)}
-                    onEdit={() => editMutation.mutate(item.id)}
-                    onDelete={() => {
-                      if (deleteMutation.isPending) {
-                        return;
-                      }
-                      setConfirmDeleteId(item.id);
-                    }}
-                    isEditing={editingId === item.id && editMutation.isPending}
-                    isDeleting={
-                      deleteMutation.isPending &&
-                      deleteMutation.variables === item.id
+                <PromptRow
+                  key={item.id}
+                  item={item}
+                  locale={i18n.language}
+                  onView={() => navigate(`/prompts/${item.id}`)}
+                  onEdit={() => editMutation.mutate(item.id)}
+                  onPublish={() => {
+                    if (publishMutation.isPending) {
+                      return;
                     }
-                  />
+                    publishMutation.mutate(item.id);
+                  }}
+                  onDelete={() => {
+                    if (deleteMutation.isPending) {
+                      return;
+                    }
+                    setConfirmDeleteId(item.id);
+                  }}
+                  isEditing={editingId === item.id && editMutation.isPending}
+                  isDeleting={
+                    deleteMutation.isPending &&
+                    deleteMutation.variables === item.id
+                  }
+                  isPublishing={
+                    publishMutation.isPending && publishingId === item.id
+                  }
+                />
                 ))}
               </tbody>
             </table>
@@ -432,9 +554,24 @@ interface PromptRowProps {
   locale: string;
   onView: () => void;
   onEdit: () => void;
+  onPublish: () => void;
   onDelete: () => void;
   isEditing: boolean;
   isDeleting: boolean;
+  isPublishing: boolean;
+}
+
+function promptListKeywordToInput(
+  keyword: PromptListKeyword,
+  polarity: "positive" | "negative",
+): PromptKeywordInput {
+  return {
+    keyword_id: keyword.keyword_id,
+    word: keyword.word,
+    polarity,
+    source: keyword.source,
+    weight: clampWeight(keyword.weight),
+  };
 }
 
 function PromptRow({
@@ -442,9 +579,11 @@ function PromptRow({
   locale,
   onView,
   onEdit,
+  onPublish,
   onDelete,
   isEditing,
   isDeleting,
+  isPublishing,
 }: PromptRowProps) {
   const { t } = useTranslation();
   const statusLabel = t(`myPrompts.statusBadge.${item.status}`);
@@ -531,39 +670,56 @@ function PromptRow({
         </div>
       </td>
       <td className="px-4 py-4 align-top">
-        <div className="flex justify-end gap-2">
+        <div className="flex flex-col items-end gap-2">
           <Button
             size="sm"
-            variant="outline"
-            className="whitespace-nowrap"
-            onClick={onEdit}
-            disabled={isEditing || isDeleting}
+            className="min-w-[100px] whitespace-nowrap bg-primary/85 text-white shadow-sm hover:bg-primary focus-visible:ring-primary/60 dark:bg-primary/80"
+            onClick={onPublish}
+            disabled={isPublishing || isEditing || isDeleting}
           >
-            {isEditing ? (
+            {isPublishing ? (
               <LoaderCircle className="h-4 w-4 animate-spin" />
             ) : (
-              <Edit3 className="h-4 w-4" />
+              <Sparkles className="h-4 w-4" />
             )}
             <span className="ml-2 whitespace-nowrap">
-              {t("myPrompts.actions.edit")}
+              {t("myPrompts.actions.publish")}
             </span>
           </Button>
-          <Button
-            size="sm"
-            variant="ghost"
-            className="whitespace-nowrap text-rose-500 hover:bg-rose-50 hover:text-rose-600 dark:text-rose-400 dark:hover:bg-rose-500/10"
-            onClick={onDelete}
-            disabled={isDeleting || isEditing}
-          >
-            {isDeleting ? (
-              <LoaderCircle className="h-4 w-4 animate-spin" />
-            ) : (
-              <Trash2 className="h-4 w-4" />
-            )}
-            <span className="ml-2 whitespace-nowrap">
-              {t("myPrompts.actions.delete")}
-            </span>
-          </Button>
+          <div className="flex w-full justify-end gap-2 sm:w-auto">
+            <Button
+              size="sm"
+              variant="outline"
+              className="whitespace-nowrap"
+              onClick={onEdit}
+              disabled={isEditing || isDeleting}
+            >
+              {isEditing ? (
+                <LoaderCircle className="h-4 w-4 animate-spin" />
+              ) : (
+                <Edit3 className="h-4 w-4" />
+              )}
+              <span className="ml-2 whitespace-nowrap">
+                {t("myPrompts.actions.edit")}
+              </span>
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              className="whitespace-nowrap text-rose-500 hover:bg-rose-50 hover:text-rose-600 dark:text-rose-400 dark:hover:bg-rose-500/10"
+              onClick={onDelete}
+              disabled={isDeleting || isEditing}
+            >
+              {isDeleting ? (
+                <LoaderCircle className="h-4 w-4 animate-spin" />
+              ) : (
+                <Trash2 className="h-4 w-4" />
+              )}
+              <span className="ml-2 whitespace-nowrap">
+                {t("myPrompts.actions.delete")}
+              </span>
+            </Button>
+          </div>
         </div>
       </td>
     </tr>

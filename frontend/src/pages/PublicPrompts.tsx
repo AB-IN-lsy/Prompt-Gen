@@ -17,6 +17,7 @@ import {
   Tags,
   CircleCheck,
   AlertCircle,
+  X,
 } from "lucide-react";
 import { GlassCard } from "../components/ui/glass-card";
 import { SpotlightSearch } from "../components/ui/spotlight-search";
@@ -82,6 +83,17 @@ export default function PublicPromptsPage(): JSX.Element {
     isAdmin ? "all" : "approved",
   );
   const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (selectedId == null) {
+      return;
+    }
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [selectedId]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -222,6 +234,14 @@ export default function PublicPromptsPage(): JSX.Element {
       toast.error(message);
     },
   });
+
+  const handleCloseDetail = () => {
+    if (downloadMutation.isPending || deleteMutation.isPending) {
+      return;
+    }
+    setSelectedId(null);
+    setConfirmDeleteId(null);
+  };
   const isDeletingSelected =
     deleteMutation.isPending && deleteMutation.variables === selectedDetail?.id;
 
@@ -233,6 +253,8 @@ export default function PublicPromptsPage(): JSX.Element {
   const handleDownload = (id: number) => {
     downloadMutation.mutate(id);
   };
+
+  const allowDelete = isAdmin || offlineMode;
 
   const statusBadge = (status: string) => {
     const normalized = status.toLowerCase();
@@ -444,155 +466,194 @@ export default function PublicPromptsPage(): JSX.Element {
       </div>
 
       {selectedId && selectedDetail ? (
-        <GlassCard className="border-primary/40 bg-white/80 shadow-[0_35px_65px_-40px_rgba(59,130,246,0.65)] dark:border-primary/50 dark:bg-slate-900/70">
-          <div className="flex flex-col gap-4">
-            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-              <div>
-                <h2 className="text-xl font-semibold text-slate-900 dark:text-white">
-                  {selectedDetail.title || selectedDetail.topic}
-                </h2>
-                <p className="text-sm text-slate-500 dark:text-slate-400">
-                  {selectedDetail.summary || t("publicPrompts.noSummary")}
-                </p>
+        (() => {
+          const statusMeta = statusBadge(selectedDetail.status);
+          return (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 px-4 py-8 backdrop-blur-sm"
+          onClick={handleCloseDetail}
+        >
+          <GlassCard
+            className="relative w-full max-w-4xl overflow-hidden border-primary/40 bg-white/95 p-0 shadow-[0_45px_75px_-35px_rgba(59,130,246,0.7)] dark:border-primary/50 dark:bg-slate-900/95"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <Button
+              type="button"
+              variant="ghost"
+              className="absolute right-4 top-4 h-8 w-8 rounded-full text-slate-500 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800/80"
+              onClick={handleCloseDetail}
+            >
+              <X className="h-4 w-4" />
+            </Button>
+            <div className="flex max-h-[80vh] flex-col overflow-y-auto">
+              <div className="border-b border-white/70 bg-white/90 px-6 pb-5 pt-7 dark:border-slate-800/60 dark:bg-slate-900/85">
+                <div className="flex flex-wrap items-start justify-between gap-6">
+                  <div className="flex flex-col gap-3">
+                    <div>
+                      <span className="text-xs font-semibold uppercase tracking-[0.35em] text-slate-400">
+                        {t("publicPrompts.detailHeader.eyebrow")}
+                      </span>
+                      <h2 className="mt-2 text-2xl font-semibold leading-tight text-slate-900 dark:text-white">
+                        {selectedDetail.title || selectedDetail.topic}
+                      </h2>
+                      <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">
+                        {selectedDetail.summary || t("publicPrompts.detailHeader.subtitle")}
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2 text-xs text-slate-400 dark:text-slate-500">
+                      <CircleCheck className="h-4 w-4 text-emerald-500" />
+                      <span>
+                        {t("publicPrompts.detailMeta.model", {
+                          model: selectedDetail.model,
+                        })}
+                      </span>
+                      <span>·</span>
+                      <span>
+                        {t("publicPrompts.detailMeta.updatedAt", {
+                          date: formatDateTime(selectedDetail.updated_at, i18n.language).date,
+                          time: formatDateTime(selectedDetail.updated_at, i18n.language).time,
+                        })}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:justify-end">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Badge className={statusMeta.className}>
+                        {statusMeta.label}
+                      </Badge>
+                      <Badge variant="outline" className="border-slate-200 text-slate-500 dark:border-slate-700 dark:text-slate-300">
+                        {selectedDetail.language.toUpperCase()}
+                      </Badge>
+                    </div>
+                    <MagneticButton
+                      type="button"
+                      className="h-10 whitespace-nowrap rounded-full bg-primary/90 px-4 text-white hover:bg-primary focus-visible:ring-primary/60 dark:bg-primary/80"
+                      disabled={isDownloadingSelected || isDeletingSelected}
+                      onClick={() => handleDownload(selectedDetail.id)}
+                    >
+                      {isDownloadingSelected ? (
+                        <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
+                      ) : (
+                        <Download className="mr-2 h-4 w-4" />
+                      )}
+                      {t("publicPrompts.downloadShort")}
+                    </MagneticButton>
+                    {allowDelete ? (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="h-10 rounded-full border-rose-300 px-4 text-rose-600 hover:bg-rose-50 dark:border-rose-500/40 dark:text-rose-300 dark:hover:bg-rose-500/10"
+                        disabled={isDeletingSelected || isDownloadingSelected}
+                        onClick={() => setConfirmDeleteId(selectedDetail.id)}
+                      >
+                        {isDeletingSelected ? (
+                          <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
+                        ) : (
+                          <AlertCircle className="mr-2 h-4 w-4" />
+                        )}
+                        {t("publicPrompts.deleteShort")}
+                      </Button>
+                    ) : null}
+                  </div>
+                </div>
                 {selectedDetail.review_reason ? (
-                  <div className="mt-2 rounded-xl border border-amber-200 bg-amber-50/80 p-3 text-xs text-amber-700 dark:border-amber-400/40 dark:bg-amber-400/10 dark:text-amber-200">
+                  <div className="mt-5 rounded-xl border border-amber-200 bg-amber-50/80 p-3 text-xs text-amber-700 dark:border-amber-400/40 dark:bg-amber-400/10 dark:text-amber-200">
                     <p className="font-semibold uppercase tracking-[0.3em]">
                       {t("publicPrompts.reviewReasonTitle")}
                     </p>
-                    <p className="mt-1 whitespace-pre-wrap">
+                    <p className="mt-1 whitespace-pre-wrap leading-relaxed">
                       {selectedDetail.review_reason}
                     </p>
                   </div>
                 ) : null}
               </div>
-              <div className="flex flex-wrap items-center gap-3">
-                <MagneticButton
-                  type="button"
-                  className="bg-primary/90 text-white hover:bg-primary focus-visible:ring-primary/60 dark:bg-primary/80"
-                  disabled={isDownloadingSelected || isDeletingSelected}
-                  onClick={() => handleDownload(selectedDetail.id)}
-                >
-                  {isDownloadingSelected ? (
-                    <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
-                  ) : (
-                    <Download className="mr-2 h-4 w-4" />
-                  )}
-                  {t("publicPrompts.downloadAction")}
-                </MagneticButton>
-                {isAdmin ? (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="border-rose-300 text-rose-600 hover:bg-rose-50 dark:border-rose-500/40 dark:text-rose-300 dark:hover:bg-rose-500/10"
-                    disabled={isDeletingSelected || isDownloadingSelected}
-                    onClick={() => setConfirmDeleteId(selectedDetail.id)}
-                  >
-                    {isDeletingSelected ? (
-                      <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
+
+              <div className="flex flex-col gap-5 px-6 pb-6 pt-5">
+              <div className="grid gap-4 md:grid-cols-2">
+                <GlassCard className="bg-white/85 dark:bg-slate-900/70">
+                  <div className="flex items-center gap-2 text-xs uppercase tracking-[0.25em] text-slate-400">
+                    <Sparkles className="h-4 w-4" />
+                    {t("publicPrompts.keywords.positive")}
+                  </div>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {selectedDetail.positive_keywords.length > 0 ? (
+                      selectedDetail.positive_keywords.map((keyword, idx) => (
+                        <Badge
+                          key={`positive-${keyword.word}-${idx}`}
+                          variant="outline"
+                          className="border-emerald-300/60 text-emerald-600 dark:border-emerald-400/30 dark:text-emerald-300"
+                        >
+                          {keyword.word}
+                        </Badge>
+                      ))
                     ) : (
-                      <AlertCircle className="mr-2 h-4 w-4" />
+                      <span className="text-xs text-slate-400 dark:text-slate-500">
+                        {t("publicPrompts.keywords.empty")}
+                      </span>
                     )}
-                    {t("publicPrompts.deleteAction")}
-                  </Button>
-                ) : null}
+                  </div>
+                </GlassCard>
+
+                <GlassCard className="bg-white/85 dark:bg-slate-900/70">
+                  <div className="flex items-center gap-2 text-xs uppercase tracking-[0.25em] text-slate-400">
+                    <Tags className="h-4 w-4" />
+                    {t("publicPrompts.keywords.negative")}
+                  </div>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {selectedDetail.negative_keywords.length > 0 ? (
+                      selectedDetail.negative_keywords.map((keyword, idx) => (
+                        <Badge
+                          key={`negative-${keyword.word}-${idx}`}
+                          variant="outline"
+                          className="border-rose-300/60 text-rose-600 dark:border-rose-400/30 dark:text-rose-300"
+                        >
+                          {keyword.word}
+                        </Badge>
+                      ))
+                    ) : (
+                      <span className="text-xs text-slate-400 dark:text-slate-500">
+                        {t("publicPrompts.keywords.empty")}
+                      </span>
+                    )}
+                  </div>
+                </GlassCard>
               </div>
-            </div>
 
-            <div className="grid gap-4 md:grid-cols-2">
-              <GlassCard className="bg-white/70 dark:bg-slate-900/60">
+              <GlassCard className="bg-white/85 dark:bg-slate-900/70">
                 <div className="flex items-center gap-2 text-xs uppercase tracking-[0.25em] text-slate-400">
-                  <Sparkles className="h-4 w-4" />
-                  {t("publicPrompts.keywords.positive")}
-                </div>
-                <div className="mt-3 flex flex-wrap gap-2">
-                  {selectedDetail.positive_keywords.length > 0 ? (
-                    selectedDetail.positive_keywords.map((keyword, idx) => (
-                      <Badge
-                        key={`positive-${keyword.word}-${idx}`}
-                        variant="outline"
-                        className="border-emerald-300/60 text-emerald-600 dark:border-emerald-400/30 dark:text-emerald-300"
-                      >
-                        {keyword.word}
-                      </Badge>
-                    ))
-                  ) : (
-                    <span className="text-xs text-slate-400 dark:text-slate-500">
-                      {t("publicPrompts.keywords.empty")}
-                    </span>
-                  )}
-                </div>
-              </GlassCard>
-              <GlassCard className="bg-white/70 dark:bg-slate-900/60">
-                <div className="flex items-center gap-2 text-xs uppercase tracking-[0.25em] text-slate-400">
-                  <AlertCircle className="h-4 w-4" />
-                  {t("publicPrompts.keywords.negative")}
-                </div>
-                <div className="mt-3 flex flex-wrap gap-2">
-                  {selectedDetail.negative_keywords.length > 0 ? (
-                    selectedDetail.negative_keywords.map((keyword, idx) => (
-                      <Badge
-                        key={`negative-${keyword.word}-${idx}`}
-                        variant="outline"
-                        className="border-rose-300/60 text-rose-600 dark:border-rose-400/30 dark:text-rose-300"
-                      >
-                        {keyword.word}
-                      </Badge>
-                    ))
-                  ) : (
-                    <span className="text-xs text-slate-400 dark:text-slate-500">
-                      {t("publicPrompts.keywords.empty")}
-                    </span>
-                  )}
-                </div>
-              </GlassCard>
-            </div>
-
-            <div className="grid gap-4 md:grid-cols-2">
-              <div className="rounded-2xl border border-white/50 bg-white/70 p-4 text-sm leading-6 text-slate-700 shadow-inner dark:border-slate-800/60 dark:bg-slate-900/70 dark:text-slate-200">
-                <h3 className="mb-2 text-xs font-semibold uppercase tracking-[0.3em] text-slate-400">
+                  <Clock3 className="h-4 w-4" />
                   {t("publicPrompts.instructions")}
-                </h3>
-                <p className="whitespace-pre-wrap">
-                  {selectedDetail.instructions || t("publicPrompts.noInstructions")}
-                </p>
-              </div>
-              <div className="rounded-2xl border border-white/50 bg-white/70 p-4 text-sm leading-6 text-slate-700 shadow-inner dark:border-slate-800/60 dark:bg-slate-900/70 dark:text-slate-200">
-                <h3 className="mb-2 text-xs font-semibold uppercase tracking-[0.3em] text-slate-400">
-                  {t("publicPrompts.body")}
-                </h3>
-                <p className="max-h-60 overflow-y-auto whitespace-pre-wrap pr-2">
+                </div>
+                <div className="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-slate-600 dark:text-slate-300">
+                  {selectedDetail.instructions
+                    ? selectedDetail.instructions
+                    : t("publicPrompts.noInstructions")}
+                </div>
+              </GlassCard>
+
+              <GlassCard className="bg-white/85 dark:bg-slate-900/70 md:col-span-2">
+                <div className="flex items-center justify-between text-xs uppercase tracking-[0.25em] text-slate-400">
+                  <span>{t("publicPrompts.body")}</span>
+                </div>
+                <pre className="mt-3 max-h-[40vh] overflow-y-auto whitespace-pre-wrap break-words rounded-2xl bg-slate-900/5 p-4 text-sm leading-relaxed text-slate-600 dark:bg-slate-900/80 dark:text-slate-200">
                   {selectedDetail.body}
-                </p>
-              </div>
+                </pre>
+              </GlassCard>
             </div>
-            <div className="flex flex-wrap gap-3 text-xs text-slate-400 dark:text-slate-500">
-              <div className="flex items-center gap-2">
-                <CircleCheck className="h-4 w-4" />
-                <span>
-                  {t("publicPrompts.detailMeta.model", { model: selectedDetail.model })}
-                </span>
-              </div>
-              <div className="flex items-center gap-2">
-                <Clock3 className="h-4 w-4" />
-                <span>
-                  {t("publicPrompts.detailMeta.updatedAt", {
-                    date: formatDateTime(selectedDetail.updated_at, i18n.language).date,
-                    time: formatDateTime(selectedDetail.updated_at, i18n.language).time,
-                  })}
-                </span>
-              </div>
             </div>
-          </div>
-        </GlassCard>
+          </GlassCard>
+        </div>
+          );
+        })()
       ) : null}
 
       {selectedId && isLoadingDetail ? (
-        <GlassCard className="border-dashed border-slate-200 bg-white/70 text-sm text-slate-500 dark:border-slate-800/60 dark:bg-slate-900/60 dark:text-slate-400">
-          <div className="flex items-center gap-2">
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-900/40 px-4 py-8 backdrop-blur-sm">
+          <GlassCard className="flex items-center gap-3 border-dashed border-slate-200 bg-white/90 text-sm text-slate-500 dark:border-slate-800/60 dark:bg-slate-900/80 dark:text-slate-300">
             <LoaderCircle className="h-4 w-4 animate-spin" />
             {t("publicPrompts.loadingDetail")}
-          </div>
-        </GlassCard>
+          </GlassCard>
+        </div>
       ) : null}
 
       <ConfirmDialog

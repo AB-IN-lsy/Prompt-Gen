@@ -6,7 +6,7 @@
   "license": "ISC",
   "main": "main.js",
   "scripts": {
-    "start": "electron .",
+    "start": "node scripts/start-electron.cjs",
     "test": "echo \"Error: no test specified\" && exit 1",
     "build": "npm --prefix frontend run build",
     "dev:frontend": "npm --prefix frontend run dev",

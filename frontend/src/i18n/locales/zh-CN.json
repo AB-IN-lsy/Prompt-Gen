@@ -166,7 +166,14 @@
     "detailMeta": {
       "model": "使用模型：{{model}}",
       "updatedAt": "最近更新：{{date}} {{time}}"
-    }
+    },
+    "downloadShort": "下载到我的库",
+    "deleteShort": "删除",
+    "detailHeader": {
+      "eyebrow": "精选详情",
+      "subtitle": "暂无简介"
+    },
+    "subtitleFallback": "暂无简介"
   },
   "publicPromptReview": {
     "eyebrow": "公共库审核",
@@ -492,8 +499,11 @@
     "actions": {
       "view": "查看详情",
       "edit": "编辑",
-      "delete": "删除"
+      "delete": "删除",
+      "publish": "保存"
     },
+    "publishSuccess": "已发布，状态已更新为“已发布”。",
+    "publishFailed": "发布失败，请稍后再试。",
     "pagination": {
       "page": "第 {{page}} 页，共 {{total}} 页",
       "count": "本页展示 {{count}} 条 Prompt"
