@@ -20,6 +20,7 @@ import { Input } from "../components/ui/input";
 import { Textarea } from "../components/ui/textarea";
 import { Badge } from "../components/ui/badge";
 import { PageHeader } from "../components/layout/PageHeader";
+import { ConfirmDialog } from "../components/ui/confirm-dialog";
 import {
   createChangelogEntry,
   deleteChangelogEntry,
@@ -93,6 +94,7 @@ export default function ChangelogAdminPage() {
     locale === "zh-CN" ? ["en"] : ["zh-CN"],
   );
   const [translationModelKey, setTranslationModelKey] = useState("");
+  const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null);
   const [isDeleting, setDeleting] = useState<number | null>(null);
   const translationToastId = useRef<string | number | null>(null);
 
@@ -262,6 +264,7 @@ const updateMutation = useMutation<
     },
     onSettled: () => {
       setDeleting(null);
+      setConfirmDeleteId(null);
     },
   });
 
@@ -312,10 +315,10 @@ const updateMutation = useMutation<
   };
 
   const handleDelete = (id: number) => {
-    if (window.confirm(t("logsPage.admin.confirmDelete"))) {
-      setDeleting(id);
-      deleteMutation.mutate(id);
+    if (deleteMutation.isPending) {
+      return;
     }
+    setConfirmDeleteId(id);
   };
 
   const isSubmitting = createMutation.isPending || updateMutation.isPending;
@@ -606,6 +609,25 @@ const updateMutation = useMutation<
           )}
         </div>
       </GlassCard>
+      <ConfirmDialog
+        open={confirmDeleteId != null}
+        title={t("logsPage.admin.deleteDialogTitle")}
+        description={t("logsPage.admin.confirmDelete")}
+        confirmLabel={t("logsPage.admin.delete")}
+        cancelLabel={t("common.cancel")}
+        loading={deleteMutation.isPending}
+        onCancel={() => {
+          if (!deleteMutation.isPending) {
+            setConfirmDeleteId(null);
+          }
+        }}
+        onConfirm={() => {
+          if (confirmDeleteId != null) {
+            setDeleting(confirmDeleteId);
+            deleteMutation.mutate(confirmDeleteId);
+          }
+        }}
+      />
     </div>
   );
 }

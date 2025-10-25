@@ -66,6 +66,8 @@ Prompt Gen Desktop 是一套以 Electron 为外壳、Go 为后端、Vite/React �
 
 下述步骤适用于希望克隆本仓库并继续迭代功能的开发者。请务必先阅读 [LICENSE](LICENSE) 与 `AGENTS.md` 中的协作约定，确保贡献方式与使用范围符合协议。
 
+> ⭐ 建议同时阅读《[开发与发布流程指引](development-workflow.md)》，其中涵盖离线数据导出、版本号管理、`scripts/deploy-online.sh` 服务器部署等完整流程。
+
 ### 前提依赖
 
 - Node.js ≥ 18（建议使用与 `.nvmrc` 对齐的版本）  

@@ -22,7 +22,9 @@ import { GlassCard } from "../components/ui/glass-card";
 import { SpotlightSearch } from "../components/ui/spotlight-search";
 import { Badge } from "../components/ui/badge";
 import { MagneticButton } from "../components/ui/magnetic-button";
+import { ConfirmDialog } from "../components/ui/confirm-dialog";
 import {
+  deletePublicPrompt,
   downloadPublicPrompt,
   fetchPublicPromptDetail,
   fetchPublicPrompts,
@@ -34,6 +36,7 @@ import {
 import { cn } from "../lib/utils";
 import { useAuth } from "../hooks/useAuth";
 import { isLocalMode } from "../lib/runtimeMode";
+import { Button } from "../components/ui/button";
 
 type StatusFilter = "all" | "approved" | "pending" | "rejected";
 
@@ -79,6 +82,7 @@ export default function PublicPromptsPage(): JSX.Element {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>(
     isAdmin ? "all" : "approved",
   );
+  const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -191,6 +195,33 @@ export default function PublicPromptsPage(): JSX.Element {
   const selectedDetail: PublicPromptDetail | undefined = detailQuery.data;
   const isDownloadingSelected =
     downloadMutation.isPending && downloadMutation.variables === selectedDetail?.id;
+  const deleteMutation = useMutation<void, unknown, number>({
+    mutationFn: (id: number) => deletePublicPrompt(id),
+    onSuccess: (_, id) => {
+      toast.success(t("publicPrompts.deleteSuccess"));
+      const cachedIds =
+        queryClient.getQueryData<number[]>(["public-prompts", "downloaded"]) ?? [];
+      if (cachedIds.length > 0) {
+        queryClient.setQueryData(
+          ["public-prompts", "downloaded"],
+          cachedIds.filter((item) => item !== id),
+        );
+      }
+      void queryClient.invalidateQueries({ queryKey: ["public-prompts"] });
+      void queryClient.invalidateQueries({ queryKey: ["public-prompts", "detail", id] });
+      if (selectedId === id) {
+        setSelectedId(null);
+      }
+      setConfirmDeleteId(null);
+    },
+    onError: (error: unknown) => {
+      const message =
+        error instanceof Error ? error.message : t("errors.generic");
+      toast.error(message);
+    },
+  });
+  const isDeletingSelected =
+    deleteMutation.isPending && deleteMutation.variables === selectedDetail?.id;
 
   const handleStatusChange = (value: StatusFilter) => {
     setStatusFilter(value);
@@ -406,7 +437,7 @@ export default function PublicPromptsPage(): JSX.Element {
       {selectedId && selectedDetail ? (
         <GlassCard className="border-primary/40 bg-white/80 shadow-[0_35px_65px_-40px_rgba(59,130,246,0.65)] dark:border-primary/50 dark:bg-slate-900/70">
           <div className="flex flex-col gap-4">
-            <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
               <div>
                 <h2 className="text-xl font-semibold text-slate-900 dark:text-white">
                   {selectedDetail.title || selectedDetail.topic}
@@ -425,19 +456,37 @@ export default function PublicPromptsPage(): JSX.Element {
                   </div>
                 ) : null}
               </div>
-              <MagneticButton
-                type="button"
-                className="bg-primary/90 text-white hover:bg-primary focus-visible:ring-primary/60 dark:bg-primary/80"
-                disabled={isDownloadingSelected}
-                onClick={() => handleDownload(selectedDetail.id)}
-              >
-                {isDownloadingSelected ? (
-                  <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
-                ) : (
-                  <Download className="mr-2 h-4 w-4" />
-                )}
-                {t("publicPrompts.downloadAction")}
-              </MagneticButton>
+              <div className="flex flex-wrap items-center gap-3">
+                <MagneticButton
+                  type="button"
+                  className="bg-primary/90 text-white hover:bg-primary focus-visible:ring-primary/60 dark:bg-primary/80"
+                  disabled={isDownloadingSelected || isDeletingSelected}
+                  onClick={() => handleDownload(selectedDetail.id)}
+                >
+                  {isDownloadingSelected ? (
+                    <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <Download className="mr-2 h-4 w-4" />
+                  )}
+                  {t("publicPrompts.downloadAction")}
+                </MagneticButton>
+                {isAdmin ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="border-rose-300 text-rose-600 hover:bg-rose-50 dark:border-rose-500/40 dark:text-rose-300 dark:hover:bg-rose-500/10"
+                    disabled={isDeletingSelected || isDownloadingSelected}
+                    onClick={() => setConfirmDeleteId(selectedDetail.id)}
+                  >
+                    {isDeletingSelected ? (
+                      <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
+                    ) : (
+                      <AlertCircle className="mr-2 h-4 w-4" />
+                    )}
+                    {t("publicPrompts.deleteAction")}
+                  </Button>
+                ) : null}
+              </div>
             </div>
 
             <div className="grid gap-4 md:grid-cols-2">
@@ -507,7 +556,6 @@ export default function PublicPromptsPage(): JSX.Element {
                 </p>
               </div>
             </div>
-
             <div className="flex flex-wrap gap-3 text-xs text-slate-400 dark:text-slate-500">
               <div className="flex items-center gap-2">
                 <CircleCheck className="h-4 w-4" />
@@ -537,6 +585,25 @@ export default function PublicPromptsPage(): JSX.Element {
           </div>
         </GlassCard>
       ) : null}
+
+      <ConfirmDialog
+        open={confirmDeleteId != null}
+        title={t("publicPrompts.deleteDialogTitle")}
+        description={t("publicPrompts.deleteConfirm")}
+        confirmLabel={t("publicPrompts.deleteAction")}
+        cancelLabel={t("common.cancel")}
+        loading={deleteMutation.isPending}
+        onCancel={() => {
+          if (!deleteMutation.isPending) {
+            setConfirmDeleteId(null);
+          }
+        }}
+        onConfirm={() => {
+          if (confirmDeleteId != null) {
+            deleteMutation.mutate(confirmDeleteId);
+          }
+        }}
+      />
     </div>
   );
 }

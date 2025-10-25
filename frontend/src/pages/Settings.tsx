@@ -28,6 +28,7 @@ import { Textarea } from "../components/ui/textarea";
 import { AvatarUploader } from "../components/account/AvatarUploader";
 import { useAuth } from "../hooks/useAuth";
 import { PageHeader } from "../components/layout/PageHeader";
+import { ConfirmDialog } from "../components/ui/confirm-dialog";
 import { Download, LoaderCircle, Upload } from "lucide-react";
 import {
   updateCurrentUser,
@@ -236,6 +237,7 @@ export default function SettingsPage() {
   });
   const [editingModelId, setEditingModelId] = useState<number | null>(null);
   const [editModelError, setEditModelError] = useState<string | null>(null);
+  const [modelPendingDeletion, setModelPendingDeletion] = useState<UserModelCredential | null>(null);
 
   // 读取模型凭据列表，用于展示和联动
   const modelsQuery = useQuery<UserModelCredential[]>({
@@ -515,6 +517,7 @@ export default function SettingsPage() {
       toast.success(t("settings.modelCard.deleteSuccess"));
       await queryClient.invalidateQueries({ queryKey: ["models"] });
       await refreshProfile();
+      setModelPendingDeletion(null);
     },
     onError: handleModelRequestError,
   });
@@ -882,15 +885,7 @@ export default function SettingsPage() {
     ) {
       return;
     }
-    const confirmed = window.confirm(
-      t("settings.modelCard.deleteConfirm", {
-        name: credential.display_name || credential.model_key,
-      }),
-    );
-    if (!confirmed) {
-      return;
-    }
-    deleteModelMutation.mutate(credential.id);
+    setModelPendingDeletion(credential);
   };
 
   const handleStartEditModel = (credential: UserModelCredential) => {
@@ -1804,6 +1799,30 @@ export default function SettingsPage() {
       </GlassCard>
       </>
       ) : null}
+      <ConfirmDialog
+        open={modelPendingDeletion != null}
+        title={t("settings.modelCard.deleteDialogTitle")}
+        description={modelPendingDeletion
+          ? t("settings.modelCard.deleteConfirm", {
+              name:
+                modelPendingDeletion.display_name ||
+                modelPendingDeletion.model_key,
+            })
+          : ""}
+        confirmLabel={t("settings.modelCard.delete")}
+        cancelLabel={t("common.cancel")}
+        loading={deleteModelMutation.isPending}
+        onCancel={() => {
+          if (!deleteModelMutation.isPending) {
+            setModelPendingDeletion(null);
+          }
+        }}
+        onConfirm={() => {
+          if (modelPendingDeletion) {
+            deleteModelMutation.mutate(modelPendingDeletion.id);
+          }
+        }}
+      />
     </div>
   );
 }

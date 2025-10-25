@@ -16,6 +16,7 @@ import {
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
 import { SpotlightSearch } from "../components/ui/spotlight-search";
+import { ConfirmDialog } from "../components/ui/confirm-dialog";
 import {
   PROMPT_KEYWORD_MAX_LENGTH,
   PROMPT_TAG_MAX_LENGTH,
@@ -87,6 +88,7 @@ export default function MyPromptsPage(): JSX.Element {
   const [page, setPage] = useState(1);
   const [searchInput, setSearchInput] = useState("");
   const [committedSearch, setCommittedSearch] = useState("");
+  const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null);
 
   const listQuery = useQuery<PromptListResponse>({
     queryKey: ["my-prompts", { status, page, committedSearch }],
@@ -129,6 +131,7 @@ export default function MyPromptsPage(): JSX.Element {
     onSuccess: () => {
       toast.success(t("myPrompts.deleteSuccess"));
       void queryClient.invalidateQueries({ queryKey: ["my-prompts"] });
+      setConfirmDeleteId(null);
     },
     onError: (error: unknown) => {
       toast.error(
@@ -350,13 +353,7 @@ export default function MyPromptsPage(): JSX.Element {
                       if (deleteMutation.isPending) {
                         return;
                       }
-                      const confirmed = window.confirm(
-                        t("myPrompts.deleteConfirm"),
-                      );
-                      if (!confirmed) {
-                        return;
-                      }
-                      deleteMutation.mutate(item.id);
+                      setConfirmDeleteId(item.id);
                     }}
                     isEditing={editingId === item.id && editMutation.isPending}
                     isDeleting={
@@ -397,6 +394,24 @@ export default function MyPromptsPage(): JSX.Element {
           </Button>
         </div>
       </footer>
+      <ConfirmDialog
+        open={confirmDeleteId != null}
+        title={t("myPrompts.deleteDialogTitle")}
+        description={t("myPrompts.deleteConfirm")}
+        confirmLabel={t("myPrompts.actions.delete")}
+        cancelLabel={t("common.cancel")}
+        loading={deleteMutation.isPending}
+        onCancel={() => {
+          if (!deleteMutation.isPending) {
+            setConfirmDeleteId(null);
+          }
+        }}
+        onConfirm={() => {
+          if (confirmDeleteId != null) {
+            deleteMutation.mutate(confirmDeleteId);
+          }
+        }}
+      />
     </div>
   );
 }

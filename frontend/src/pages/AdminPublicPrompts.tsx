@@ -18,6 +18,7 @@ import { Button } from "../components/ui/button";
 import { Badge } from "../components/ui/badge";
 import { SpotlightSearch } from "../components/ui/spotlight-search";
 import { Textarea } from "../components/ui/textarea";
+import { ConfirmDialog } from "../components/ui/confirm-dialog";
 import {
   deletePublicPrompt,
   fetchPublicPromptDetail,
@@ -58,6 +59,7 @@ export default function AdminPublicPromptsPage(): JSX.Element {
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("pending");
   const [rejectReason, setRejectReason] = useState("");
+  const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -155,6 +157,7 @@ export default function AdminPublicPromptsPage(): JSX.Element {
       void queryClient.invalidateQueries({
         queryKey: ["admin-public-prompts", "detail", id],
       });
+      setConfirmDeleteId(null);
     },
     onError: (error: unknown) => {
       const message =
@@ -358,17 +361,38 @@ export default function AdminPublicPromptsPage(): JSX.Element {
               onReject={handleReject}
               onDelete={() => {
                 if (detailQuery.data) {
-                  deleteMutation.mutate(detailQuery.data.id);
+                  setConfirmDeleteId(detailQuery.data.id);
                 }
               }}
               isSubmitting={reviewMutation.isPending}
-              isDeleting={deleteMutation.isPending}
+              isDeleting={
+                deleteMutation.isPending &&
+                deleteMutation.variables === detailQuery.data.id
+              }
               formatDateTime={formatDateTime}
               t={t}
             />
           )}
         </GlassCard>
       </div>
+      <ConfirmDialog
+        open={confirmDeleteId != null}
+        title={t("publicPromptReview.deleteDialogTitle")}
+        description={t("publicPromptReview.deleteConfirm")}
+        confirmLabel={t("publicPromptReview.deleteAction")}
+        cancelLabel={t("common.cancel")}
+        loading={deleteMutation.isPending}
+        onCancel={() => {
+          if (!deleteMutation.isPending) {
+            setConfirmDeleteId(null);
+          }
+        }}
+        onConfirm={() => {
+          if (confirmDeleteId != null) {
+            deleteMutation.mutate(confirmDeleteId);
+          }
+        }}
+      />
     </div>
   );
 }
@@ -398,14 +422,6 @@ function PublicPromptDetailPanel({
 }): JSX.Element {
   const handleDeleteClick = () => {
     if (isSubmitting || isDeleting) {
-      return;
-    }
-    const confirmed = window.confirm(
-      t("publicPromptReview.deleteConfirm", {
-        defaultValue: "确认删除该公共 Prompt 吗？此操作不可撤销。",
-      }),
-    );
-    if (!confirmed) {
       return;
     }
     onDelete();

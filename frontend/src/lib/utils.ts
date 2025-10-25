@@ -61,10 +61,16 @@ function deriveAssetOriginFromApiBase(apiBaseUrl: string): string {
 
 function resolveAssetOrigin(): string {
   const derived = deriveAssetOriginFromApiBase(API_BASE_URL);
-  if (isLocalMode()) {
-    return derived || LOCAL_ASSET_ORIGIN_FALLBACK;
+  if (!isLocalMode() && typeof window !== "undefined") {
+    const origin = window.location.origin ?? "";
+    if (/^https?:\/\//i.test(origin)) {
+      return origin;
+    }
   }
-  return derived;
+  if (derived) {
+    return derived;
+  }
+  return LOCAL_ASSET_ORIGIN_FALLBACK;
 }
 
 export function resolveAssetUrl(path?: string | null): string | null {
