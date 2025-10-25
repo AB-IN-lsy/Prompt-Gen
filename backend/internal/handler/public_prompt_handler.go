@@ -19,8 +19,6 @@ import (
 )
 
 const (
-	defaultPublicPromptPageSize = 12
-	maxPublicPromptPageSize     = 60
 	// DefaultPublicSubmitLimit 控制公共库投稿默认限额。
 	DefaultPublicSubmitLimit = 5
 	// DefaultPublicSubmitWindow 控制公共库投稿限流窗口。
@@ -114,16 +112,24 @@ func (h *PublicPromptHandler) List(c *gin.Context) {
 		return
 	}
 
+	defaultPageSize, maxPageSize := h.service.ListPageSizeBounds()
+	if defaultPageSize <= 0 {
+		defaultPageSize = publicpromptsvc.DefaultListPageSize
+	}
+	if maxPageSize <= 0 {
+		maxPageSize = publicpromptsvc.DefaultListMaxPageSize
+	}
+
 	page, err := strconv.Atoi(c.DefaultQuery("page", "1"))
 	if err != nil || page <= 0 {
 		page = 1
 	}
-	pageSize, err := strconv.Atoi(c.DefaultQuery("page_size", strconv.Itoa(defaultPublicPromptPageSize)))
+	pageSize, err := strconv.Atoi(c.DefaultQuery("page_size", strconv.Itoa(defaultPageSize)))
 	if err != nil || pageSize <= 0 {
-		pageSize = defaultPublicPromptPageSize
+		pageSize = defaultPageSize
 	}
-	if pageSize > maxPublicPromptPageSize {
-		pageSize = maxPublicPromptPageSize
+	if maxPageSize > 0 && pageSize > maxPageSize {
+		pageSize = maxPageSize
 	}
 
 	filter := publicpromptsvc.ListFilter{
@@ -195,10 +201,11 @@ func (h *PublicPromptHandler) List(c *gin.Context) {
 		http.StatusOK,
 		gin.H{"items": items},
 		response.MetaPagination{
-			Page:       result.Page,
-			PageSize:   result.PageSize,
-			TotalItems: int(result.Total),
-			TotalPages: result.TotalPages,
+			Page:         result.Page,
+			PageSize:     result.PageSize,
+			TotalItems:   int(result.Total),
+			TotalPages:   result.TotalPages,
+			CurrentCount: len(items),
 		},
 	)
 }

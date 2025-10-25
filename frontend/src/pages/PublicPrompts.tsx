@@ -37,10 +37,9 @@ import { cn } from "../lib/utils";
 import { useAuth } from "../hooks/useAuth";
 import { isLocalMode } from "../lib/runtimeMode";
 import { Button } from "../components/ui/button";
+import { PUBLIC_PROMPT_LIST_PAGE_SIZE } from "../config/prompt";
 
 type StatusFilter = "all" | "approved" | "pending" | "rejected";
-
-const PAGE_SIZE = 9;
 
 const formatDateTime = (value?: string | null, locale?: string) => {
   if (!value) {
@@ -139,7 +138,7 @@ export default function PublicPromptsPage(): JSX.Element {
     queryFn: () =>
       fetchPublicPrompts({
         page,
-        pageSize: PAGE_SIZE,
+        pageSize: PUBLIC_PROMPT_LIST_PAGE_SIZE,
         query: debouncedSearch || undefined,
         status: statusFilter === "all" ? undefined : statusFilter,
       }),
@@ -150,6 +149,9 @@ export default function PublicPromptsPage(): JSX.Element {
   const listMeta = listQuery.data?.meta;
   const totalPages = listMeta?.total_pages ?? 1;
   const totalItems = listMeta?.total_items ?? items.length;
+  const currentCount =
+    listMeta?.current_count ??
+    Math.min(items.length, PUBLIC_PROMPT_LIST_PAGE_SIZE);
 
   const detailQuery = useQuery<PublicPromptDetail>({
     queryKey: ["public-prompts", "detail", selectedId],
@@ -322,7 +324,7 @@ export default function PublicPromptsPage(): JSX.Element {
 
       <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
         {isLoadingList && items.length === 0
-          ? Array.from({ length: PAGE_SIZE }).map((_, index) => (
+          ? Array.from({ length: PUBLIC_PROMPT_LIST_PAGE_SIZE }).map((_, index) => (
               <GlassCard
                 key={`skeleton-${index}`}
                 className="animate-pulse border-dashed border-slate-200 bg-white/60 dark:border-slate-800/60 dark:bg-slate-900/50"
@@ -408,11 +410,18 @@ export default function PublicPromptsPage(): JSX.Element {
       </div>
 
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-        <div className="text-xs text-slate-400 dark:text-slate-500">
-          {t("publicPrompts.paginationInfo", {
-            page,
-            totalPages,
-          })}
+        <div className="flex flex-col gap-1 text-xs text-slate-400 dark:text-slate-500 md:flex-row md:items-center md:gap-4">
+          <span>
+            {t("publicPrompts.paginationInfo", {
+              page,
+              totalPages,
+            })}
+          </span>
+          <span>
+            {t("publicPrompts.paginationCount", {
+              count: currentCount,
+            })}
+          </span>
         </div>
         <div className="flex items-center gap-2">
           <button

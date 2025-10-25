@@ -20,8 +20,10 @@ import { ConfirmDialog } from "../components/ui/confirm-dialog";
 import {
   PROMPT_KEYWORD_MAX_LENGTH,
   PROMPT_TAG_MAX_LENGTH,
+  KEYWORD_ROW_LIMIT,
+  DEFAULT_KEYWORD_WEIGHT,
+  MY_PROMPTS_PAGE_SIZE,
 } from "../config/prompt";
-import { KEYWORD_ROW_LIMIT, DEFAULT_KEYWORD_WEIGHT } from "../config/prompt";
 import {
   deletePrompt,
   fetchMyPrompts,
@@ -96,7 +98,7 @@ export default function MyPromptsPage(): JSX.Element {
       fetchMyPrompts({
         status: status === "all" ? undefined : status,
         page,
-        pageSize: undefined,
+        pageSize: MY_PROMPTS_PAGE_SIZE,
         query: committedSearch || undefined,
       }),
     placeholderData: (previousData) => previousData,
@@ -143,6 +145,8 @@ export default function MyPromptsPage(): JSX.Element {
   const meta: PromptListMeta | undefined = listQuery.data?.meta;
   const items: PromptListItem[] = listQuery.data?.items ?? [];
   const totalPages = meta?.total_pages ?? 1;
+  const currentCount =
+    meta?.current_count ?? Math.min(items.length, MY_PROMPTS_PAGE_SIZE);
   const isLoading = listQuery.isLoading;
   const isFetching = listQuery.isFetching;
 
@@ -369,12 +373,19 @@ export default function MyPromptsPage(): JSX.Element {
       </section>
 
       <footer className="flex items-center justify-between rounded-3xl border border-white/60 bg-white/75 px-4 py-3 text-sm text-slate-500 shadow-sm transition-colors dark:border-slate-800 dark:bg-slate-900/60 dark:text-slate-400">
-        <span>
-          {t("myPrompts.pagination.page", {
-            page,
-            total: totalPages,
-          })}
-        </span>
+        <div className="flex flex-col gap-1 text-xs sm:flex-row sm:items-center sm:gap-4 sm:text-sm">
+          <span>
+            {t("myPrompts.pagination.page", {
+              page,
+              total: totalPages,
+            })}
+          </span>
+          <span>
+            {t("myPrompts.pagination.count", {
+              count: currentCount,
+            })}
+          </span>
+        </div>
         <div className="flex items-center gap-2">
           <Button
             variant="ghost"

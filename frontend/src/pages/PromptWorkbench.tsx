@@ -39,6 +39,7 @@ import {
   LoaderCircle,
   Minus,
   Plus,
+  RotateCcw,
   Sparkles,
   X,
 } from "lucide-react";
@@ -1118,14 +1119,31 @@ export default function PromptWorkbenchPage() {
           }),
         });
       }
+      const trimmedTopic = topic.trim();
+      if (!trimmedTopic) {
+        throw new ApiError({
+          message: t("promptWorkbench.topicMissing", {
+            defaultValue: "请先填写主题",
+          }),
+        });
+      }
+      const trimmedInstructions = instructions.trim();
+      if (!trimmedInstructions) {
+        throw new ApiError({
+          message: t("promptWorkbench.instructionsRequired", {
+            defaultValue: "请先补充要求，便于 AI 保持方向一致。",
+          }),
+        });
+      }
       return generatePromptPreview({
-        topic,
+        topic: trimmedTopic,
         model_key: model,
         positive_keywords: positiveKeywords.map(keywordToInput),
         negative_keywords: negativeKeywords.map(keywordToInput),
+        description: description.trim() || undefined,
         prompt_id:
           promptId && Number(promptId) > 0 ? Number(promptId) : undefined,
-        instructions: instructions.trim() || undefined,
+        instructions: trimmedInstructions,
         language: "zh",
         workspace_token: workspaceToken ?? undefined,
       });
@@ -1562,6 +1580,10 @@ export default function PromptWorkbenchPage() {
 
   const isGenerating = generateMutation.isPending;
   const isAugmenting = augmentMutation.isPending;
+  const trimmedTopic = topic.trim();
+  const trimmedInstructions = instructions.trim();
+  const canGenerate =
+    hasPositive && trimmedTopic.length > 0 && trimmedInstructions.length > 0 && !isGenerating;
 
   return (
     <div className="flex flex-col gap-6 text-slate-700 transition-colors dark:text-slate-200">
@@ -1575,6 +1597,36 @@ export default function PromptWorkbenchPage() {
         description={t("promptWorkbench.workbenchSubtitle", {
           defaultValue: "从解析需求到发布 Prompt 的一站式工作区。",
         })}
+        actions={
+          <>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="gap-1.5"
+              onClick={handleCancel}
+              disabled={isGenerating || interpretMutation.isPending}
+            >
+              <RotateCcw className="h-3.5 w-3.5" />
+              {t("promptWorkbench.cancel", { defaultValue: "重置" })}
+            </Button>
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              className="shadow-sm"
+              onClick={handleGenerate}
+              disabled={!canGenerate}
+            >
+              {isGenerating ? (
+                <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <Sparkles className="mr-2 h-4 w-4" />
+              )}
+              {t("promptWorkbench.generate", { defaultValue: "AI 生成" })}
+            </Button>
+          </>
+        }
       />
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-[360px_minmax(320px,360px)_minmax(0,1fr)] xl:items-start">
       <GlassCard className="flex flex-col gap-6">
@@ -1630,7 +1682,7 @@ export default function PromptWorkbenchPage() {
         </div>
 
         <header className="flex items-center justify-between">
-          <div>
+          <div className="space-y-1">
             <p className="text-xs uppercase tracking-[0.28em] text-slate-400 dark:text-slate-500">
               {t("promptWorkbench.descriptionEyebrow", {
                 defaultValue: "需求解析",
@@ -1641,6 +1693,11 @@ export default function PromptWorkbenchPage() {
                 defaultValue: "自然语言描述",
               })}
             </h2>
+            <p className="text-xs text-slate-400 dark:text-slate-500">
+              {t("promptWorkbench.descriptionDetailHint", {
+                defaultValue: "请尽可能详细描述需求，帮助 AI 理解你的目标。",
+              })}
+            </p>
           </div>
         </header>
         <p className="text-xs text-slate-500 dark:text-slate-400">
@@ -1875,20 +1932,6 @@ export default function PromptWorkbenchPage() {
               })}
             </h2>
           </div>
-          <Button
-            variant="secondary"
-            size="sm"
-            className="shadow-sm"
-            onClick={handleGenerate}
-            disabled={isGenerating || !hasPositive}
-          >
-            {isGenerating ? (
-              <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
-            ) : (
-              <Sparkles className="mr-2 h-4 w-4" />
-            )}
-            {t("promptWorkbench.generate", { defaultValue: "AI 生成" })}
-          </Button>
         </header>
 
         <div className="rounded-3xl border border-white/60 bg-white/80 p-5 shadow-inner transition-colors dark:border-slate-800 dark:bg-slate-900/70">
@@ -2038,9 +2081,6 @@ export default function PromptWorkbenchPage() {
         </div>
 
         <div className="flex flex-wrap items-center justify-end gap-3">
-          <Button variant="ghost" onClick={handleCancel}>
-            {t("promptWorkbench.cancel", { defaultValue: "重置" })}
-          </Button>
           <Button
             variant="outline"
             onClick={handleSaveDraft}

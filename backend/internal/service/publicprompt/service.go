@@ -26,9 +26,17 @@ var ErrReviewStatusInvalid = errors.New("审核状态不合法")
 // ErrPromptNotApproved 表示公共 Prompt 尚未通过审核，无法下载。
 var ErrPromptNotApproved = errors.New("公共 Prompt 尚未通过审核")
 
-const (
-	defaultListPageSize = 12
-)
+// DefaultListPageSize 定义公共库列表默认每页条目数。
+const DefaultListPageSize = 9
+
+// DefaultListMaxPageSize 定义公共库列表允许的最大单页条目数。
+const DefaultListMaxPageSize = 60
+
+// Config 描述公共库服务的可配置参数。
+type Config struct {
+	DefaultPageSize int
+	MaxPageSize     int
+}
 
 // Service 封装公共 Prompt 库相关的业务逻辑。
 type Service struct {
@@ -36,18 +44,36 @@ type Service struct {
 	db              *gorm.DB
 	logger          *zap.SugaredLogger
 	allowSubmission bool
+	defaultPageSize int
+	maxPageSize     int
 }
 
 // NewService 创建公共 Prompt 服务。
 func NewService(repo *repository.PublicPromptRepository, db *gorm.DB, logger *zap.SugaredLogger, allowSubmission bool) *Service {
+	return NewServiceWithConfig(repo, db, logger, allowSubmission, Config{})
+}
+
+// NewServiceWithConfig 创建公共 Prompt 服务，允许自定义分页配置。
+func NewServiceWithConfig(repo *repository.PublicPromptRepository, db *gorm.DB, logger *zap.SugaredLogger, allowSubmission bool, cfg Config) *Service {
 	if logger == nil {
 		logger = zap.NewNop().Sugar()
+	}
+	if cfg.DefaultPageSize <= 0 {
+		cfg.DefaultPageSize = DefaultListPageSize
+	}
+	if cfg.MaxPageSize <= 0 {
+		cfg.MaxPageSize = DefaultListMaxPageSize
+	}
+	if cfg.DefaultPageSize > cfg.MaxPageSize {
+		cfg.DefaultPageSize = cfg.MaxPageSize
 	}
 	return &Service{
 		repo:            repo,
 		db:              db,
 		logger:          logger,
 		allowSubmission: allowSubmission,
+		defaultPageSize: cfg.DefaultPageSize,
+		maxPageSize:     cfg.MaxPageSize,
 	}
 }
 
@@ -76,7 +102,10 @@ func (s *Service) List(ctx context.Context, filter ListFilter) (*ListResult, err
 		filter.Page = 1
 	}
 	if filter.PageSize <= 0 {
-		filter.PageSize = defaultListPageSize
+		filter.PageSize = s.defaultPageSize
+	}
+	if s.maxPageSize > 0 && filter.PageSize > s.maxPageSize {
+		filter.PageSize = s.maxPageSize
 	}
 	repoFilter := repository.PublicPromptListFilter{
 		Query:        filter.Query,
@@ -101,6 +130,11 @@ func (s *Service) List(ctx context.Context, filter ListFilter) (*ListResult, err
 		Total:      total,
 		TotalPages: totalPages,
 	}, nil
+}
+
+// ListPageSizeBounds 返回公共库分页的默认与最大条目数。
+func (s *Service) ListPageSizeBounds() (int, int) {
+	return s.defaultPageSize, s.maxPageSize
 }
 
 // Get 查询单条公共 Prompt 详情。

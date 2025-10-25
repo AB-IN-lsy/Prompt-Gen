@@ -144,6 +144,7 @@
     "deleteConfirm": "Delete this public prompt? This cannot be undone.",
     "deleteSuccess": "The public prompt has been removed.",
     "paginationInfo": "Page {{page}} of {{totalPages}}",
+    "paginationCount": "{{count}} prompts on this page",
     "prevPage": "Previous",
     "nextPage": "Next",
     "loadingDetail": "Loading prompt details…",
@@ -313,7 +314,7 @@
     "descriptionPlaceholder": "e.g. generate an interview prompt focusing on React Hooks",
     "descriptionRequired": "Please describe what you need so the AI can help.",
     "instructionsLabel": "Additional instructions",
-    "instructionsPlaceholder": "(Optional) tone, structure, output format…",
+    "instructionsPlaceholder": "Tone, structure, output format…",
     "tagsLabel": "Tags",
     "tagLimitHint": "Up to {{limit}} tags",
     "tagsPlaceholder": "Type a tag and press Enter",
@@ -326,6 +327,7 @@
     "confidence": "Confidence {{value}}",
     "confidenceHint": "Click the button to interpret your description",
     "interpret": "Interpret",
+    "descriptionDetailHint": "Describe your intent in as much detail as possible to keep the prompt aligned.",
     "descriptionHelper": "Once interpreted, the topic, additional instructions and initial keywords will be filled automatically so you can keep refining.",
     "interpretSuccess": "Description parsed.",
     "augmentKeywords": "Augment keywords",
@@ -337,6 +339,7 @@
     "negativeAutoTrimmed": "Kept the first {{limit}} negative keywords automatically.",
     "keywordDuplicate": "This keyword already exists.",
     "keywordRemoveFailed": "Failed to remove keyword. Please try again later.",
+    "instructionsRequired": "Please provide the additional instructions so the AI can stay on target.",
     "generateSuccess": "Prompt generated.",
     "saveQueued": "Save job queued and will persist shortly.",
     "keywordRemoveHint": "Use the × button to remove a keyword.",
@@ -492,7 +495,8 @@
       "delete": "Delete"
     },
     "pagination": {
-      "page": "Page {{page}} of {{total}}"
+      "page": "Page {{page}} of {{total}}",
+      "count": "{{count}} prompts on this page"
     },
     "loading": "Loading prompt...",
     "editSuccess": "Prompt loaded. Redirecting to the workbench...",

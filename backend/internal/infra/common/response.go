@@ -54,10 +54,11 @@ type Response struct {
 
 // MetaPagination 描述分页信息，可嵌入到 Response.Meta。
 type MetaPagination struct {
-	Page       int `json:"page"`
-	PageSize   int `json:"page_size"`
-	TotalItems int `json:"total_items"`
-	TotalPages int `json:"total_pages"`
+	Page         int `json:"page"`
+	PageSize     int `json:"page_size"`
+	TotalItems   int `json:"total_items"`
+	TotalPages   int `json:"total_pages"`
+	CurrentCount int `json:"current_count"`
 }
 
 // Success 以统一格式返回成功结果。

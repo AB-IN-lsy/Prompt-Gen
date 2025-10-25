@@ -5,11 +5,15 @@
  * @LastEditTime: 2025-10-09 23:53:15
  */
 import type { AxiosResponse } from "axios";
-import { PROMPT_KEYWORD_MAX_LENGTH } from "../config/prompt";
+import {
+  DEFAULT_KEYWORD_WEIGHT,
+  PROMPT_KEYWORD_MAX_LENGTH,
+  MY_PROMPTS_PAGE_SIZE,
+  PUBLIC_PROMPT_LIST_PAGE_SIZE,
+} from "../config/prompt";
 import { ApiError } from "./errors";
 import { http, normaliseError } from "./http";
 import { clampTextWithOverflow } from "./utils";
-import { DEFAULT_KEYWORD_WEIGHT } from "../config/prompt";
 
 export type KeywordPolarity = "positive" | "negative";
 export type KeywordSource = "local" | "api" | "manual" | "model";
@@ -207,6 +211,7 @@ export interface PromptListMeta {
   page_size: number;
   total_items: number;
   total_pages: number;
+  current_count: number;
 }
 
 export interface PromptListResponse {
@@ -236,6 +241,7 @@ export interface PublicPromptListMeta {
   page_size: number;
   total_items: number;
   total_pages: number;
+  current_count: number;
 }
 
 export interface PublicPromptListResponse {
@@ -494,6 +500,7 @@ export interface GeneratePromptRequest {
   model_key: string;
   positive_keywords: PromptKeywordInput[];
   negative_keywords: PromptKeywordInput[];
+  description?: string;
   prompt_id?: number;
   language?: string;
   instructions?: string;
@@ -818,6 +825,7 @@ export async function generatePromptPreview(
         model_key: payload.model_key,
         language: payload.language,
         instructions: payload.instructions,
+        description: payload.description,
         tone: payload.tone,
         temperature: payload.temperature,
         max_tokens: payload.max_tokens,
@@ -954,15 +962,26 @@ export async function fetchMyPrompts(params: {
       },
     });
     const meta = (response as typeof response & { meta?: PromptListMeta }).meta;
+    const effectivePageSize = params.pageSize ?? MY_PROMPTS_PAGE_SIZE;
     const fallbackMeta: PromptListMeta = {
       page: params.page ?? 1,
-      page_size: params.pageSize ?? 20,
+      page_size: effectivePageSize,
       total_items: response.data?.items?.length ?? 0,
       total_pages: 1,
+      current_count: Math.min(
+        response.data?.items?.length ?? 0,
+        effectivePageSize,
+      ),
     };
+    const resolvedMeta = meta ?? fallbackMeta;
+    const currentCount =
+      resolvedMeta.current_count ?? response.data?.items?.length ?? 0;
     return {
       items: response.data?.items ?? [],
-      meta: meta ?? fallbackMeta,
+      meta: {
+        ...resolvedMeta,
+        current_count: currentCount,
+      },
     };
   } catch (error) {
     throw normaliseError(error);
@@ -1011,15 +1030,23 @@ export async function fetchPublicPrompts(params: {
           typeof item?.review_reason === "string" ? item.review_reason : undefined,
       } as PublicPromptListItem;
     });
-    const meta =
-      response.meta ??
-      ({
-        page: params.page ?? 1,
-        page_size: params.pageSize ?? 12,
-        total_items: items.length,
-        total_pages: 1,
-      } satisfies PublicPromptListMeta);
-    return { items, meta };
+    const effectivePageSize = params.pageSize ?? PUBLIC_PROMPT_LIST_PAGE_SIZE;
+    const fallbackMeta: PublicPromptListMeta = {
+      page: params.page ?? 1,
+      page_size: effectivePageSize,
+      total_items: items.length,
+      total_pages: 1,
+      current_count: Math.min(items.length, effectivePageSize),
+    };
+    const resolvedMeta = response.meta ?? fallbackMeta;
+    const currentCount = resolvedMeta.current_count ?? items.length;
+    return {
+      items,
+      meta: {
+        ...resolvedMeta,
+        current_count: currentCount,
+      },
+    };
   } catch (error) {
     throw normaliseError(error);
   }

@@ -88,6 +88,12 @@ const DefaultTagLimit = 3
 // DefaultTagMaxLength 限制标签字符数，默认 5 个字符。
 const DefaultTagMaxLength = 5
 
+// DefaultPromptListPageSize 定义个人 Prompt 列表的默认分页大小。
+const DefaultPromptListPageSize = 10
+
+// DefaultPromptListMaxPageSize 定义个人 Prompt 列表的最大分页大小。
+const DefaultPromptListMaxPageSize = 100
+
 // DefaultVersionRetentionLimit 默认保留的 Prompt 历史版本数量。
 const DefaultVersionRetentionLimit = 5
 
@@ -165,10 +171,10 @@ func NewServiceWithConfig(prompts *repository.PromptRepository, keywords *reposi
 		cfg.TagMaxLength = DefaultTagMaxLength
 	}
 	if cfg.DefaultListPageSize <= 0 {
-		cfg.DefaultListPageSize = 20
+		cfg.DefaultListPageSize = DefaultPromptListPageSize
 	}
 	if cfg.MaxListPageSize <= 0 {
-		cfg.MaxListPageSize = 100
+		cfg.MaxListPageSize = DefaultPromptListMaxPageSize
 	}
 	if cfg.DefaultListPageSize > cfg.MaxListPageSize {
 		cfg.DefaultListPageSize = cfg.MaxListPageSize
@@ -954,6 +960,7 @@ type GenerateInput struct {
 	UserID            uint
 	Topic             string
 	ModelKey          string
+	Description       string
 	PositiveKeywords  []KeywordItem
 	NegativeKeywords  []KeywordItem
 	WorkspaceToken    string // 前端和后端约定的“临时工作区”标识
@@ -2400,6 +2407,9 @@ func buildGenerateRequest(input GenerateInput) modeldomain.ChatCompletionRequest
 	builder := &strings.Builder{}
 	fmt.Fprintf(builder, "请面向 %s 输出一个完整 Prompt，仅返回最终 Prompt 文本。\n", lang)
 	fmt.Fprintf(builder, "主题：%s\n", input.Topic)
+	if desc := strings.TrimSpace(input.Description); desc != "" {
+		fmt.Fprintf(builder, "用户需求描述：%s\n", desc)
+	}
 	fmt.Fprintf(builder, "正向关键词：%s\n", joinKeywordWords(input.PositiveKeywords))
 	if len(input.NegativeKeywords) > 0 {
 		fmt.Fprintf(builder, "负向关键词：%s\n", joinKeywordWords(input.NegativeKeywords))

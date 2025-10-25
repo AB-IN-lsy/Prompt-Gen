@@ -165,6 +165,7 @@ type generateRequest struct {
 	ModelKey          string           `json:"model_key" binding:"required"`
 	Language          string           `json:"language"`
 	Instructions      string           `json:"instructions"`
+	Description       string           `json:"description"`
 	Tone              string           `json:"tone"`
 	Temperature       float64          `json:"temperature"`
 	MaxTokens         int              `json:"max_tokens"`
@@ -204,7 +205,7 @@ func (h *PromptHandler) ListPrompts(c *gin.Context) {
 	if err != nil || page <= 0 {
 		page = 1
 	}
-	pageSize, err := strconv.Atoi(c.DefaultQuery("page_size", "20"))
+	pageSize, err := strconv.Atoi(c.DefaultQuery("page_size", strconv.Itoa(defaultPageSize)))
 	if err != nil || pageSize <= 0 {
 		pageSize = defaultPageSize
 	}
@@ -250,10 +251,11 @@ func (h *PromptHandler) ListPrompts(c *gin.Context) {
 		http.StatusOK,
 		gin.H{"items": items},
 		response.MetaPagination{
-			Page:       out.Page,
-			PageSize:   out.PageSize,
-			TotalItems: int(out.Total),
-			TotalPages: totalPages,
+			Page:         out.Page,
+			PageSize:     out.PageSize,
+			TotalItems:   int(out.Total),
+			TotalPages:   totalPages,
+			CurrentCount: len(items),
 		},
 	)
 }
@@ -721,6 +723,7 @@ func (h *PromptHandler) GeneratePrompt(c *gin.Context) {
 		UserID:            userID,
 		Topic:             req.Topic,
 		ModelKey:          req.ModelKey,
+		Description:       strings.TrimSpace(req.Description),
 		Language:          req.Language,
 		Instructions:      req.Instructions,
 		Tone:              req.Tone,

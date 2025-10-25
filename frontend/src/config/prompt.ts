@@ -79,3 +79,23 @@ export const PROMPT_AUTOSAVE_DELAY_MS =
   Number.isInteger(rawAutosaveDelay) && rawAutosaveDelay > 0
     ? rawAutosaveDelay
     : 10000;
+
+const rawMyPromptPageSize = Number.parseInt(
+  import.meta.env.VITE_MY_PROMPTS_PAGE_SIZE ?? "",
+  10,
+);
+
+export const MY_PROMPTS_PAGE_SIZE =
+  Number.isInteger(rawMyPromptPageSize) && rawMyPromptPageSize > 0
+    ? rawMyPromptPageSize
+    : 10;
+
+const rawPublicPromptPageSize = Number.parseInt(
+  import.meta.env.VITE_PUBLIC_PROMPT_LIST_PAGE_SIZE ?? "",
+  10,
+);
+
+export const PUBLIC_PROMPT_LIST_PAGE_SIZE =
+  Number.isInteger(rawPublicPromptPageSize) && rawPublicPromptPageSize > 0
+    ? rawPublicPromptPageSize
+    : 9;

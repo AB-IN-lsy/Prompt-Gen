@@ -290,6 +290,8 @@
 | 设置中心 | 左侧导航 | 账号信息、模型配置、数据导出、本地路径 | 同一页签内使用分组卡片，提供“连接测试”“重置路径”等操作。|
 | 帮助与日志 | 左侧导航 | FAQ、错误日志、导出按钮、联系客服入口 | 整合系统日志查看与反馈渠道。|
 
+- **分页提示**：公共 Prompt 列表统一 9 条/页，`meta.current_count` 用于驱动“本页条目数”提示；`My Prompts` 底部同样展示 `current_count`，帮助用户在离线安装包或导入数据后快速核对展示数量。默认值可通过环境变量 `PUBLIC_PROMPT_LIST_PAGE_SIZE` / `PROMPT_LIST_PAGE_SIZE`（后端）与 `VITE_PUBLIC_PROMPT_LIST_PAGE_SIZE` / `VITE_MY_PROMPTS_PAGE_SIZE`（前端）覆盖。
+
 ### 6.2 关键 UX 原则
 
 - 主要操作最多 3 步完成。

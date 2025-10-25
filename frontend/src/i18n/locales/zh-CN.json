@@ -144,6 +144,7 @@
     "deleteConfirm": "确定要删除该公共 Prompt 吗？此操作无法撤销。",
     "deleteSuccess": "该公共 Prompt 已删除。",
     "paginationInfo": "第 {{page}} / {{totalPages}} 页",
+    "paginationCount": "本页包含 {{count}} 条 Prompt",
     "prevPage": "上一页",
     "nextPage": "下一页",
     "loadingDetail": "正在加载详情…",
@@ -313,7 +314,7 @@
     "descriptionPlaceholder": "例如：生成一份聚焦 React Hooks 的技术面试 Prompt",
     "descriptionRequired": "请先填写需求描述，AI 才能理解你的意图。",
     "instructionsLabel": "补充要求",
-    "instructionsPlaceholder": "（可选）语气、结构、输出格式等",
+    "instructionsPlaceholder": "语气、结构、输出格式等",
     "tagsLabel": "标签",
     "tagLimitHint": "最多 {{limit}} 个标签",
     "tagsPlaceholder": "输入标签后按 Enter",
@@ -326,6 +327,7 @@
     "confidence": "解析置信度 {{value}}",
     "confidenceHint": "点击按钮让 AI 解析描述",
     "interpret": "解析描述",
+    "descriptionDetailHint": "请尽可能详细描述需求，避免生成结果偏离目标。",
     "descriptionHelper": "解析后会自动填写主题、补充要求并补充首批关键词，可继续手动或 AI 调整。",
     "interpretSuccess": "描述解析完成",
     "augmentKeywords": "AI 补充关键词",
@@ -337,6 +339,7 @@
     "negativeAutoTrimmed": "已自动保留前 {{limit}} 个负向关键词",
     "keywordDuplicate": "该关键词已存在，无需重复添加。",
     "keywordRemoveFailed": "移除关键词失败，请稍后再试。",
+    "instructionsRequired": "请先补充要求，便于 AI 保持方向一致。",
     "generateSuccess": "生成完成",
     "saveQueued": "已提交保存任务，稍后自动落库",
     "keywordRemoveHint": "点击右上角 × 可移除",
@@ -492,7 +495,8 @@
       "delete": "删除"
     },
     "pagination": {
-      "page": "第 {{page}} 页，共 {{total}} 页"
+      "page": "第 {{page}} 页，共 {{total}} 页",
+      "count": "本页展示 {{count}} 条 Prompt"
     },
     "loading": "正在加载 Prompt...",
     "editSuccess": "Prompt 已加载，正在打开工作台。",

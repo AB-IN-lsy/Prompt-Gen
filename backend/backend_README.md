@@ -143,7 +143,7 @@
 | `PROMPT_KEYWORD_MAX_LENGTH` | 单个关键词允许的最大字符数（按 Unicode 码点计），默认 `32` |
 | `PROMPT_TAG_LIMIT` | 标签数量上限，默认 `3`，需与前端 `VITE_PROMPT_TAG_LIMIT` 保持一致 |
 | `PROMPT_TAG_MAX_LENGTH` | 单个标签允许的最大字符数，默认 `5` |
-| `PROMPT_LIST_PAGE_SIZE` | “我的 Prompt”列表默认每页数量，默认 `20` |
+| `PROMPT_LIST_PAGE_SIZE` | “我的 Prompt”列表默认每页数量，默认 `10` |
 | `PROMPT_LIST_MAX_PAGE_SIZE` | “我的 Prompt”列表单页最大数量，默认 `100` |
 | `PROMPT_USE_FULLTEXT` | 设置为 `1` 时使用 FULLTEXT 检索（需提前创建 `ft_prompts_topic_tags` 索引） |
 | `PROMPT_IMPORT_BATCH_SIZE` | 导入 Prompt 时单批处理的最大条数，默认 `20` |
@@ -155,6 +155,8 @@
 
 | 变量 | 作用 |
 | --- | --- |
+| `PUBLIC_PROMPT_LIST_PAGE_SIZE` | 公共库列表默认每页数量，默认 `9` |
+| `PUBLIC_PROMPT_LIST_MAX_PAGE_SIZE` | 公共库列表单页最大数量，默认 `60` |
 | `PUBLIC_PROMPT_SUBMIT_LIMIT` | 投稿接口限流次数，默认 `5` |
 | `PUBLIC_PROMPT_SUBMIT_WINDOW` | 投稿限流窗口，默认 `30m` |
 | `PUBLIC_PROMPT_DOWNLOAD_LIMIT` | 下载接口限流次数，默认 `30` |
@@ -746,9 +748,9 @@ ALTER TABLE prompts
   | --- | --- |
   | `status` | 可选，按 `draft` / `published` 过滤，默认不过滤 |
   | `q` | 可选，对 `topic` 与 `tags` 做模糊搜索 |
-  | `page` / `page_size` | 可选，分页参数，默认 `page=1`、`page_size=20`，单页上限 100 |
+  | `page` / `page_size` | 可选，分页参数，默认 `page=1`、`page_size=10`，单页上限 100 |
 
-- **成功响应**：`200`，`data.items` 为 Prompt 列表，每项包含 `id`、`topic`、`model`、`status`、`tags`、`positive_keywords`、`negative_keywords`、`updated_at`、`published_at`；`meta` 返回 `page`、`page_size`、`total_items`、`total_pages`。
+- **成功响应**：`200`，`data.items` 为 Prompt 列表，每项包含 `id`、`topic`、`model`、`status`、`tags`、`positive_keywords`、`negative_keywords`、`updated_at`、`published_at`；`meta` 返回 `page`、`page_size`、`current_count`、`total_items`、`total_pages`。
 
 #### GET /api/prompts/:id
 
@@ -874,7 +876,7 @@ ALTER TABLE prompts
 #### GET /api/public-prompts
 
 - **用途**：获取公共 Prompt 列表，用于优质 Prompt 浏览。离线模式下接口保持可用但仅支持只读，投稿入口会被前端隐藏。
-- **查询参数**：`q`（关键词模糊搜索标题、主题、标签）、`status`（管理员可传 `pending`/`rejected` 查看待审条目；普通用户在传入 `pending`/`rejected` 时仅返回自己的投稿，默认返回全量 `approved` 数据）、`page`、`page_size`。
+- **查询参数**：`q`（关键词模糊搜索标题、主题、标签）、`status`（管理员可传 `pending`/`rejected` 查看待审条目；普通用户在传入 `pending`/`rejected` 时仅返回自己的投稿，默认返回全量 `approved` 数据）、`page`、`page_size`（默认 `9`，上限 `60`）。
 - **成功响应**：`200`
 
   ```json
@@ -902,13 +904,14 @@ ALTER TABLE prompts
     "meta": {
       "page": 1,
       "page_size": 9,
+      "current_count": 9,
       "total_items": 24,
       "total_pages": 3
     }
   }
   ```
 
-- **访问控制**：非管理员用户传入 `status=pending` 或 `status=rejected` 时，仅返回其本人投稿的记录；默认或 `status=approved` 场景下返回全量已通过条目。
+- **访问控制**：非管理员用户传入 `status=pending` 或 `status=rejected` 时，仅返回其本人投稿的记录；默认或 `status=approved` 场景下返回全量已通过条目。`meta.current_count` 会返回当前页实际条目数，方便前端在栅格布局中展示分页摘要。
 
 #### GET /api/public-prompts/:id
 

@@ -2,7 +2,7 @@
  * @Author: NEFU AB-IN
  * @Date: 2025-10-09 20:51:28
  * @FilePath: \electron-go-app\backend\internal\bootstrap\bootstrap.go
- * @LastEditTime: 2025-10-22 20:53:30
+ * @LastEditTime: 2025-10-25 13:16:32
  */
 package bootstrap
 
@@ -146,7 +146,8 @@ func BuildApplication(ctx context.Context, logger *zap.SugaredLogger, resources 
 	promptHandler := handler.NewPromptHandler(promptService, promptLimiter, promptRateLimit)
 	// 公开 Prompt 服务与 Handler 仅负责公开库的查询功能。
 	publicPromptRate := loadPublicPromptRateLimit(logger)
-	publicPromptService := publicpromptsvc.NewService(publicPromptRepo, resources.DBConn(), logger, !isLocalMode)
+	publicPromptListCfg := loadPublicPromptListConfig(logger)
+	publicPromptService := publicpromptsvc.NewServiceWithConfig(publicPromptRepo, resources.DBConn(), logger, !isLocalMode, publicPromptListCfg)
 	publicPromptHandler := handler.NewPublicPromptHandler(publicPromptService, publicPromptLimiter, publicPromptRate)
 
 	// IP 防护中间件也是可选的，且强依赖 Redis。
@@ -341,15 +342,23 @@ func loadPublicPromptRateLimit(logger *zap.SugaredLogger) handler.PublicPromptRa
 	}
 }
 
+// loadPublicPromptListConfig 读取公共 Prompt 列表分页配置。
+func loadPublicPromptListConfig(logger *zap.SugaredLogger) publicpromptsvc.Config {
+	return publicpromptsvc.Config{
+		DefaultPageSize: parseIntEnv("PUBLIC_PROMPT_LIST_PAGE_SIZE", publicpromptsvc.DefaultListPageSize, logger),
+		MaxPageSize:     parseIntEnv("PUBLIC_PROMPT_LIST_MAX_PAGE_SIZE", publicpromptsvc.DefaultListMaxPageSize, logger),
+	}
+}
+
 // loadPromptConfig 汇总 Prompt 模块使用到的配置项。
 func loadPromptConfig(logger *zap.SugaredLogger) promptsvc.Config {
 	return promptsvc.Config{
 		KeywordLimit:        parseIntEnv("PROMPT_KEYWORD_LIMIT", promptsvc.DefaultKeywordLimit, logger),
-		KeywordMaxLength:    parseIntEnv("PROMPT_KEYWORD_MAX_LENGTH", 64, logger),
+		KeywordMaxLength:    parseIntEnv("PROMPT_KEYWORD_MAX_LENGTH", promptsvc.DefaultKeywordMaxLength, logger),
 		TagLimit:            parseIntEnv("PROMPT_TAG_LIMIT", promptsvc.DefaultTagLimit, logger),
-		TagMaxLength:        parseIntEnv("PROMPT_TAG_MAX_LENGTH", 5, logger),
-		DefaultListPageSize: parseIntEnv("PROMPT_LIST_PAGE_SIZE", 20, logger),
-		MaxListPageSize:     parseIntEnv("PROMPT_LIST_MAX_PAGE_SIZE", 100, logger),
+		TagMaxLength:        parseIntEnv("PROMPT_TAG_MAX_LENGTH", promptsvc.DefaultTagMaxLength, logger),
+		DefaultListPageSize: parseIntEnv("PROMPT_LIST_PAGE_SIZE", promptsvc.DefaultPromptListPageSize, logger),
+		MaxListPageSize:     parseIntEnv("PROMPT_LIST_MAX_PAGE_SIZE", promptsvc.DefaultPromptListMaxPageSize, logger),
 		UseFullTextSearch:   parseBoolEnv("PROMPT_USE_FULLTEXT", false),
 		ExportDirectory:     strings.TrimSpace(os.Getenv("PROMPT_EXPORT_DIR")),
 		VersionRetention:    parseIntEnv("PROMPT_VERSION_KEEP_LIMIT", promptsvc.DefaultVersionRetentionLimit, logger),
