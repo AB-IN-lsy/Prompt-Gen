@@ -60,7 +60,7 @@ coverage/
 *.exe~
 *.test
 *.out
-backend/bin/
+bin/
 /go-build/
 
 # Database files
