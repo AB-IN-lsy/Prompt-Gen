@@ -1,6 +1,6 @@
 {
   "name": "prompt-gen",
-  "version": "1.2.1",
+  "version": "1.2.2",
   "description": "Electron + Go 一体化的 AI Prompt 工作台，集成关键词治理、模型管理与运营后台能力。",
   "author": "AB-IN <ab-in-liusy@outlook.com>",
   "license": "ISC",
