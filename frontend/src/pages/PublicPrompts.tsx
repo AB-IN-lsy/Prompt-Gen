@@ -17,6 +17,7 @@ import {
   Tags,
   CircleCheck,
   AlertCircle,
+  Copy,
   X,
 } from "lucide-react";
 import { GlassCard } from "../components/ui/glass-card";
@@ -256,6 +257,34 @@ export default function PublicPromptsPage(): JSX.Element {
 
   const allowDelete = isAdmin || offlineMode;
 
+  const handleCopyBody = async () => {
+    if (!selectedDetail?.body) {
+      toast.error(t("publicPrompts.copyBodyEmpty"));
+      return;
+    }
+    const textToCopy = selectedDetail.body;
+    try {
+      if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(textToCopy);
+      } else if (typeof document !== "undefined") {
+        const textarea = document.createElement("textarea");
+        textarea.value = textToCopy;
+        textarea.setAttribute("readonly", "");
+        textarea.style.position = "absolute";
+        textarea.style.left = "-9999px";
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand("copy");
+        document.body.removeChild(textarea);
+      } else {
+        throw new Error("clipboard unsupported");
+      }
+      toast.success(t("publicPrompts.copyBodySuccess"));
+    } catch {
+      toast.error(t("publicPrompts.copyBodyFailure"));
+    }
+  };
+
   const statusBadge = (status: string) => {
     const normalized = status.toLowerCase();
     if (normalized === "approved") {
@@ -477,46 +506,44 @@ export default function PublicPromptsPage(): JSX.Element {
             className="relative w-full max-w-4xl overflow-hidden border-primary/40 bg-white/95 p-0 shadow-[0_45px_75px_-35px_rgba(59,130,246,0.7)] dark:border-primary/50 dark:bg-slate-900/95"
             onClick={(event) => event.stopPropagation()}
           >
-            <Button
+            <button
               type="button"
-              variant="ghost"
-              className="absolute right-4 top-4 h-8 w-8 rounded-full text-slate-500 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800/80"
+              className="absolute right-5 top-5 inline-flex h-12 w-12 items-center justify-center rounded-full bg-white/95 text-primary shadow-[0_18px_45px_-20px_rgba(59,130,246,0.55)] ring-1 ring-slate-200/70 backdrop-blur-md transition hover:scale-105 hover:bg-white hover:ring-primary/40 dark:bg-slate-900/90 dark:text-primary dark:ring-slate-700/60"
               onClick={handleCloseDetail}
+              aria-label={t("common.close")}
             >
-              <X className="h-4 w-4" />
-            </Button>
+              <X className="h-8 w-8" strokeWidth={2.4} />
+            </button>
             <div className="flex max-h-[80vh] flex-col overflow-y-auto">
               <div className="border-b border-white/70 bg-white/90 px-6 pb-5 pt-7 dark:border-slate-800/60 dark:bg-slate-900/85">
-                <div className="flex flex-wrap items-start justify-between gap-6">
-                  <div className="flex flex-col gap-3">
-                    <div>
-                      <span className="text-xs font-semibold uppercase tracking-[0.35em] text-slate-400">
-                        {t("publicPrompts.detailHeader.eyebrow")}
-                      </span>
-                      <h2 className="mt-2 text-2xl font-semibold leading-tight text-slate-900 dark:text-white">
-                        {selectedDetail.title || selectedDetail.topic}
-                      </h2>
-                      <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">
-                        {selectedDetail.summary || t("publicPrompts.detailHeader.subtitle")}
-                      </p>
-                    </div>
-                    <div className="flex flex-wrap items-center gap-2 text-xs text-slate-400 dark:text-slate-500">
-                      <CircleCheck className="h-4 w-4 text-emerald-500" />
-                      <span>
-                        {t("publicPrompts.detailMeta.model", {
-                          model: selectedDetail.model,
-                        })}
-                      </span>
-                      <span>·</span>
-                      <span>
-                        {t("publicPrompts.detailMeta.updatedAt", {
-                          date: formatDateTime(selectedDetail.updated_at, i18n.language).date,
-                          time: formatDateTime(selectedDetail.updated_at, i18n.language).time,
-                        })}
-                      </span>
-                    </div>
+                <div className="flex flex-col gap-4">
+                  <div>
+                    <span className="text-xs font-semibold uppercase tracking-[0.35em] text-slate-400">
+                      {t("publicPrompts.detailHeader.eyebrow")}
+                    </span>
+                    <h2 className="mt-2 text-2xl font-semibold leading-tight text-slate-900 dark:text-white">
+                      {selectedDetail.title || selectedDetail.topic}
+                    </h2>
+                    <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">
+                      {selectedDetail.summary || t("publicPrompts.detailHeader.subtitle")}
+                    </p>
                   </div>
-                  <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:justify-end">
+                  <div className="flex flex-wrap items-center gap-2 text-xs text-slate-400 dark:text-slate-500">
+                    <CircleCheck className="h-4 w-4 text-emerald-500" />
+                    <span>
+                      {t("publicPrompts.detailMeta.model", {
+                        model: selectedDetail.model,
+                      })}
+                    </span>
+                    <span>·</span>
+                    <span>
+                      {t("publicPrompts.detailMeta.updatedAt", {
+                        date: formatDateTime(selectedDetail.updated_at, i18n.language).date,
+                        time: formatDateTime(selectedDetail.updated_at, i18n.language).time,
+                      })}
+                    </span>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-3 pt-1">
                     <div className="flex flex-wrap items-center gap-2">
                       <Badge className={statusMeta.className}>
                         {statusMeta.label}
@@ -525,35 +552,37 @@ export default function PublicPromptsPage(): JSX.Element {
                         {selectedDetail.language.toUpperCase()}
                       </Badge>
                     </div>
-                    <MagneticButton
-                      type="button"
-                      className="h-10 whitespace-nowrap rounded-full bg-primary/90 px-4 text-white hover:bg-primary focus-visible:ring-primary/60 dark:bg-primary/80"
-                      disabled={isDownloadingSelected || isDeletingSelected}
-                      onClick={() => handleDownload(selectedDetail.id)}
-                    >
-                      {isDownloadingSelected ? (
-                        <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
-                      ) : (
-                        <Download className="mr-2 h-4 w-4" />
-                      )}
-                      {t("publicPrompts.downloadShort")}
-                    </MagneticButton>
-                    {allowDelete ? (
-                      <Button
+                    <div className="ml-auto flex flex-wrap items-center gap-2">
+                      <MagneticButton
                         type="button"
-                        variant="outline"
-                        className="h-10 rounded-full border-rose-300 px-4 text-rose-600 hover:bg-rose-50 dark:border-rose-500/40 dark:text-rose-300 dark:hover:bg-rose-500/10"
-                        disabled={isDeletingSelected || isDownloadingSelected}
-                        onClick={() => setConfirmDeleteId(selectedDetail.id)}
+                        className="h-10 whitespace-nowrap rounded-full bg-primary/90 px-4 text-white hover:bg-primary focus-visible:ring-primary/60 dark:bg-primary/80"
+                        disabled={isDownloadingSelected || isDeletingSelected}
+                        onClick={() => handleDownload(selectedDetail.id)}
                       >
-                        {isDeletingSelected ? (
+                        {isDownloadingSelected ? (
                           <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
                         ) : (
-                          <AlertCircle className="mr-2 h-4 w-4" />
+                          <Download className="mr-2 h-4 w-4" />
                         )}
-                        {t("publicPrompts.deleteShort")}
-                      </Button>
-                    ) : null}
+                        {t("publicPrompts.downloadShort")}
+                      </MagneticButton>
+                      {allowDelete ? (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className="h-10 rounded-full border-rose-300 px-4 text-rose-600 hover:bg-rose-50 dark:border-rose-500/40 dark:text-rose-300 dark:hover:bg-rose-500/10"
+                          disabled={isDeletingSelected || isDownloadingSelected}
+                          onClick={() => setConfirmDeleteId(selectedDetail.id)}
+                        >
+                          {isDeletingSelected ? (
+                            <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
+                          ) : (
+                            <AlertCircle className="mr-2 h-4 w-4" />
+                          )}
+                          {t("publicPrompts.deleteShort")}
+                        </Button>
+                      ) : null}
+                    </div>
                   </div>
                 </div>
                 {selectedDetail.review_reason ? (
@@ -634,6 +663,16 @@ export default function PublicPromptsPage(): JSX.Element {
               <GlassCard className="bg-white/85 dark:bg-slate-900/70 md:col-span-2">
                 <div className="flex items-center justify-between text-xs uppercase tracking-[0.25em] text-slate-400">
                   <span>{t("publicPrompts.body")}</span>
+                  <button
+                    type="button"
+                    className="inline-flex items-center gap-2 rounded-full bg-primary/5 px-3 py-1 text-[0.75rem] font-medium text-primary transition hover:bg-primary/10 hover:text-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 dark:bg-primary/10 dark:text-primary-200 dark:hover:bg-primary/20"
+                    onClick={() => {
+                      void handleCopyBody();
+                    }}
+                  >
+                    <Copy className="h-4 w-4" />
+                    {t("publicPrompts.copyBody")}
+                  </button>
                 </div>
                 <pre className="mt-3 max-h-[40vh] overflow-y-auto whitespace-pre-wrap break-words rounded-2xl bg-slate-900/5 p-4 text-sm leading-relaxed text-slate-600 dark:bg-slate-900/80 dark:text-slate-200">
                   {selectedDetail.body}

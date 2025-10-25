@@ -151,6 +151,10 @@
     "instructions": "补充说明",
     "noInstructions": "暂无补充说明",
     "body": "Prompt 正文",
+    "copyBody": "复制全文",
+    "copyBodySuccess": "Prompt 正文已复制到剪贴板。",
+    "copyBodyFailure": "复制失败，请稍后重试。",
+    "copyBodyEmpty": "暂无可复制的正文内容。",
     "reviewReasonTitle": "驳回原因",
     "reviewReasonBadge": "驳回说明：{{reason}}",
     "status": {

@@ -151,6 +151,10 @@
     "instructions": "Instructions",
     "noInstructions": "No additional instructions",
     "body": "Prompt body",
+    "copyBody": "Copy full text",
+    "copyBodySuccess": "Prompt body copied to clipboard.",
+    "copyBodyFailure": "Copy failed. Please try again.",
+    "copyBodyEmpty": "No prompt body available to copy.",
     "reviewReasonTitle": "Rejection reason",
     "reviewReasonBadge": "Reason: {{reason}}",
     "status": {

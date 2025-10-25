@@ -1,6 +1,34 @@
 [
   {
     "author_id": 9,
+    "badge": "Frontend",
+    "items": [
+      "Launched the 'Premium Prompts' page, showcasing curated content with detailed drawer browsing support.",
+      "Redesigned the drawer's close interaction and visual hierarchy for more prominent buttons and clearer operation feedback.",
+      "Enhanced search box with fuzzy matching and loading indicators to improve public prompt filtering efficiency.",
+      "Added a 'Copy Full Text' button for one-click copying of prompt content, boosting reuse efficiency."
+    ],
+    "locale": "en",
+    "published_at": "2025-10-25",
+    "summary": "Release v1.2.0: Introducing the Premium Prompts page with comprehensive UI and search flow optimizations",
+    "title": "v1.2.0 Public Prompt Experience Upgrade"
+  },
+  {
+    "author_id": 9,
+    "badge": "前端",
+    "items": [
+      "上线“优质 Prompt”页面，集中展示精选内容并支持详情抽屉浏览。",
+      "重做详情抽屉的关闭交互与视觉层次，按钮更显眼、操作反馈更清晰。",
+      "搜索框加入模糊匹配与加载提示，提升筛选公共 Prompt 的效率。",
+      "新增“复制全文”按钮，一键复制 Prompt 正文提升复用效率。"
+    ],
+    "locale": "zh-CN",
+    "published_at": "2025-10-25",
+    "summary": "发布 v1.2.0，新增优质 Prompt 页面并全面优化 UI 与搜索流程",
+    "title": "v1.2.0 公共 Prompt 体验升级"
+  },
+  {
+    "author_id": 9,
     "badge": "Backend",
     "items": [
       "Added POST /api/prompts/export endpoint to export current account's Prompts as local JSON files, with support for custom storage directory via PROMPT_EXPORT_DIR.",
