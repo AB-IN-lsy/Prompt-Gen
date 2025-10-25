@@ -162,6 +162,18 @@
   - 导入前提示备份当前数据，出现冲突时以“跳过/覆盖”方式处理。
   - 操作成功/失败均以 toast 提示，并在帮助页给出操作说明。
 
+#### 离线预置数据同步（新增）
+
+- **目标**：离线客户端首次启动时即可看到最新公共 Prompt 与 changelog，避免空白页。
+- **流程**：
+  1. 发布前执行 `go run ./backend/cmd/export-offline-data -output-dir backend/data/bootstrap`，从线上 MySQL 导出 `public_prompts.json`、`changelog_entries.json`。
+  2. 将生成的 JSON 提交到版本库（目录固定为 `backend/data/bootstrap/`），CI 在打包阶段复制到 `resources/app/backend/data/bootstrap/`。
+  3. Electron 后端子进程启动后，通过 `bootstrapdata.SeedLocalDatabase` 在 SQLite 表为空时导入上述数据；导入完成的条目会直接展示在 changelog 页面和公共 Prompt 列表。
+- **验收标准**：
+  - 打包后的安装目录可见两个 JSON，并在 changelog 页面看到一致的条目数。
+  - 离线模式不暴露 `/admin/changelog`、`/admin/public-prompts` 等后台写操作，仅提供只读视图。
+  - 更新 JSON 后重新打包即可覆盖旧数据，用户升级安装包后下次启动自动完成同步。
+
 ### 4.7 设置页（已实现）
 
 - **配置项**：

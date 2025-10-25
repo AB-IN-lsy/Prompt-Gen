@@ -138,6 +138,25 @@ go test -tags=e2e ./backend/tests/e2e                   # 命中线上接口时�
 - `POST /api/prompts/export`：导出当前用户的 Prompt，Electron 客户端会在“我的 Prompt”页面提供按钮并显示导出路径。
 - `POST /api/prompts/import`：上传导出的 JSON 文件，可合并或覆盖现有 Prompt；前端会展示导入统计以及失败条目列表，便于逐项修复。
 
+### 离线预置数据更新
+
+- 安装包会随带 `backend/data/bootstrap/` 下的 `public_prompts.json` 与 `changelog_entries.json`，空表启动时后端子进程会自动导入这些预置数据。
+- 发布前请执行：
+
+  ```bash
+  go run ./backend/cmd/export-offline-data -output-dir backend/data/bootstrap
+  ```
+
+  命令会使用 `.env(.local)` 中的线上数据库配置导出最新公共 Prompt 与 changelog，并覆盖目录内 JSON。
+- 如需确认导入效果，可运行：
+
+  ```bash
+  go run ./backend/cmd/offline-bootstrap -output ./release/assets/promptgen-offline.db
+  ```
+
+  CLI 会根据 JSON 生成一个 SQLite 文件并打印条目统计；将 `LOCAL_SQLITE_PATH` 指向该文件或清空现有数据库后重启客户端即可验证页面展示。
+- 更新 JSON 后记得纳入提交（`.gitignore` 已放行该目录），再执行 `npm run dist:win` / `npm run dist:mac` 检查安装包内 `resources/app/backend/data/bootstrap/` 是否包含最新文件。
+
 ## 常用脚本速查
 
 | 命令 | 作用 |

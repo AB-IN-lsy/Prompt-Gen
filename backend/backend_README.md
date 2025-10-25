@@ -32,6 +32,29 @@
 - JWT 访问令牌新增 `is_admin` 字段，后端会在鉴权中间件里解析并注入上下文，前端可据此展示后台管理能力。
 - 新增 `/api/ip-guard/bans` 黑名单管理接口，管理员可查询限流封禁的 IP 并调用 `DELETE /api/ip-guard/bans/:ip` 解除；默认从环境变量 `IP_GUARD_ADMIN_SCAN_COUNT`、`IP_GUARD_ADMIN_MAX_ENTRIES` 读取扫描批量与返回上限，避免硬编码“神秘数字”。
 
+## 离线预置数据导出与校验
+
+离线安装包会在首次启动时读取 `backend/data/bootstrap/` 下的 JSON，并通过 `bootstrapdata.SeedLocalDatabase` 向空数据库导入公共 Prompt 与更新日志。为了确保桌面端安装包内置最新内容，请在每次发布前按以下步骤更新并校验预置数据：
+
+1. **准备环境变量**：保证 `.env.local` 中的 MySQL、Redis 等在线资源配置可用，`LOCAL_BOOTSTRAP_DATA_DIR` 若为空将默认写入 `backend/data/bootstrap`。
+2. **导出最新数据**：
+
+   ```bash
+   go run ./backend/cmd/export-offline-data -output-dir backend/data/bootstrap
+   ```
+
+   命令会根据环境配置查询线上库，并生成 `public_prompts.json`、`changelog_entries.json`。由于 `.gitignore` 已放行该目录，生成后的文件会显示在 `git status` 中，注意一并提交。
+3. **本地校验（可选）**：
+
+   ```bash
+   go run ./backend/cmd/offline-bootstrap -output ./release/assets/promptgen-offline.db
+   ```
+
+   该命令会加载刚刚导出的 JSON，将其写入临时 SQLite 并输出统计信息，便于确认条目数量是否符合预期。若未指定 `-output`，CLI 会写入 `LOCAL_SQLITE_PATH` 指向的位置。
+4. **打包验证**：运行 `npm run dist:win` / `npm run dist:mac` 生成安装包后，解压安装目录确认 `resources/app/backend/data/bootstrap/*.json` 是否存在，避免遗漏。
+
+> 以上流程仅更新 JSON 数据，不会影响 .env 或其他配置；请勿将 `.env.local`、真实凭据等敏感文件提交到仓库。
+
 ## 环境变量
 
 ### 运行必需

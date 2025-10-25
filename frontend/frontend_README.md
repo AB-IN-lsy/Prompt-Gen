@@ -198,6 +198,24 @@ frontend/
 - 使用 TypeScript，建议在新增文件时同步补全类型定义。
 - 所有对后端的请求都应通过 `lib/api.ts` 暴露的函数完成，避免散落的 Axios 调用。
 - 新增页面时，把路由注册在 `App.tsx` 并复用 `AppShell` 外壳，保持导航一致。
+
+## 离线预置数据联调
+
+- 客户端打包时会把 `backend/data/bootstrap/*.json` 一并带入安装目录，渲染进程通过 `useAppSettings` 识别离线模式后，直接向本地后端请求 `/api/changelog`、`/api/public-prompts`，从 SQLite 中读取刚刚导入的离线条目。
+- 若需在开发环境验证离线表现，先按后端文档运行：
+
+  ```bash
+  go run ./backend/cmd/export-offline-data -output-dir backend/data/bootstrap
+  ```
+
+  再执行：
+
+  ```bash
+  go run ./backend/cmd/offline-bootstrap -output ./release/assets/promptgen-offline.db
+  ```
+
+  然后将 `LOCAL_SQLITE_PATH` 指向生成的数据库或清空本地数据库后重启 Electron，即可看到 changelog 页面和公共 Prompt 列表在离线模式下的完整数据。
+- 发布前请至少执行一次 `npm run dist:win`（或 `dist:mac`）验证安装包，确认 `resources/app/backend/data/bootstrap/` 中的 JSON 已随包分发；若缺失，请重新运行导出命令并打包。
 - 文案统一维护在 `i18n/locales/*`，新增 key 请同步提供中英双语翻译。
 - 若扩展 UI 组件，请优先考虑 `components/ui/` 目录，保持复用性。
 

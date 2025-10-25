@@ -36,6 +36,7 @@
       "preload.js",
       "frontend/dist/**",
       "backend/bin/**",
+      "backend/data/bootstrap/**",
       ".env",
       "!**/.env.local",
       "!backend/tests/**",
