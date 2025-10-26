@@ -324,6 +324,29 @@ func (s *Service) Login(ctx context.Context, params LoginParams) (*domain.User, 
 	return user, tokens, nil
 }
 
+// ResolveEmailByIdentifier 根据用户输入的账号标识推断邮箱地址，便于后续发送验证邮件。
+func (s *Service) ResolveEmailByIdentifier(ctx context.Context, identifier string) (string, error) {
+	trimmed := strings.TrimSpace(identifier)
+	if trimmed == "" {
+		return "", fmt.Errorf("resolve email: empty identifier")
+	}
+	if strings.Contains(trimmed, "@") {
+		return trimmed, nil
+	}
+	user, err := s.users.FindByUsername(ctx, trimmed)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return "", ErrInvalidLogin
+		}
+		return "", fmt.Errorf("resolve email by username: %w", err)
+	}
+	email := strings.TrimSpace(user.Email)
+	if email == "" {
+		return "", fmt.Errorf("resolve email: user email empty")
+	}
+	return email, nil
+}
+
 // hashPassword 使用 bcrypt 对明文密码加盐哈希，确保存储安全。
 func hashPassword(password string) (string, error) {
 	out, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)

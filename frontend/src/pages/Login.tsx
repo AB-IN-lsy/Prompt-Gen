@@ -43,6 +43,7 @@ export default function LoginPage() {
     const [needsVerification, setNeedsVerification] = useState(false);
     const [shouldRetryLogin, setShouldRetryLogin] = useState(false);
     const [verificationFeedback, setVerificationFeedback] = useState<VerificationFeedback | null>(null);
+    const [resolvedEmail, setResolvedEmail] = useState<string | undefined>(undefined);
     const authenticate = useAuth((state) => state.authenticate);
     const verificationToken = useVerificationToken();
     const [rememberIdentifier, setRememberIdentifier] = useState(false);
@@ -92,6 +93,7 @@ export default function LoginPage() {
             setNeedsVerification(false);
             setShouldRetryLogin(false);
             setVerificationFeedback(null);
+            setResolvedEmail(undefined);
             if (typeof window !== "undefined") {
                 const trimmed = credentials.identifier.trim();
                 if (rememberIdentifier && trimmed) {
@@ -109,9 +111,15 @@ export default function LoginPage() {
                 if (error.code === "EMAIL_NOT_VERIFIED" || error.status === 403) {
                     setNeedsVerification(true);
                     setShouldRetryLogin(true);
+                    const payload = (error.details ?? {}) as { email?: string } | undefined;
+                    const email = typeof payload?.email === "string" ? payload.email.trim() : "";
+                    if (email) {
+                        setResolvedEmail(email);
+                    }
                     toast.error(t("auth.verification.required"));
                     return;
                 }
+                setResolvedEmail(undefined);
                 if (error.code) {
                     const key = `errors.${error.code}`;
                     const translated = t(key, { defaultValue: "" });
@@ -119,6 +127,8 @@ export default function LoginPage() {
                 } else {
                     message = error.message ?? message;
                 }
+            } else {
+                setResolvedEmail(undefined);
             }
             toast.error(message);
         },
@@ -129,14 +139,21 @@ export default function LoginPage() {
 
     const resendMutation = useMutation({
         mutationFn: async (): Promise<EmailVerificationRequestResult> => {
-            const trimmed = credentials.identifier.trim();
-            if (!trimmed) {
-                throw new ApiError({ message: t("auth.validation.identifierRequired") ?? "" });
+            const identifier = credentials.identifier.trim();
+            const fallbackEmail = resolvedEmail?.trim() ?? "";
+            let targetEmail = "";
+            if (identifier.includes("@")) {
+                targetEmail = identifier;
+            } else if (fallbackEmail) {
+                targetEmail = fallbackEmail;
             }
-            if (!trimmed.includes("@")) {
-                throw new ApiError({ message: t("auth.verification.emailOnly") ?? "" });
+            if (!targetEmail) {
+                if (!identifier) {
+                    throw new ApiError({ message: t("auth.validation.identifierRequired") ?? "" });
+                }
+                throw new ApiError({ message: t("auth.verification.emailResolvedRequired") ?? t("auth.verification.emailOnly") ?? "" });
             }
-            return requestEmailVerification(trimmed);
+            return requestEmailVerification(targetEmail);
         },
         onSuccess: (result) => {
             const remaining = typeof result.remainingAttempts === "number" ? result.remainingAttempts : undefined;
@@ -363,6 +380,11 @@ export default function LoginPage() {
                             <p className="text-sm font-medium text-amber-900 dark:text-amber-200">{t("auth.verification.blockTitle")}</p>
                             <p className="text-sm text-amber-800 dark:text-amber-100/90">{t("auth.verification.blockMessage")}</p>
                         </div>
+                        {resolvedEmail ? (
+                            <p className="text-xs text-amber-700 dark:text-amber-200/80">
+                                {t("auth.verification.resolvedEmail", { email: resolvedEmail })}
+                            </p>
+                        ) : null}
                         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:flex-wrap">
                             <Button
                                 type="button"
@@ -408,8 +430,9 @@ export default function LoginPage() {
                             onClick={() => {
                                 const searchParams = new URLSearchParams();
                                 const trimmed = credentials.identifier.trim();
-                                if (trimmed && trimmed.includes("@")) {
-                                    searchParams.set("email", trimmed);
+                                const target = trimmed.includes("@") ? trimmed : resolvedEmail?.trim();
+                                if (target) {
+                                    searchParams.set("email", target);
                                 }
                                 navigate(`/verify-email${searchParams.toString() ? `?${searchParams.toString()}` : ""}`);
                             }}

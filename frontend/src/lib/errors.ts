@@ -38,6 +38,7 @@ export type ErrorCode =
   | "EMAIL_NOT_VERIFIED"
   | "EMAIL_ALREADY_VERIFIED"
   | "VERIFICATION_TOKEN_INVALID"
+  | "INVALID_CREDENTIALS"
   | string;
 
 /** Shape of the error payload sent by the backend. */

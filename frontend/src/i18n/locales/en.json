@@ -614,7 +614,11 @@
       "emailReminder": "If nothing arrives within a minute, check the spam folder or try again.",
       "emailOnly": "Please enter an email address to resend the verification message.",
       "pageIntro": "Enter the email you registered with and we’ll send a fresh verification link.",
-      "pageSteps": "After verifying via the email link, return here or sign in to continue."
+      "pageSteps": "After verifying via the email link, return here or sign in to continue.",
+      "resolvedEmail": "We found your account email: {{email}}",
+      "emailResolvedRequired": "We couldn't detect your email address. Please enter it to resend.",
+      "autoFilledHint": "We pre-filled the account email for you - just tap send to get a fresh link.",
+      "resendAssist": "Didn't see the email? Wait a moment and tap the button again to resend."
     },
     "offline": {
       "title": "Use offline mode",
@@ -946,6 +950,7 @@
     "CAPTCHA_REQUIRED": "Captcha verification is required.",
     "EMAIL_NOT_VERIFIED": "Your email address hasn’t been verified yet.",
     "EMAIL_ALREADY_VERIFIED": "This email address has already been verified.",
-    "VERIFICATION_TOKEN_INVALID": "The verification token is invalid or has expired."
+    "VERIFICATION_TOKEN_INVALID": "The verification token is invalid or has expired.",
+    "INVALID_CREDENTIALS": "Incorrect email or password. Please try again."
   }
 }

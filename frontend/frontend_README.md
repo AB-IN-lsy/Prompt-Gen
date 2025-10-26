@@ -11,6 +11,7 @@
   - `VITE_API_REQUEST_TIMEOUT_MS`（默认 60000）用于控制 Axios 请求超时时间，AI 生成等耗时操作可按需放宽。
   - `VITE_AI_GENERATE_MIN_DURATION_MS`（默认 2000）可调节 Prompt 工作台在生成提示时的最短加载展示时间。
 - **内容审核提示**：当后端返回 `CONTENT_REJECTED` 时，工作台会抓取 `error.details.reason` 并通过 `promptWorkbench.contentRejected`、`promptWorkbench.contentRejectedFallbackReason` 两个 i18n 键展示多语言 toast，指导用户修改不合规文案。
+- **邮箱验证体验**：验证页会自动填入账号邮箱、提供更醒目的发送按钮，并给出“如未收到可再次发送”的提示。
 - **AI 生成等待时间**：通过 `VITE_AI_GENERATE_MIN_DURATION_MS`（默认 2000ms）调整 Prompt 工作台触发 AI 生成时的最短加载时长，配合 UI 提示让离线/低速环境下的长耗时更易感知。
 - **自动保存草稿**：Prompt 工作台新增自动草稿功能，会在正文、关键词或标签修改后 **10 秒** 内（可通过 `VITE_PROMPT_AUTOSAVE_DELAY_MS` 调整）自动调用 `/api/prompts` 保存草稿；若 Redis 工作区可用，会同步刷新 `workspace_token`，离线模式则直接写入本地 SQLite。
 - **偏好模型展示**：个人资料页的“偏好模型”字段现为只读，用于展示在模型凭据或工作台里设定的偏好值；Prompt 工作台加载时会优先选中该模型作为默认生成模型。

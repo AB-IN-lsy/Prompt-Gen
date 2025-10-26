@@ -467,8 +467,9 @@ ALTER TABLE prompts
   ```
 
 - **成功响应**：`200`，返回用户信息与新的 TokenPair。
-- **常见错误**：账号不存在或密码错误 → `401` + `ErrInvalidLogin`。
+- **常见错误**：账号不存在或密码错误 → `401` + `INVALID_CREDENTIALS`。
 - **邮箱未验证**：返回 `403` + `EMAIL_NOT_VERIFIED`，需先完成邮箱验证。
+  - 响应还会在 `error.details.email` 中附带账号邮箱，便于前端自动填充。
 
 #### POST /api/auth/verify-email/request
 

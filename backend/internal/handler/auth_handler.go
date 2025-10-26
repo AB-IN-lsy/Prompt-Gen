@@ -2,7 +2,7 @@
  * @Author: NEFU AB-IN
  * @Date: 2025-10-08 20:42:09
  * @FilePath: \electron-go-app\backend\internal\handler\auth_handler.go
- * @LastEditTime: 2025-10-10 02:49:19
+ * @LastEditTime: 2025-10-27 01:07:15
  */
 package handler
 
@@ -174,18 +174,23 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	if err != nil {
 		status := http.StatusInternalServerError
 		code := response.ErrInternal
-		if err == auth.ErrInvalidLogin {
+		var details gin.H
+		switch err {
+		case auth.ErrInvalidLogin:
 			status = http.StatusUnauthorized
-			code = response.ErrUnauthorized
+			code = response.ErrInvalidCredentials
 			log.Warnw("login failed: invalid credential", "identifier", req.Identifier)
-		} else if err == auth.ErrEmailNotVerified {
+		case auth.ErrEmailNotVerified:
 			status = http.StatusForbidden
 			code = response.ErrEmailNotVerified
+			if resolved, resolveErr := h.service.ResolveEmailByIdentifier(c.Request.Context(), req.Identifier); resolveErr == nil && strings.TrimSpace(resolved) != "" {
+				details = gin.H{"email": resolved}
+			}
 			log.Warnw("login blocked: email not verified", "identifier", req.Identifier)
-		} else {
+		default:
 			log.Errorw("login failed", "error", err, "identifier", req.Identifier)
 		}
-		response.Fail(c, status, code, err.Error(), nil)
+		response.Fail(c, status, code, err.Error(), details)
 		return
 	}
 
