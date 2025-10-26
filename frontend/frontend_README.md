@@ -71,8 +71,11 @@ npm install
 # 开发模式（默认使用 Vite Dev Server）
 npm run dev
 
-# 构建生产包
+# 构建生产包（默认面向 Web 部署）
 npm run build
+
+# 构建 Electron 桌面壳专用包（保留相对资源路径）
+npm run build:electron
 
 # 本地预览构建结果
 npm run preview
@@ -84,6 +87,8 @@ npm run preview
 
 - `5173`：Vite 开发服务器默认端口。执行 `npm run dev` 时，浏览器或 Electron 渲染进程会从该端口加载最新的热更新页面。
 - `4173`：`npm run preview` 使用的预览端口，用于本地验证生产构建的效果。
+
+若要部署到独立的 Web 服务器，请确保构建时 `VITE_PUBLIC_BASE_PATH=/`，以便静态资源在任意路径下都能正确加载；Electron 打包则沿用默认的 `./` 即可兼容 `file://` 协议。
 
 前端的 API 客户端（`src/lib/http.ts`）默认直接指向 `http://localhost:9090/api`（Go 后端监听端口）。若需要接入远程环境，可以在根目录 `.env.local` 中设置 `VITE_API_BASE_URL` 覆盖默认地址，构建与运行都会读取该变量。上传成功的头像会返回 `/static/avatars/<文件名>` 路径，由后端静态资源路由托管。
 

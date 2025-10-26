@@ -50,7 +50,8 @@ func composeVerificationContent(baseURL string, user *domain.User, token string)
 }
 
 func buildVerificationURL(baseURL, token string) string {
-	trimmed := strings.TrimRight(baseURL, "/")
+	normalised := normaliseBaseURL(baseURL)
+	trimmed := strings.TrimRight(normalised, "/")
 	if trimmed == "" {
 		return token
 	}

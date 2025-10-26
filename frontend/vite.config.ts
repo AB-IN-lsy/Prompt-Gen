@@ -16,13 +16,16 @@ export default defineConfig(({ mode }) => {
     Object.entries(env).filter(([key]) => key.startsWith("VITE_"))
   );
 
+  const rawBase = (env.VITE_PUBLIC_BASE_PATH ?? "").trim();
+  const base = rawBase || (mode === "electron" ? "./" : "/");
+
   return {
     envDir,
     define: {
       "process.env": viteEnvForProcess
     },
     plugins: [react()],
-    base: "./",
+    base,
     server: {
       port: 5173
     },

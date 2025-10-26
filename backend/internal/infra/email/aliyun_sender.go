@@ -76,10 +76,9 @@ func (s *AliyunSender) SendVerification(ctx context.Context, user *domain.User, 
 		request.TagName = tea.String(s.cfg.TagName)
 	}
 
+	request.TextBody = tea.String(textBody)
 	if htmlBody != "" {
 		request.HtmlBody = tea.String(htmlBody)
-	} else {
-		request.TextBody = tea.String(textBody)
 	}
 
 	// DirectMail SDK 不支持 context 取消，但我们仍在外层等待调用返回。

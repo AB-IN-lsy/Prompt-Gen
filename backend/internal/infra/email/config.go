@@ -55,7 +55,7 @@ func LoadSMTPConfigFromEnv() (SMTPConfig, bool, error) {
 		return SMTPConfig{}, false, fmt.Errorf("parse SMTP_PORT: %w", err)
 	}
 
-	baseURL := os.Getenv("APP_PUBLIC_BASE_URL")
+	baseURL := normaliseBaseURL(os.Getenv("APP_PUBLIC_BASE_URL"))
 
 	return SMTPConfig{
 		Host:                host,
@@ -113,7 +113,7 @@ func LoadAliyunConfigFromEnv() (AliyunConfig, bool, error) {
 		}
 	}
 
-	baseURL := os.Getenv("APP_PUBLIC_BASE_URL")
+	baseURL := normaliseBaseURL(os.Getenv("APP_PUBLIC_BASE_URL"))
 
 	return AliyunConfig{
 		AccessKeyID:         accessKey,
@@ -127,4 +127,18 @@ func LoadAliyunConfigFromEnv() (AliyunConfig, bool, error) {
 		AddressType:         addressType,
 		VerificationBaseURL: baseURL,
 	}, true, nil
+}
+
+// normaliseBaseURL 用于清洗邮件链接的基准地址，移除多余空格或误输的前缀符号。
+func normaliseBaseURL(value string) string {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		return ""
+	}
+	cleaned := strings.TrimLeft(trimmed, "=")
+	cleaned = strings.TrimSpace(cleaned)
+	if cleaned == "" {
+		return ""
+	}
+	return cleaned
 }

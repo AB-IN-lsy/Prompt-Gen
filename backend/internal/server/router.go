@@ -172,9 +172,7 @@ func NewRouter(opts RouterOptions) *gin.Engine {
 
 		if opts.UploadHandler != nil {
 			uploads := api.Group("/uploads")
-			if opts.AuthMW != nil {
-				uploads.Use(opts.AuthMW.Handle())
-			}
+			// 头像上传在注册阶段也会使用，所以该路由不强制登录。
 			uploads.POST("/avatar", opts.UploadHandler.UploadAvatar)
 		}
 

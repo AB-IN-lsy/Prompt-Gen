@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "build:electron": "tsc -b && vite build --mode electron",
     "preview": "vite preview",
     "lint": "node scripts/no-js-check.mjs"
   },

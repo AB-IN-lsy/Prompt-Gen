@@ -114,7 +114,8 @@ go mod tidy
 2. 基本字段包括：`APP_MODE`、`LOCAL_SQLITE_PATH`、`JWT_SECRET`、`MODEL_CREDENTIAL_MASTER_KEY`（用于 AES-256-GCM 加密模型凭据，需填入 Base64 编码的 32 字节密钥）等。  
 3. 若需调试在线模式，可补充 MySQL、Redis、Nacos 等连接参数；否则将 `APP_MODE=local` 即可在完全离线的 SQLite 环境中启动。
 4. 前端同样读取根目录 `.env(.local)` 中的 `VITE_` 字段，例如 `VITE_API_BASE_URL`、`VITE_API_REQUEST_TIMEOUT_MS` 等。
-5. 当前版本仅提供本地存储加手动的 JSON 导入/导出备份能力，不再包含任何远程同步功能。
+5. 若需要部署到纯 Web 环境，可在 `.env` 中设置 `VITE_PUBLIC_BASE_PATH=/`；打包桌面壳保持默认的 `./` 即可兼容 `file://` 协议。
+6. 当前版本仅提供本地存储加手动的 JSON 导入/导出备份能力，不再包含任何远程同步功能。
 
 详细参数说明与约束请参考 `backend/backend_README.md` 与 `frontend/frontend_README.md`。
 
@@ -136,9 +137,10 @@ npm start
 构建生产资源：
 
 ```bash
-npm run build:frontend   # 生成前端静态文件至 frontend/dist
-npm run prepare:offline  # 同时构建前端与后端二进制
-npm run dist:win         # 生成 Windows 安装包（macOS 对应 dist:mac）
+npm run build:frontend:web   # 生成部署 Web 的前端静态文件（base=/）
+npm run build:frontend       # 生成 Electron 壳使用的前端资产（保留相对路径 base=./）
+npm run prepare:offline      # 同时构建前端与后端二进制
+npm run dist:win             # 生成 Windows 安装包（macOS 对应 dist:mac）
 ```
 
 ### 质量检查

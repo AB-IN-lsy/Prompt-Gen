@@ -10,7 +10,7 @@
 - 本地离线模式下会自动关闭邮箱验证、Prompt 生成与公共库的限流器，避免开发或演示环境频繁操作触发限流提示。
 - `/api/users/me` 响应新增 `runtime_mode` 字段，标记后端当前运行在本地（`local`）还是在线（`online`）模式，供前端自动切换离线特性。
 - 新增用户头像字段 `avatar_url`，支持上传后通过 `PUT /api/users/me` 保存。
-- 新增 `POST /api/uploads/avatar` 接口，可接收 multipart 头像并返回可访问的静态地址。
+- 新增 `POST /api/uploads/avatar` 接口，可接收 multipart 头像并返回可访问的静态地址（支持匿名访问，便于注册阶段上传头像）。
 - 默认开放 `/static/**` 路由映射到 `backend/public` 目录，供头像等资源直接访问。
 - 用户资料更新接口现会在保存前检查用户名、邮箱冲突，并返回更明确的错误。
 - 注册接口在邮箱、用户名同时冲突时会通过 `error.details.fields` 返回完整字段列表，方便前端逐项提示。
@@ -257,7 +257,7 @@ go run ./backend/cmd/sendmail -to you@example.com -name "测试账号"
 | `POST` | `/api/auth/logout` | 撤销刷新令牌 | JSON：`refresh_token` |
 | `GET` | `/api/users/me` | 获取当前登录用户信息 | 需附带 `Authorization: Bearer <token>` |
 | `PUT` | `/api/users/me` | 更新当前用户信息与偏好设置 | JSON：`username`、`email`、`avatar_url`、`preferred_model`、`enable_animations` |
-| `POST` | `/api/uploads/avatar` | 上传头像文件并返回静态地址 | 需登录；multipart 表单：`avatar` 文件字段 |
+| `POST` | `/api/uploads/avatar` | 上传头像文件并返回静态地址 | 无需登录；multipart 表单：`avatar` 文件字段 |
 | `GET` | `/api/models` | 列出当前用户的模型凭据 | 需登录 |
 | `POST` | `/api/models` | 新增模型凭据并加密存储 | JSON：`provider`、`label`、`api_key`、`metadata` |
 | `PUT` | `/api/models/:id` | 更新模型凭据（可替换 API Key） | JSON：`label`、`api_key`、`metadata` |
@@ -596,6 +596,7 @@ ALTER TABLE prompts
 
 - **用途**：把前端选中的头像上传到 `public/avatars`，返回可以立即使用的静态 URL。
 - **请求体**（multipart/form-data）：`avatar` 文件字段，支持 PNG/JPG/WEBP，大小 ≤ 5 MB。
+- **鉴权**：公开接口，无需登录即可上传头像，注册表单可直接调用。
 - **成功响应**：`201`
 
   ```json

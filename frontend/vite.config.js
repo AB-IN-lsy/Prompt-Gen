@@ -8,6 +8,7 @@ import { defineConfig, loadEnv } from "vite";
 import react from "@vitejs/plugin-react";
 import path from "node:path";
 export default defineConfig(function (_a) {
+    var _b;
     var mode = _a.mode;
     var envDir = path.resolve(__dirname, "..");
     var env = loadEnv(mode, envDir, "");
@@ -15,13 +16,15 @@ export default defineConfig(function (_a) {
         var key = _a[0];
         return key.startsWith("VITE_");
     }));
+    var rawBase = ((_b = env.VITE_PUBLIC_BASE_PATH) !== null && _b !== void 0 ? _b : "").trim();
+    var base = rawBase || (mode === "electron" ? "./" : "/");
     return {
         envDir: envDir,
         define: {
             "process.env": viteEnvForProcess
         },
         plugins: [react()],
-        base: "./",
+        base: base,
         server: {
             port: 5173
         },
