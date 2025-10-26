@@ -388,8 +388,8 @@ export default function LoginPage() {
                         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:flex-wrap">
                             <Button
                                 type="button"
-                                variant="outline"
-                                className="w-full sm:w-auto sm:flex-shrink-0"
+                                variant="default"
+                                className="w-full sm:w-auto sm:flex-shrink-0 shadow-lg shadow-primary/40"
                                 disabled={resendMutation.isPending}
                                 onClick={() => resendMutation.mutate()}
                             >
@@ -425,8 +425,8 @@ export default function LoginPage() {
                         <p className="text-xs text-amber-700 dark:text-amber-200">{t("auth.verification.emailReminder")}</p>
                         <Button
                             type="button"
-                            variant="ghost"
-                            className="w-full justify-start px-0 text-primary underline-offset-4 hover:underline"
+                            variant="outline"
+                            className="w-full justify-start border-primary/50 text-primary underline-offset-4 hover:bg-primary/10 hover:underline"
                             onClick={() => {
                                 const searchParams = new URLSearchParams();
                                 const trimmed = credentials.identifier.trim();

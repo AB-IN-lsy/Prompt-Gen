@@ -94,7 +94,8 @@ export default function VerifyEmailPage(): JSX.Element {
                     </div>
                     <Button
                         type="button"
-                        className="w-full"
+                        variant="default"
+                        className="w-full shadow-lg shadow-primary/40"
                         disabled={resendMutation.isPending}
                         onClick={() => resendMutation.mutate()}
                     >
@@ -109,8 +110,8 @@ export default function VerifyEmailPage(): JSX.Element {
                 </div>
                 <Button
                     type="button"
-                    variant="ghost"
-                    className="w-full text-primary underline-offset-4 hover:underline"
+                    variant="outline"
+                    className="w-full border-primary/50 bg-white text-primary font-medium hover:bg-primary/10 dark:bg-transparent"
                     onClick={() => navigate("/login")}
                 >
                     {t("auth.verification.backToLogin")}
