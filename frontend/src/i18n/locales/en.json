@@ -376,6 +376,8 @@
     "interpretLoading": "Interpreting description...",
     "augmentLoading": "Augmenting keywords...",
     "generateLoading": "Generating prompt… AI generation can take a bit longer, please wait",
+    "contentRejected": "Content review failed: {{reason}}",
+    "contentRejectedFallbackReason": "The text contains restricted content. Please revise and try again.",
     "keywordDropPlaceholder": "Drop keywords here",
     "dragHandle": "Drag keyword",
     "decreaseWeight": "Decrease relevance weight",

@@ -122,6 +122,14 @@ const (
 	exportFilePermission os.FileMode = 0o600
 )
 
+// auditStage 标记内容审核所处的业务阶段，便于提示模型给出针对性反馈。
+type auditStage string
+
+const (
+	auditStageInterpretInput auditStage = "interpret_input"
+	auditStageGenerateOutput auditStage = "generate_output"
+)
+
 var (
 	// ErrPositiveKeywordLimit 表示正向关键词数量超出上限。
 	ErrPositiveKeywordLimit = errors.New("positive keywords exceed limit")
@@ -133,6 +141,8 @@ var (
 	ErrPromptNotFound = errors.New("prompt not found")
 	// ErrPromptVersionNotFound 表示请求的历史版本不存在。
 	ErrPromptVersionNotFound = errors.New("prompt version not found")
+	// ErrContentRejected 表示内容审核未通过，需提醒用户修改。
+	ErrContentRejected = errors.New("content rejected")
 	// ErrTagLimitExceeded 表示标签数量超出上限。
 	ErrTagLimitExceeded = errors.New("tags exceed limit")
 	// ErrModelInvocationFailed 表示调用模型失败，通常由网络或凭据问题导致。
@@ -902,6 +912,7 @@ type InterpretOutput struct {
 	Confidence       float64
 	WorkspaceToken   string
 	Instructions     string
+	Tags             []string
 }
 
 // AugmentInput 描述补充关键词的请求参数。
@@ -961,6 +972,7 @@ type GenerateInput struct {
 	Topic             string
 	ModelKey          string
 	Description       string
+	ExistingBody      string
 	PositiveKeywords  []KeywordItem
 	NegativeKeywords  []KeywordItem
 	WorkspaceToken    string // 前端和后端约定的“临时工作区”标识
@@ -981,6 +993,32 @@ type GenerateOutput struct {
 	Usage        *modeldomain.ChatCompletionUsage
 	PositiveUsed []KeywordItem
 	NegativeUsed []KeywordItem
+}
+
+// auditContent 使用用户选择的模型对文本进行内容审核，审核不通过时返回 ErrContentRejected。
+func (s *Service) auditContent(ctx context.Context, userID uint, modelKey string, text string, stage auditStage) error {
+	trimmedText := strings.TrimSpace(text)
+	trimmedModel := strings.TrimSpace(modelKey)
+	if trimmedText == "" || trimmedModel == "" {
+		return nil
+	}
+	req := buildAuditRequest(stage, trimmedText)
+	req.Model = trimmedModel
+	modelCtx, cancel := s.modelInvocationContext(ctx)
+	defer cancel()
+	resp, err := s.model.InvokeChatCompletion(modelCtx, userID, trimmedModel, req)
+	if err != nil {
+		return fmt.Errorf("content audit failed: %w", err)
+	}
+	verdict, err := parseAuditPayload(resp)
+	if err != nil {
+		return err
+	}
+	if !verdict.Allowed {
+		reason := normalizeAuditReason(verdict.Reason)
+		return fmt.Errorf("%w: %s", ErrContentRejected, reason)
+	}
+	return nil
 }
 
 // SaveInput 描述保存草稿或发布 Prompt 的参数。
@@ -1019,6 +1057,9 @@ func (s *Service) Interpret(ctx context.Context, input InterpretInput) (Interpre
 	if modelKey == "" {
 		return InterpretOutput{}, errors.New("model key is empty")
 	}
+	if err := s.auditContent(ctx, input.UserID, modelKey, description, auditStageInterpretInput); err != nil {
+		return InterpretOutput{}, err
+	}
 	req := buildInterpretationRequest(description, input.Language)
 	req.Model = modelKey
 	// 防止模型超时
@@ -1034,10 +1075,19 @@ func (s *Service) Interpret(ctx context.Context, input InterpretInput) (Interpre
 		return InterpretOutput{}, err
 	}
 
+	cleanedTags := []string{}
+	if len(payload.Tags) > 0 {
+		if tags, err := s.normalizeTags(payload.Tags); err != nil {
+			cleanedTags = s.truncateTags(payload.Tags)
+		} else {
+			cleanedTags = tags
+		}
+	}
 	result := InterpretOutput{
 		Topic:        payload.Topic,
 		Confidence:   payload.Confidence,
 		Instructions: payload.Instructions,
+		Tags:         cleanedTags,
 	}
 	if result.Topic == "" {
 		return InterpretOutput{}, errors.New("model did not return topic")
@@ -1082,8 +1132,15 @@ func (s *Service) Interpret(ctx context.Context, input InterpretInput) (Interpre
 			Negative:  toWorkspaceKeywords(result.NegativeKeywords, s.keywordLimit),
 			Version:   1,
 		}
+		attributes := map[string]string{}
 		if strings.TrimSpace(result.Instructions) != "" {
-			workspaceSnapshot.Attributes = map[string]string{workspaceAttrInstructions: result.Instructions}
+			attributes[workspaceAttrInstructions] = result.Instructions
+		}
+		if len(result.Tags) > 0 {
+			attributes[workspaceAttrTags] = encodeTagsAttribute(result.Tags)
+		}
+		if len(attributes) > 0 {
+			workspaceSnapshot.Attributes = attributes
 		}
 		if token, err := s.workspace.CreateOrReplace(storeCtx, input.UserID, workspaceSnapshot); err != nil {
 			s.logger.Warnw("store workspace snapshot failed", "user_id", input.UserID, "topic", payload.Topic, "error", err)
@@ -1383,7 +1440,8 @@ func (s *Service) GeneratePrompt(ctx context.Context, input GenerateInput) (Gene
 	if strings.TrimSpace(input.Topic) == "" {
 		return GenerateOutput{}, errors.New("topic is empty")
 	}
-	if strings.TrimSpace(input.ModelKey) == "" {
+	modelKey := strings.TrimSpace(input.ModelKey)
+	if modelKey == "" {
 		return GenerateOutput{}, errors.New("model key is empty")
 	}
 	if len(input.PositiveKeywords) == 0 {
@@ -1393,11 +1451,11 @@ func (s *Service) GeneratePrompt(ctx context.Context, input GenerateInput) (Gene
 		return GenerateOutput{}, err
 	}
 	req := buildGenerateRequest(input)
-	req.Model = strings.TrimSpace(input.ModelKey)
+	req.Model = modelKey
 	start := time.Now()
 	modelCtx, cancel := s.modelInvocationContext(ctx)
 	defer cancel()
-	resp, err := s.model.InvokeChatCompletion(modelCtx, input.UserID, input.ModelKey, req)
+	resp, err := s.model.InvokeChatCompletion(modelCtx, input.UserID, modelKey, req)
 	if err != nil {
 		return GenerateOutput{}, fmt.Errorf("%w: %w", ErrModelInvocationFailed, err)
 	}
@@ -1405,6 +1463,9 @@ func (s *Service) GeneratePrompt(ctx context.Context, input GenerateInput) (Gene
 	promptText := extractPromptText(resp)
 	if promptText == "" {
 		return GenerateOutput{}, errors.New("model returned empty prompt")
+	}
+	if err := s.auditContent(ctx, input.UserID, modelKey, promptText, auditStageGenerateOutput); err != nil {
+		return GenerateOutput{}, err
 	}
 	if s.workspace != nil && strings.TrimSpace(input.WorkspaceToken) != "" {
 		// 写回最新草稿并刷新 TTL，防止用户在生成后继续调整时工作区被 Redis 过期策略清理。
@@ -2051,6 +2112,7 @@ type interpretationPayload struct {
 	Negative     []keywordPayload
 	Confidence   float64
 	Instructions string
+	Tags         []string
 }
 
 // rawInterpretationPayload 用于兼容模型返回的多种 instructions 表达形式（字符串或数组）。
@@ -2060,6 +2122,29 @@ type rawInterpretationPayload struct {
 	Negative     []keywordPayload `json:"negative_keywords"`
 	Confidence   float64          `json:"confidence"`
 	Instructions interface{}      `json:"instructions"`
+	Tags         interface{}      `json:"tags"`
+}
+
+// auditPayload 描述模型审核返回的结构化结果。
+type auditPayload struct {
+	Allowed bool   `json:"allowed"`
+	Reason  string `json:"reason"`
+}
+
+// parseAuditPayload 解析内容审核模型返回的 JSON 结果，判断是否放行。
+func parseAuditPayload(resp modeldomain.ChatCompletionResponse) (auditPayload, error) {
+	if len(resp.Choices) == 0 {
+		return auditPayload{}, errors.New("content audit returned no choices")
+	}
+	content := strings.TrimSpace(resp.Choices[0].Message.Content)
+	if content == "" {
+		return auditPayload{}, errors.New("content audit returned empty message")
+	}
+	var payload auditPayload
+	if err := json.Unmarshal([]byte(content), &payload); err != nil {
+		return auditPayload{}, fmt.Errorf("decode audit response: %w", err)
+	}
+	return payload, nil
 }
 
 func parseInterpretationPayload(resp modeldomain.ChatCompletionResponse) (interpretationPayload, error) {
@@ -2080,6 +2165,7 @@ func parseInterpretationPayload(resp modeldomain.ChatCompletionResponse) (interp
 		Negative:     normalizeKeywordPayloadSlice(raw.Negative),
 		Confidence:   raw.Confidence,
 		Instructions: normalizeInstructions(raw.Instructions),
+		Tags:         normalizeTagPayload(raw.Tags),
 	}
 	return result, nil
 }
@@ -2169,6 +2255,54 @@ func joinInstructions(items []string) string {
 		builder.WriteString(text)
 	}
 	return builder.String()
+}
+
+// normalizeAuditReason 统一清洗内容审核的拒绝理由，保证提示语友好。
+func normalizeAuditReason(reason string) string {
+	trimmed := strings.TrimSpace(reason)
+	if trimmed == "" {
+		return "内容包含敏感信息，请修改后再试"
+	}
+	return trimmed
+}
+
+// normalizeTagPayload 将模型返回的标签字段整理为去重后的字符串列表。
+func normalizeTagPayload(value interface{}) []string {
+	if value == nil {
+		return []string{}
+	}
+	var candidates []string
+	switch v := value.(type) {
+	case []string:
+		candidates = v
+	case []interface{}:
+		for _, item := range v {
+			str, ok := item.(string)
+			if !ok {
+				continue
+			}
+			candidates = append(candidates, str)
+		}
+	case string:
+		candidates = append(candidates, v)
+	default:
+		return []string{}
+	}
+	result := make([]string, 0, len(candidates))
+	seen := map[string]struct{}{}
+	for _, candidate := range candidates {
+		trimmed := strings.TrimSpace(candidate)
+		if trimmed == "" {
+			continue
+		}
+		key := strings.ToLower(trimmed)
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		result = append(result, trimmed)
+	}
+	return result
 }
 
 // clampWeight 用于清洗模型或前端传入的权重，避免写入异常值。
@@ -2358,13 +2492,31 @@ func (s *Service) clampTagValue(tag string) string {
 	return trimmed
 }
 
+// buildAuditRequest 根据业务阶段构造内容审核提示词，要求模型返回允许与否。
+func buildAuditRequest(stage auditStage, content string) modeldomain.ChatCompletionRequest {
+	stageHint := "解析前的用户输入"
+	if stage == auditStageGenerateOutput {
+		stageHint = "模型生成的 Prompt 文本"
+	}
+	system := "你是一名内容审核助手，需要识别文本中是否包含黄赌毒、暴力、仇恨、违法或其他违反政策的内容。输出必须严格遵循 JSON 结构。"
+	builder := &strings.Builder{}
+	fmt.Fprintf(builder, "审核阶段：%s\n待审核内容：\n%s\n\n请按照以下格式返回：{\"allowed\":true/false,\"reason\":\"若不允许，请说明原因\"}。", stageHint, content)
+	return modeldomain.ChatCompletionRequest{
+		Messages: []modeldomain.ChatMessage{
+			{Role: "system", Content: system},
+			{Role: "user", Content: builder.String()},
+		},
+		ResponseFormat: map[string]any{"type": "json_object"},
+	}
+}
+
 // buildInterpretationRequest 拼装解析自然语言描述所需的模型请求。
 func buildInterpretationRequest(description, language string) modeldomain.ChatCompletionRequest {
 	lang := languageOrDefault(language)
 	system := "你是一名 Prompt 主题解析助手，负责从用户的自然语言意图中提炼主题、补充要求以及关键词。请始终返回结构化 JSON。"
 	user := fmt.Sprintf(
-		"目标语言：%s\n请从以下描述中提炼一个主题，拆分 3~6 个正向关键词与 1~4 个负向关键词，并总结 1~2 条补充要求。每个关键词需返回 0~5 的整数权重，表示与主题的相关度（0 为几乎无关，5 为强相关）。输出 JSON（保持字段命名一致）：\n"+
-			"{\"topic\":\"主题名称\",\"instructions\":\"补充要求\",\"positive_keywords\":[{\"word\":\"关键词\",\"weight\":0-5}],\"negative_keywords\":[{\"word\":\"关键词\",\"weight\":0-5}],\"confidence\":0.0-1.0}\n"+
+		"目标语言：%s\n请从以下描述中提炼一个主题，拆分 3~6 个正向关键词与 1~4 个负向关键词，并总结 1~2 条补充要求。每个关键词需返回 0~5 的整数权重，表示与主题的相关度（0 为几乎无关，5 为强相关）。此外，请额外提供一个与主题相关的标签数组，帮助快速检索。输出 JSON（保持字段命名一致）：\n"+
+			"{\"topic\":\"主题名称\",\"instructions\":\"补充要求\",\"positive_keywords\":[{\"word\":\"关键词\",\"weight\":0-5}],\"negative_keywords\":[{\"word\":\"关键词\",\"weight\":0-5}],\"tags\":[\"标签\"],\"confidence\":0.0-1.0}\n"+
 			"描述：%s",
 		lang, description,
 	)
@@ -2420,6 +2572,9 @@ func buildGenerateRequest(input GenerateInput) modeldomain.ChatCompletionRequest
 	}
 	if strings.TrimSpace(input.Tone) != "" {
 		fmt.Fprintf(builder, "语气偏好：%s\n", input.Tone)
+	}
+	if existing := strings.TrimSpace(input.ExistingBody); existing != "" {
+		fmt.Fprintf(builder, "以下是当前的 Prompt 草稿，请在保留核心信息的前提下加以润色和补充：\n%s\n请基于这份草稿做定向优化，输出优化后的完整 Prompt 文本，而不是完全重写。\n", existing)
 	}
 	if input.IncludeKeywordRef {
 		fmt.Fprintf(builder, "请在 Prompt 中自然融入这些关键词，而非简单罗列。")

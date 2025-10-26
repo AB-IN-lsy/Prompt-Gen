@@ -6,17 +6,21 @@
 ![Visitors](https://komarev.com/ghpvc/?username=AB-IN-lsy&repo=Prompt-Gen&style=flat-square)
 [![zread](https://img.shields.io/badge/Ask_Zread-_.svg?style=flat&color=00b0aa&labelColor=000000&logo=data%3Aimage%2Fsvg%2Bxml%3Bbase64%2CPHN2ZyB3aWR0aD0iMTYiIGhlaWdodD0iMTYiIHZpZXdCb3g9IjAgMCAxNiAxNiIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHBhdGggZD0iTTQuOTYxNTYgMS42MDAxSDIuMjQxNTZDMS44ODgxIDEuNjAwMSAxLjYwMTU2IDEuODg2NjQgMS42MDE1NiAyLjI0MDFWNC45NjAxQzEuNjAxNTYgNS4zMTM1NiAxLjg4ODEgNS42MDAxIDIuMjQxNTYgNS42MDAxSDQuOTYxNTZDNS4zMTUwMiA1LjYwMDEgNS42MDE1NiA1LjMxMzU2IDUuNjAxNTYgNC45NjAxVjIuMjQwMUM1LjYwMTU2IDEuODg2NjQgNS4zMTUwMiAxLjYwMDEgNC45NjE1NiAxLjYwMDFaIiBmaWxsPSIjZmZmIi8%2BCjxwYXRoIGQ9Ik00Ljk2MTU2IDEwLjM5OTlIMi4yNDE1NkMxLjg4ODEgMTAuMzk5OSAxLjYwMTU2IDEwLjY4NjQgMS42MDE1NiAxMS4wMzk5VjEzLjc1OTlDMS42MDE1NiAxNC4xMTM0IDEuODg4MSAxNC4zOTk5IDIuMjQxNTYgMTQuMzk5OUg0Ljk2MTU2QzUuMzE1MDIgMTQuMzk5OSA1LjYwMTU2IDE0LjExMzQgNS42MDE1NiAxMy43NTk5VjExLjAzOTlDNS42MDE1NiAxMC42ODY0IDUuMzE1MDIgMTAuMzk5OSA0Ljk2MTU2IDEwLjM5OTlaIiBmaWxsPSIjZmZmIi8%2BCjxwYXRoIGQ9Ik0xMy43NTg0IDEuNjAwMUgxMS4wMzg0QzEwLjY4NSAxLjYwMDEgMTAuMzk4NCAxLjg4NjY0IDEwLjM5ODQgMi4yNDAxVjQuOTYwMUMxMC4zOTg0IDUuMzEzNTYgMTAuNjg1IDUuNjAwMSAxMS4wMzg0IDUuNjAwMUgxMy43NTg0QzE0LjExMTkgNS42MDAxIDE0LjM5ODQgNS4zMTM1NiAxNC4zOTg0IDQuOTYwMVYyLjI0MDFDMTQuMzk4NCAxLjg4NjY0IDE0LjExMTkgMS42MDAxIDEzLjc1ODQgMS42MDAxWiIgZmlsbD0iI2ZmZiIvPgo8cGF0aCBkPSJNNCAxMkwxMiA0TDQgMTJaIiBmaWxsPSIjZmZmIi8%2BCjxwYXRoIGQ9Ik00IDEyTDEyIDQiIHN0cm9rZT0iI2ZmZiIgc3Ryb2tlLXdpZHRoPSIxLjUiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPgo8L3N2Zz4K&logoColor=ffffff)](https://zread.ai/AB-IN-lsy/Prompt-Gen)
 
-Prompt Gen Desktop 是一套以 Electron 为外壳、Go 为后端、Vite/React 为前端的提示词管理工作台，面向需要系统化维护 Prompt 的产品、运营与研发团队。应用通过桌面端封装、后端 API 与前端治理模块，为需求解析、关键词管理、模型凭据维护等场景提供统一体验；设置页同时提供界面动效开关，可自由控制 Aurora 背景与欢迎过场动画。
+Prompt Gen Desktop 是一款专为内容创作者打造的桌面提示词管家。从灵感梳理、关键词治理到版本发布，全流程都能在几分钟内完成；就算离线也能继续整理 Prompt 资产，并随时导出备份与日志。
+
+> **新增功能速览（v1.1）**
+>
+> - 解析与生成流程内置内容审核，自动过滤黄赌毒等违规文案。
+> - 标签在解析阶段自动补齐，并在后端按环境变量校验长度与数量。
+> - 前端针对审核失败提供 i18n toast 提示，便于用户快速调整文案。
 
 ## 核心亮点
 
-- **一站式 Prompt 工作台**：从需求解析、关键词调优到版本发布全流程串联，看得见每一步。
-- **智能模型偏好**：模型凭据里设置一次，工作台全局自动跟随，随时切换随时生效。模型列表支持连通性测试、启用禁用与偏好设置。
-- **公共库灵感库**：随手浏览他人精炼过的 Prompt，取用、下载、二次发布一站式完成，驳回反馈也第一时间同步给作者。
-- **分页摘要更直观**：公共库按 9 条/页、我的 Prompt 按 10 条/页 展示，并在界面底部提示“本页包含条目数”，快速确认离线包内置数据是否完整；条数可通过 `VITE_PUBLIC_PROMPT_LIST_PAGE_SIZE`、`VITE_MY_PROMPTS_PAGE_SIZE` 配合后端的 `PUBLIC_PROMPT_LIST_PAGE_SIZE`、`PROMPT_LIST_PAGE_SIZE` 自由调整。
-- **全局快速检索**：顶部 Spotlight 搜索栏支持跨页面检索，按下回车即可直达优质 Prompt 库并保留查询词。
-- **本地优先体验**：默认采用内置 SQLite 管理数据，并提供 JSON 导入导出备份；如需调用大模型，只需在设置页填入自己的 API Key。
-- **日志与备份透明**：操作日志、导导出记录、版本历史一目了然，让每一次生成、发布与回滚都有迹可循。
+- **5 分钟产出 Prompt**：输入场景后即可获得结构化 Prompt，历史记录会自动追踪，方便随时复用。
+- **关键词随手调音**：正向/负向关键词支持拖拽排序、权重调整与模型推荐，调优过程完全可视化。
+- **版本管理不迷路**：草稿自动保存，发布后可回看最近版本并一键回滚，适合迭代式创作。
+- **离线也能信任**：本地 SQLite 存储与 JSON 备份让数据牢牢掌握在自己手里，导入导出只需一键。
+- **公共 Prompt 透明**：公共 Prompt 的发布与审核记录都会同步展示，结合操作日志与导入导出明细，团队协作更放心。
 
 ## 演示视频
 
@@ -77,7 +81,7 @@ Prompt Gen Desktop 是一套以 Electron 为外壳、Go 为后端、Vite/React �
 
 ## 开发者指南
 
-下述步骤适用于希望克隆本仓库并继续迭代功能的开发者。请务必先阅读 [LICENSE](LICENSE) 与 `AGENTS.md` 中的协作约定，确保贡献方式与使用范围符合协议。
+下述步骤适用于希望克隆本仓库并继续迭代功能的开发者。请务必先阅读 [LICENSE](LICENSE) 与 `AGENTS.md` 中的协作约定，确保贡献方式与使用范围符合协议。Prompt Gen Desktop 采用 Electron + Go + Vite/React 的一体化架构，下面提供给开发者的安装调试指引。
 
 > ⭐ 建议同时阅读《[开发与发布流程指引](development-workflow.md)》，其中涵盖离线数据导出、版本号管理、`scripts/deploy-online.sh` 服务器部署等完整流程。
 

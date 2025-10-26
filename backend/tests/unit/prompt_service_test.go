@@ -130,6 +130,24 @@ func setupPromptServiceWithConfig(t *testing.T, cfg promptsvc.Config) (*promptsv
 	return service, promptRepo, keywordRepo, db, modelStub
 }
 
+func buildAuditResponse(t *testing.T, allowed bool, reason string) deepseek.ChatCompletionResponse {
+	t.Helper()
+	payload := map[string]any{
+		"allowed": allowed,
+		"reason":  reason,
+	}
+	raw, err := json.Marshal(payload)
+	if err != nil {
+		t.Fatalf("marshal audit payload: %v", err)
+	}
+	return deepseek.ChatCompletionResponse{
+		Model: "audit-model",
+		Choices: []deepseek.ChatCompletionChoice{
+			{Message: deepseek.ChatMessage{Role: "assistant", Content: string(raw)}},
+		},
+	}
+}
+
 // TestPromptServiceInterpret 验证自然语言解析会落地关键词并正确去重。
 func TestPromptServiceInterpret(t *testing.T) {
 	service, _, keywordRepo, db, modelStub := setupPromptService(t)
@@ -152,9 +170,11 @@ func TestPromptServiceInterpret(t *testing.T) {
 		},
 		"confidence":   0.92,
 		"instructions": "强调输出结构化问答",
+		"tags":         []string{"React", "面试", "React", "备考"},
 	}
 	content, _ := json.Marshal(payload)
 	modelStub.responses = []deepseek.ChatCompletionResponse{
+		buildAuditResponse(t, true, ""),
 		{
 			Model: "deepseek-chat",
 			Choices: []deepseek.ChatCompletionChoice{
@@ -183,6 +203,12 @@ func TestPromptServiceInterpret(t *testing.T) {
 	}
 	if result.Instructions != "强调输出结构化问答" {
 		t.Fatalf("unexpected instructions: %s", result.Instructions)
+	}
+	if len(result.Tags) != 3 {
+		t.Fatalf("expected 3 tags, got %d", len(result.Tags))
+	}
+	if len(modelStub.requests) != 2 {
+		t.Fatalf("expected 2 model requests, got %d", len(modelStub.requests))
 	}
 
 	// 关键词应已写入数据库，方便后续补全。
@@ -213,9 +239,15 @@ func TestPromptServiceInterpretInstructionsArray(t *testing.T) {
 		"negative_keywords": []map[string]any{},
 		"confidence":        0.8,
 		"instructions":      []string{"回答时附带示例代码", "重点解释事件循环机制"},
+		"tags": []any{
+			"Node.js",
+			"后端",
+			123,
+		},
 	}
 	content, _ := json.Marshal(payload)
 	modelStub.responses = []deepseek.ChatCompletionResponse{
+		buildAuditResponse(t, true, ""),
 		{
 			Model: "deepseek-chat",
 			Choices: []deepseek.ChatCompletionChoice{
@@ -238,6 +270,17 @@ func TestPromptServiceInterpretInstructionsArray(t *testing.T) {
 	}
 	if got := result.Instructions; got != "回答时附带示例代码；重点解释事件循环机制" {
 		t.Fatalf("unexpected instructions: %q", got)
+	}
+	if len(result.Tags) != 2 {
+		t.Fatalf("expected 2 tags, got %d", len(result.Tags))
+	}
+	for _, tag := range result.Tags {
+		if len([]rune(tag)) > promptsvc.DefaultTagMaxLength {
+			t.Fatalf("tag exceeds max length: %q", tag)
+		}
+	}
+	if len(modelStub.requests) != 2 {
+		t.Fatalf("expected 2 model requests, got %d", len(modelStub.requests))
 	}
 }
 
@@ -602,6 +645,7 @@ func TestPromptServiceGeneratePrompt(t *testing.T) {
 				TotalTokens:      30,
 			},
 		},
+		buildAuditResponse(t, true, ""),
 	}
 
 	start := time.Now()
@@ -623,6 +667,73 @@ func TestPromptServiceGeneratePrompt(t *testing.T) {
 	}
 	if out.Usage == nil || out.Usage.TotalTokens != 30 {
 		t.Fatalf("unexpected usage: %+v", out.Usage)
+	}
+	if len(modelStub.requests) != 2 {
+		t.Fatalf("expected 2 model requests, got %d", len(modelStub.requests))
+	}
+}
+
+// TestPromptServiceInterpretAuditReject 验证内容审核未通过时会直接中断解析流程。
+func TestPromptServiceInterpretAuditReject(t *testing.T) {
+	service, _, _, db, modelStub := setupPromptService(t)
+	defer func() {
+		sqlDB, _ := db.DB()
+		sqlDB.Close()
+	}()
+
+	modelStub.responses = []deepseek.ChatCompletionResponse{
+		buildAuditResponse(t, false, "描述包含违规内容"),
+	}
+
+	_, err := service.Interpret(context.Background(), promptsvc.InterpretInput{
+		UserID:      1,
+		Description: "这里包含敏感词，需要被拦截",
+		ModelKey:    "deepseek-chat",
+		Language:    "中文",
+	})
+	if err == nil {
+		t.Fatalf("expected error but got nil")
+	}
+	if !errors.Is(err, promptsvc.ErrContentRejected) {
+		t.Fatalf("expected ErrContentRejected, got %v", err)
+	}
+	if len(modelStub.requests) != 1 {
+		t.Fatalf("expected 1 model request, got %d", len(modelStub.requests))
+	}
+}
+
+// TestPromptServiceGeneratePromptAuditReject 验证生成后的 Prompt 审核未通过会返回错误。
+func TestPromptServiceGeneratePromptAuditReject(t *testing.T) {
+	service, _, _, db, modelStub := setupPromptService(t)
+	defer func() {
+		sqlDB, _ := db.DB()
+		sqlDB.Close()
+	}()
+
+	modelStub.responses = []deepseek.ChatCompletionResponse{
+		{
+			Model: "deepseek-chat",
+			Choices: []deepseek.ChatCompletionChoice{
+				{Message: deepseek.ChatMessage{Role: "assistant", Content: "这是违规 Prompt"}},
+			},
+		},
+		buildAuditResponse(t, false, "生成内容涉及违禁信息"),
+	}
+
+	_, err := service.GeneratePrompt(context.Background(), promptsvc.GenerateInput{
+		UserID:           1,
+		Topic:            "违规主题",
+		ModelKey:         "deepseek-chat",
+		PositiveKeywords: []promptsvc.KeywordItem{{Word: "合法"}},
+	})
+	if err == nil {
+		t.Fatalf("expected error but got nil")
+	}
+	if !errors.Is(err, promptsvc.ErrContentRejected) {
+		t.Fatalf("expected ErrContentRejected, got %v", err)
+	}
+	if len(modelStub.requests) != 2 {
+		t.Fatalf("expected 2 model requests, got %d", len(modelStub.requests))
 	}
 }
 

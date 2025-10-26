@@ -35,6 +35,7 @@ const (
 	ErrEmailNotVerified         ErrorCode = "EMAIL_NOT_VERIFIED"
 	ErrEmailAlreadyVerified     ErrorCode = "EMAIL_ALREADY_VERIFIED"
 	ErrVerificationTokenInvalid ErrorCode = "VERIFICATION_TOKEN_INVALID"
+	ErrContentRejected          ErrorCode = "CONTENT_REJECTED"
 )
 
 // Error 描述错误响应的统一结构。

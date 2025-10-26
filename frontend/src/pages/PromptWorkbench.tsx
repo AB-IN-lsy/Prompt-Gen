@@ -218,6 +218,7 @@ export default function PromptWorkbenchPage() {
     updateKeyword,
     removeKeyword,
     tags,
+    setTags,
     addTag,
     removeTag,
     prompt,
@@ -336,6 +337,24 @@ export default function PromptWorkbenchPage() {
       }
     },
     [keywordLimit, t],
+  );
+
+  const handleContentRejected = useCallback(
+    (error: ApiError) => {
+      const raw = (error.message ?? "").trim();
+      const reason =
+        raw ||
+        t("promptWorkbench.contentRejectedFallbackReason", {
+          defaultValue: "内容包含敏感信息，请修改后再试",
+        });
+      toast.warning(
+        t("promptWorkbench.contentRejected", {
+          reason,
+          defaultValue: `内容审核未通过：${reason}`,
+        }),
+      );
+    },
+    [t],
   );
 
   const sensors = useSensors(
@@ -957,12 +976,21 @@ export default function PromptWorkbenchPage() {
       setPrompt("");
       setPromptId(null);
       setWorkspaceToken(data.workspace_token ?? null);
+      if (Array.isArray(data.tags)) {
+        setTags(data.tags);
+      } else {
+        setTags([]);
+      }
       toast.success(
         t("promptWorkbench.interpretSuccess", { defaultValue: "解析完成" }),
       );
     },
     onError: (error: unknown) => {
       dismissLoadingToast(interpretToastId);
+      if (error instanceof ApiError && error.code === "CONTENT_REJECTED") {
+        handleContentRejected(error);
+        return;
+      }
       const limitMessage = extractKeywordError(error);
       if (limitMessage) {
         toast.warning(limitMessage);
@@ -1135,6 +1163,7 @@ export default function PromptWorkbenchPage() {
           }),
         });
       }
+      const existingBody = prompt.trim();
       return generatePromptPreview({
         topic: trimmedTopic,
         model_key: model,
@@ -1146,6 +1175,7 @@ export default function PromptWorkbenchPage() {
         instructions: trimmedInstructions,
         language: "zh",
         workspace_token: workspaceToken ?? undefined,
+        existing_body: existingBody ? existingBody : undefined,
       });
     },
     onMutate: () => {
@@ -1199,6 +1229,10 @@ export default function PromptWorkbenchPage() {
     onError: (error: unknown) => {
       ensureMinimumGenerationDuration(() => {
         dismissLoadingToast(generateToastId);
+        if (error instanceof ApiError && error.code === "CONTENT_REJECTED") {
+          handleContentRejected(error);
+          return;
+        }
         const limitMessage = extractKeywordError(error);
         if (limitMessage) {
           toast.warning(limitMessage);

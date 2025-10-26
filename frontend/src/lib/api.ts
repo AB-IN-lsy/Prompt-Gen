@@ -461,6 +461,7 @@ export interface InterpretPromptResponse {
   negative_keywords: PromptKeywordResult[];
   workspace_token?: string;
   instructions?: string;
+  tags?: string[];
 }
 
 export interface AugmentPromptKeywordsRequest {
@@ -500,6 +501,7 @@ export interface GeneratePromptRequest {
   model_key: string;
   positive_keywords: PromptKeywordInput[];
   negative_keywords: PromptKeywordInput[];
+  existing_body?: string;
   description?: string;
   prompt_id?: number;
   language?: string;
@@ -818,6 +820,7 @@ export async function generatePromptPreview(
   payload: GeneratePromptRequest,
 ): Promise<GeneratePromptResponse> {
   try {
+    const existingBody = payload.existing_body?.trim();
     const response: AxiosResponse<GeneratePromptResponse> = await http.post(
       "/prompts/generate",
       {
@@ -832,6 +835,7 @@ export async function generatePromptPreview(
         prompt_id: payload.prompt_id,
         include_keyword_reference: payload.include_keyword_reference,
         workspace_token: payload.workspace_token ?? undefined,
+        existing_body: existingBody ? existingBody : undefined,
         positive_keywords: payload.positive_keywords.map(
           normalisePromptKeyword,
         ),

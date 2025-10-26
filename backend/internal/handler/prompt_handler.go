@@ -165,6 +165,7 @@ type generateRequest struct {
 	ModelKey          string           `json:"model_key" binding:"required"`
 	Language          string           `json:"language"`
 	Instructions      string           `json:"instructions"`
+	ExistingBody      string           `json:"existing_body"`
 	Description       string           `json:"description"`
 	Tone              string           `json:"tone"`
 	Temperature       float64          `json:"temperature"`
@@ -516,6 +517,11 @@ func (h *PromptHandler) Interpret(c *gin.Context) {
 		Language:    req.Language,
 	})
 	if err != nil {
+		if errors.Is(err, promptsvc.ErrContentRejected) {
+			reason := extractContentRejectReason(err)
+			response.Fail(c, http.StatusBadRequest, response.ErrContentRejected, reason, gin.H{"reason": reason})
+			return
+		}
 		log.Errorw("interpret failed", "error", err, "user_id", userID)
 		if errors.Is(err, promptsvc.ErrModelInvocationFailed) {
 			response.Fail(c, http.StatusServiceUnavailable, response.ErrInternal, "调用模型失败，请检查网络连接或模型凭据。", nil)
@@ -532,6 +538,7 @@ func (h *PromptHandler) Interpret(c *gin.Context) {
 		"confidence":        result.Confidence,
 		"workspace_token":   result.WorkspaceToken,
 		"instructions":      result.Instructions,
+		"tags":              result.Tags,
 	}, nil)
 }
 
@@ -726,6 +733,7 @@ func (h *PromptHandler) GeneratePrompt(c *gin.Context) {
 		Description:       strings.TrimSpace(req.Description),
 		Language:          req.Language,
 		Instructions:      req.Instructions,
+		ExistingBody:      req.ExistingBody,
 		Tone:              req.Tone,
 		Temperature:       req.Temperature,
 		MaxTokens:         req.MaxTokens,
@@ -736,6 +744,11 @@ func (h *PromptHandler) GeneratePrompt(c *gin.Context) {
 		WorkspaceToken:    strings.TrimSpace(req.WorkspaceToken),
 	})
 	if err != nil {
+		if errors.Is(err, promptsvc.ErrContentRejected) {
+			reason := extractContentRejectReason(err)
+			response.Fail(c, http.StatusBadRequest, response.ErrContentRejected, reason, gin.H{"reason": reason})
+			return
+		}
 		if errors.Is(err, promptsvc.ErrPositiveKeywordLimit) {
 			h.keywordLimitError(c, promptdomain.KeywordPolarityPositive, len(req.PositiveKeywords))
 			return
@@ -957,6 +970,25 @@ func (h *PromptHandler) keywordDuplicateError(c *gin.Context, polarity, word str
 	response.Fail(c, http.StatusBadRequest, response.ErrBadRequest, message, details)
 }
 
+// extractContentRejectReason 提取内容审核错误中的具体原因，便于返回给前端提示。
+func extractContentRejectReason(err error) string {
+	if err == nil {
+		return ""
+	}
+	message := strings.TrimSpace(err.Error())
+	if message == "" {
+		return message
+	}
+	if idx := strings.Index(message, ":"); idx >= 0 {
+		trimmed := strings.TrimSpace(message[idx+1:])
+		if trimmed != "" {
+			return trimmed
+		}
+	}
+	return message
+}
+
+// toServiceKeywords 将请求体中的关键词载荷转换为 Service 层使用的结构体。
 func toServiceKeywords(items []KeywordPayload) []promptsvc.KeywordItem {
 	result := make([]promptsvc.KeywordItem, 0, len(items))
 	for _, item := range items {
@@ -971,6 +1003,7 @@ func toServiceKeywords(items []KeywordPayload) []promptsvc.KeywordItem {
 	return result
 }
 
+// toKeywordResponse 将 Service 返回的关键词列表转换为 HTTP 响应字段。
 func toKeywordResponse(items []promptsvc.KeywordItem) []gin.H {
 	result := make([]gin.H, 0, len(items))
 	for _, item := range items {
