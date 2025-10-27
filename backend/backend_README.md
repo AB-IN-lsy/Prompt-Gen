@@ -27,6 +27,7 @@
 - 新增 `/api/models` 系列接口，支持模型凭据的创建、查看、更新与删除，API Key 会在入库前加密。
 - 引入 `MODEL_CREDENTIAL_MASTER_KEY` 环境变量，使用 AES-256-GCM 加解密用户提交的模型凭据。
 - 新增 `POST /api/prompts/import`，可上传导出的 JSON 文件并选择“合并/覆盖”模式批量回灌 Prompt，导入批大小由 `PROMPT_IMPORT_BATCH_SIZE` 控制。
+- “我的 Prompt” 支持收藏：新增 `PATCH /api/prompts/:id/favorite` 切换收藏状态，`GET /api/prompts` 返回 `is_favorited` 字段并支持 `favorited=true` 筛选列表。
 - 公共 Prompt 库上线：新增 `/api/public-prompts` 列表、详情与下载接口；投稿仅在在线模式开放，离线模式默认只读，避免本地环境误提交。
 - Prompt 版本号策略：首次仅保存草稿不会产生版本（`latest_version_no=0`），首次发布才会生成版本 1；发布后再保存草稿不改变版本号，下次发布时会遍历历史版本取最大值再 +1，保证序号连续递增。
 - 数据库自动迁移包含 `user_model_credentials` 与 `changelog_entries` 表，服务启动即可创建所需数据结构。
@@ -35,6 +36,17 @@
 - 新增 `changelog_entries` 表和 `/api/changelog` 接口，允许管理员在线维护更新日志；普通用户可直接读取最新发布的条目。
 - JWT 访问令牌新增 `is_admin` 字段，后端会在鉴权中间件里解析并注入上下文，前端可据此展示后台管理能力。
 - 新增 `/api/ip-guard/bans` 黑名单管理接口，管理员可查询限流封禁的 IP 并调用 `DELETE /api/ip-guard/bans/:ip` 解除；默认从环境变量 `IP_GUARD_ADMIN_SCAN_COUNT`、`IP_GUARD_ADMIN_MAX_ENTRIES` 读取扫描批量与返回上限，避免硬编码“神秘数字”。
+
+## 请求生命周期与并发模型
+>
+> 所有请求都走同一个 http.Server 和单例 Gin Router，但 net/http 会在后台为每个连接启动 goroutine，各自顺序处理该连接里的请求；整体并发、调度都由 Go 负责，无需你手动 go func()。
+
+- 入口：`backend/cmd/server/main.go:55` 使用 `http.Server` + `ListenAndServe` 监听请求；这一步由 Go 标准库负责为每个新连接/请求开辟 goroutine，无需手动 `go func()`。
+- 路由：`backend/internal/server/router.go:25` 初始化 Gin 引擎并注册中间件、路由；每条路由的 handler（例如 `backend/internal/handler/prompt_handler.go:117` 的 `GeneratePrompt`）都在独立 goroutine 中执行。
+- 业务拆分：handler 将请求绑定/校验后转给 `internal/service`，例如 `PromptHandler.GeneratePrompt → prompt.Service.Generate`，在同一 goroutine 内同步调用数据库、Redis 或模型 API；阻塞时调度器会自动切换去执行其他请求的 goroutine。
+- 优雅退出：当进程收到 `SIGTERM` 时，`main.go:32` 会触发 `server.Shutdown`，等待当前 goroutine 完成后再释放资源。
+
+> 因此，一个用户发起“解析/生成 Prompt”请求时，整个链路会在同一个 goroutine 上完成 handler → service → repository → 外部调用，无需显式创建新 goroutine；Go 会在高并发场景下自动调度这些请求处理线程。
 
 ## 离线预置数据导出与校验
 
@@ -267,7 +279,8 @@ go run ./backend/cmd/sendmail -to you@example.com -name "测试账号"
 | `POST` | `/api/prompts/keywords/manual` | 手动新增关键词并落库 | JSON：`topic`、`word`、`polarity`、`weight`（可选，默认 5）、`prompt_id`（可选）、`workspace_token`（可选） |
 | `POST` | `/api/prompts/keywords/remove` | 从工作区移除关键词 | JSON：`word`、`polarity`、`workspace_token` |
 | `POST` | `/api/prompts/keywords/sync` | 同步排序与权重到工作区 | JSON：`workspace_token`、`positive_keywords[]`、`negative_keywords[]`（元素含 `word`、`polarity`、`weight`） |
-| `GET` | `/api/prompts` | 获取当前用户的 Prompt 列表 | Query：`status`（可选，draft/published）、`q`（模糊搜索 topic/tags）、`page`、`page_size` |
+| `GET` | `/api/prompts` | 获取当前用户的 Prompt 列表 | Query：`status`（可选，draft/published）、`q`（模糊搜索 topic/tags）、`page`、`page_size`、`favorited`（可选，true/1 表示仅展示收藏项） |
+| `PATCH` | `/api/prompts/:id/favorite` | 收藏或取消收藏 Prompt | JSON：`favorited`（布尔值） |
 | `POST` | `/api/prompts/export` | 导出当前用户的 Prompt 并返回本地保存路径 | 无 |
 | `POST` | `/api/prompts/import` | 导入导出的 Prompt JSON（支持合并/覆盖模式） | multipart：`file`（JSON 文件）、`mode`（可选，merge/overwrite）；或直接提交 JSON 正文 |
 | `GET` | `/api/prompts/:id` | 获取单条 Prompt 详情并返回最新工作区 token | 无 |
@@ -755,9 +768,10 @@ ALTER TABLE prompts
   | --- | --- |
   | `status` | 可选，按 `draft` / `published` 过滤，默认不过滤 |
   | `q` | 可选，对 `topic` 与 `tags` 做模糊搜索 |
+  | `favorited` | 可选，设置为 `true` / `1` 时仅返回已收藏 Prompt |
   | `page` / `page_size` | 可选，分页参数，默认 `page=1`、`page_size=10`，单页上限 100 |
 
-- **成功响应**：`200`，`data.items` 为 Prompt 列表，每项包含 `id`、`topic`、`model`、`status`、`tags`、`positive_keywords`、`negative_keywords`、`updated_at`、`published_at`；`meta` 返回 `page`、`page_size`、`current_count`、`total_items`、`total_pages`。
+- **成功响应**：`200`，`data.items` 为 Prompt 列表，每项包含 `id`、`topic`、`model`、`status`、`tags`、`positive_keywords`、`negative_keywords`、`is_favorited`、`updated_at`、`published_at`；`meta` 返回 `page`、`page_size`、`current_count`、`total_items`、`total_pages`。
 
 #### GET /api/prompts/:id
 
@@ -774,6 +788,7 @@ ALTER TABLE prompts
       "model": "deepseek-chat",
       "status": "draft",
       "tags": ["前端", "面试"],
+      "is_favorited": true,
       "positive_keywords": [{"word": "React", "weight": 5}],
       "negative_keywords": [{"word": "陈旧框架", "weight": 1}],
       "workspace_token": "c9f0d7...",
@@ -879,6 +894,13 @@ ALTER TABLE prompts
 - **用途**：删除指定 Prompt 及其关联的关键词关系、历史版本。
 - **成功响应**：`204`。
 - **常见错误**：Prompt 不存在或无访问权限 → `404`。
+
+#### PATCH /api/prompts/:id/favorite
+
+- **用途**：收藏或取消收藏指定 Prompt，便于在“我的 Prompt”中快速筛选。
+- **请求体**：`favorited`（布尔值），传 `true` 表示收藏，`false` 取消收藏。
+- **成功响应**：`200`，返回 `{ "favorited": <bool> }`。
+- **常见错误**：Prompt 不存在或归属不同用户 → `404`。
 
 #### GET /api/public-prompts
 

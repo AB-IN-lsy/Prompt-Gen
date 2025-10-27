@@ -337,6 +337,7 @@ func TestPromptServiceExportPrompts(t *testing.T) {
 		Model:            "deepseek-chat",
 		Status:           promptdomain.PromptStatusDraft,
 		Tags:             string(tagJSON),
+		IsFavorited:      true,
 	}
 	if err := promptRepo.Create(context.Background(), &prompt); err != nil {
 		t.Fatalf("create prompt: %v", err)
@@ -384,6 +385,7 @@ func TestPromptServiceExportPrompts(t *testing.T) {
 		PromptCount int `json:"prompt_count"`
 		Prompts     []struct {
 			Topic            string `json:"topic"`
+			IsFavorited      bool   `json:"is_favorited"`
 			PositiveKeywords []struct {
 				Word string `json:"word"`
 			} `json:"positive_keywords"`
@@ -406,6 +408,9 @@ func TestPromptServiceExportPrompts(t *testing.T) {
 	}
 	if exported.Prompts[0].PositiveKeywords[0].Word != "示例关键词" {
 		t.Fatalf("unexpected keyword word: %s", exported.Prompts[0].PositiveKeywords[0].Word)
+	}
+	if !exported.Prompts[0].IsFavorited {
+		t.Fatalf("expected prompt favorited flag true")
 	}
 }
 
@@ -471,6 +476,73 @@ func TestPromptServiceListPromptVersions(t *testing.T) {
 	}
 	if out.Versions[0].VersionNo != 2 {
 		t.Fatalf("expected latest version first, got %d", out.Versions[0].VersionNo)
+	}
+}
+
+func TestPromptServiceUpdateFavorite(t *testing.T) {
+	service, promptRepo, _, db, _ := setupPromptService(t)
+	defer func() {
+		sqlDB, _ := db.DB()
+		sqlDB.Close()
+	}()
+
+	ctx := context.Background()
+	res, err := service.Save(ctx, promptsvc.SaveInput{
+		UserID:           1,
+		Topic:            "收藏测试",
+		Body:             "正文",
+		Instructions:     "说明",
+		Model:            "deepseek-chat",
+		Status:           promptdomain.PromptStatusDraft,
+		Publish:          false,
+		Tags:             []string{"收藏"},
+		PositiveKeywords: []promptsvc.KeywordItem{{Word: "示例", Polarity: promptdomain.KeywordPolarityPositive, Weight: 3}},
+		NegativeKeywords: []promptsvc.KeywordItem{},
+	})
+	if err != nil {
+		t.Fatalf("seed prompt: %v", err)
+	}
+
+	if err := service.UpdateFavorite(ctx, promptsvc.UpdateFavoriteInput{
+		UserID:    1,
+		PromptID:  res.PromptID,
+		Favorited: true,
+	}); err != nil {
+		t.Fatalf("set favorite: %v", err)
+	}
+
+	stored, err := promptRepo.FindByID(ctx, 1, res.PromptID)
+	if err != nil {
+		t.Fatalf("load prompt: %v", err)
+	}
+	if !stored.IsFavorited {
+		t.Fatalf("expected prompt favorited flag true")
+	}
+
+	list, err := service.ListPrompts(ctx, promptsvc.ListPromptsInput{
+		UserID:        1,
+		FavoritedOnly: true,
+	})
+	if err != nil {
+		t.Fatalf("list prompts: %v", err)
+	}
+	if len(list.Items) != 1 || list.Items[0].ID != res.PromptID {
+		t.Fatalf("unexpected list result: %+v", list.Items)
+	}
+
+	if err := service.UpdateFavorite(ctx, promptsvc.UpdateFavoriteInput{
+		UserID:    1,
+		PromptID:  res.PromptID,
+		Favorited: false,
+	}); err != nil {
+		t.Fatalf("unset favorite: %v", err)
+	}
+	stored, err = promptRepo.FindByID(ctx, 1, res.PromptID)
+	if err != nil {
+		t.Fatalf("reload prompt: %v", err)
+	}
+	if stored.IsFavorited {
+		t.Fatalf("expected prompt favorited flag false")
 	}
 }
 
@@ -899,6 +971,7 @@ func TestPromptServiceImportPromptsMerge(t *testing.T) {
 				"instructions": "请突出 Hooks 与并发特性",
 				"model":        "deepseek-chat",
 				"status":       "published",
+				"is_favorited": true,
 				"tags":         []string{"合并", "更新"},
 				"positive_keywords": []map[string]any{
 					{"word": "Hooks", "weight": 5, "source": "manual"},
@@ -919,6 +992,7 @@ func TestPromptServiceImportPromptsMerge(t *testing.T) {
 				"instructions": "强调结构化输出",
 				"model":        "deepseek-chat",
 				"status":       "draft",
+				"is_favorited": false,
 				"tags":         []string{"新增"},
 				"positive_keywords": []map[string]any{
 					{"word": "总结", "weight": 4, "source": "manual"},
@@ -960,6 +1034,9 @@ func TestPromptServiceImportPromptsMerge(t *testing.T) {
 	if !updatedPrompt.CreatedAt.Equal(createdAt) || !updatedPrompt.UpdatedAt.Equal(updatedAt) {
 		t.Fatalf("unexpected timestamps: created=%v updated=%v", updatedPrompt.CreatedAt, updatedPrompt.UpdatedAt)
 	}
+	if !updatedPrompt.IsFavorited {
+		t.Fatalf("expected updated prompt favorited flag true")
+	}
 
 	detail, err := service.GetPrompt(ctx, promptsvc.GetPromptInput{UserID: 1, PromptID: existing.PromptID})
 	if err != nil {
@@ -990,6 +1067,9 @@ func TestPromptServiceImportPromptsMerge(t *testing.T) {
 	}
 	if len(newDetail.PositiveKeywords) != 1 || newDetail.PositiveKeywords[0].Word != "总结" {
 		t.Fatalf("unexpected new prompt keywords: %+v", newDetail.PositiveKeywords)
+	}
+	if newDetail.IsFavorited {
+		t.Fatalf("expected new prompt favorited flag false")
 	}
 	if _, err := keywordRepo.ListByTopic(ctx, 1, "新建 Prompt"); err != nil {
 		t.Fatalf("list keywords: %v", err)
@@ -1027,6 +1107,7 @@ func TestPromptServiceImportPromptsOverwrite(t *testing.T) {
 				"instructions": "覆盖说明",
 				"model":        "deepseek-chat",
 				"status":       "published",
+				"is_favorited": true,
 				"positive_keywords": []map[string]any{
 					{"word": "覆盖关键词", "weight": 5, "source": "manual"},
 				},
@@ -1057,6 +1138,9 @@ func TestPromptServiceImportPromptsOverwrite(t *testing.T) {
 	}
 	if len(prompts) != 1 || prompts[0].Topic != "覆盖后的 Prompt" {
 		t.Fatalf("unexpected prompts after overwrite: %+v", prompts)
+	}
+	if !prompts[0].IsFavorited {
+		t.Fatalf("expected overwritten prompt favorited flag true")
 	}
 }
 

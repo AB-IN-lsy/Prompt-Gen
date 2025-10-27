@@ -192,6 +192,10 @@ type saveRequest struct {
 	WorkspaceToken   string           `json:"workspace_token"`
 }
 
+type favoriteRequest struct {
+	Favorited bool `json:"favorited"`
+}
+
 // ListPrompts 返回当前登录用户的 Prompt 列表。
 func (h *PromptHandler) ListPrompts(c *gin.Context) {
 	log := h.scope("list")
@@ -213,13 +217,19 @@ func (h *PromptHandler) ListPrompts(c *gin.Context) {
 	if pageSize > maxPageSize {
 		pageSize = maxPageSize
 	}
+	favoritedOnly := false
+	switch strings.ToLower(strings.TrimSpace(c.Query("favorited"))) {
+	case "1", "true", "yes":
+		favoritedOnly = true
+	}
 
 	out, err := h.service.ListPrompts(c.Request.Context(), promptsvc.ListPromptsInput{
-		UserID:   userID,
-		Status:   c.Query("status"),
-		Query:    c.Query("q"),
-		Page:     page,
-		PageSize: pageSize,
+		UserID:        userID,
+		Status:        c.Query("status"),
+		Query:         c.Query("q"),
+		Page:          page,
+		PageSize:      pageSize,
+		FavoritedOnly: favoritedOnly,
 	})
 	if err != nil {
 		log.Errorw("list prompts failed", "error", err, "user_id", userID)
@@ -237,6 +247,7 @@ func (h *PromptHandler) ListPrompts(c *gin.Context) {
 			"tags":              item.Tags,
 			"positive_keywords": toKeywordResponse(item.PositiveKeywords),
 			"negative_keywords": toKeywordResponse(item.NegativeKeywords),
+			"is_favorited":      item.IsFavorited,
 			"updated_at":        item.UpdatedAt,
 			"published_at":      item.PublishedAt,
 		})
@@ -453,6 +464,7 @@ func (h *PromptHandler) GetPrompt(c *gin.Context) {
 		"tags":              detail.Tags,
 		"positive_keywords": toKeywordResponse(detail.PositiveKeywords),
 		"negative_keywords": toKeywordResponse(detail.NegativeKeywords),
+		"is_favorited":      detail.IsFavorited,
 		"workspace_token":   detail.WorkspaceToken,
 		"created_at":        detail.CreatedAt,
 		"updated_at":        detail.UpdatedAt,
@@ -488,6 +500,40 @@ func (h *PromptHandler) DeletePrompt(c *gin.Context) {
 	}
 
 	response.NoContent(c)
+}
+
+// UpdateFavorite 切换 Prompt 的收藏状态。
+func (h *PromptHandler) UpdateFavorite(c *gin.Context) {
+	log := h.scope("favorite")
+	userID, ok := extractUserID(c)
+	if !ok {
+		response.Fail(c, http.StatusUnauthorized, response.ErrUnauthorized, "missing user id", nil)
+		return
+	}
+	promptID, err := strconv.ParseUint(strings.TrimSpace(c.Param("id")), 10, 64)
+	if err != nil || promptID == 0 {
+		response.Fail(c, http.StatusBadRequest, response.ErrBadRequest, "invalid prompt id", nil)
+		return
+	}
+	var req favoriteRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Fail(c, http.StatusBadRequest, response.ErrBadRequest, err.Error(), nil)
+		return
+	}
+	if err := h.service.UpdateFavorite(c.Request.Context(), promptsvc.UpdateFavoriteInput{
+		UserID:    userID,
+		PromptID:  uint(promptID),
+		Favorited: req.Favorited,
+	}); err != nil {
+		if errors.Is(err, promptsvc.ErrPromptNotFound) {
+			response.Fail(c, http.StatusNotFound, response.ErrNotFound, "prompt not found", nil)
+			return
+		}
+		log.Errorw("update favorite failed", "error", err, "user_id", userID, "prompt_id", promptID)
+		response.Fail(c, http.StatusInternalServerError, response.ErrInternal, "更新收藏状态失败", nil)
+		return
+	}
+	response.Success(c, http.StatusOK, gin.H{"favorited": req.Favorited}, nil)
 }
 
 // Interpret 解析自然语言描述，返回主题与关键词，建议

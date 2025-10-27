@@ -42,6 +42,7 @@ type Prompt struct {
 	Model            string     `gorm:"size:64;not null"`                       // 使用的大模型标识。
 	Status           string     `gorm:"size:16;not null;default:'draft';index"` // 当前状态：draft/published/archived。
 	Tags             string     `gorm:"type:text;not null"`                     // 自定义标签 JSON。
+	IsFavorited      bool       `gorm:"not null;default:false"`                 // 是否收藏。
 	PublishedAt      *time.Time // 最近发布的时间戳。
 	CreatedAt        time.Time  // 创建时间。
 	UpdatedAt        time.Time  // 最近更新时间。

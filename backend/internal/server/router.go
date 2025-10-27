@@ -143,6 +143,7 @@ func NewRouter(opts RouterOptions) *gin.Engine {
 			prompts.POST("/keywords/sync", opts.PromptHandler.SyncKeywords)
 			prompts.POST("/generate", opts.PromptHandler.GeneratePrompt)
 			prompts.GET("/:id", opts.PromptHandler.GetPrompt)
+			prompts.PATCH("/:id/favorite", opts.PromptHandler.UpdateFavorite)
 			prompts.DELETE("/:id", opts.PromptHandler.DeletePrompt)
 			prompts.POST("", opts.PromptHandler.SavePrompt)
 		}

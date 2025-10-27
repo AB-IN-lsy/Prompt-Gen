@@ -27,6 +27,7 @@ type PromptListFilter struct {
 	UseFullText bool
 	Limit       int
 	Offset      int
+	Favorited   bool
 }
 
 // PromptMetadataUpdate 用于在导入场景下批量同步 Prompt 的时间戳与版本编号。
@@ -170,6 +171,9 @@ func (r *PromptRepository) ListByUser(ctx context.Context, userID uint, filter P
 	if strings.TrimSpace(filter.Status) != "" {
 		query = query.Where("status = ?", strings.TrimSpace(filter.Status))
 	}
+	if filter.Favorited {
+		query = query.Where("is_favorited = ?", true)
+	}
 	if q := strings.TrimSpace(filter.Query); q != "" {
 		if filter.UseFullText {
 			if booleanQuery, ok := buildBooleanQuery(q); ok {
@@ -201,6 +205,21 @@ func (r *PromptRepository) ListByUser(ctx context.Context, userID uint, filter P
 		return nil, 0, fmt.Errorf("list prompts: %w", err)
 	}
 	return records, total, nil
+}
+
+// UpdateFavorite 更新 Prompt 的收藏状态。
+func (r *PromptRepository) UpdateFavorite(ctx context.Context, userID, promptID uint, favorited bool) error {
+	result := r.db.WithContext(ctx).
+		Model(&promptdomain.Prompt{}).
+		Where("id = ? AND user_id = ?", promptID, userID).
+		Update("is_favorited", favorited)
+	if result.Error != nil {
+		return fmt.Errorf("update prompt favorite: %w", result.Error)
+	}
+	if result.RowsAffected == 0 {
+		return gorm.ErrRecordNotFound
+	}
+	return nil
 }
 
 func buildBooleanQuery(raw string) (string, bool) {

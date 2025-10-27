@@ -263,6 +263,7 @@ func (s *Service) ListPrompts(ctx context.Context, input ListPromptsInput) (List
 		UseFullText: s.useFullText,
 		Limit:       pageSize,
 		Offset:      (page - 1) * pageSize,
+		Favorited:   input.FavoritedOnly,
 	}
 	records, total, err := s.prompts.ListByUser(ctx, input.UserID, filter)
 	if err != nil {
@@ -280,6 +281,7 @@ func (s *Service) ListPrompts(ctx context.Context, input ListPromptsInput) (List
 			Tags:             s.truncateTags(decodeTags(record.Tags)),
 			PositiveKeywords: positive,
 			NegativeKeywords: negative,
+			IsFavorited:      record.IsFavorited,
 			UpdatedAt:        record.UpdatedAt,
 			PublishedAt:      record.PublishedAt,
 		})
@@ -375,6 +377,7 @@ type promptExportRecord struct {
 	Tags             []string                         `json:"tags"`
 	PositiveKeywords []promptdomain.PromptKeywordItem `json:"positive_keywords"`
 	NegativeKeywords []promptdomain.PromptKeywordItem `json:"negative_keywords"`
+	IsFavorited      bool                             `json:"is_favorited"`
 	PublishedAt      *time.Time                       `json:"published_at,omitempty"`
 	CreatedAt        time.Time                        `json:"created_at"`
 	UpdatedAt        time.Time                        `json:"updated_at"`
@@ -440,6 +443,7 @@ func (s *Service) ExportPrompts(ctx context.Context, input ExportPromptsInput) (
 			Tags:             decodeTags(record.Tags),
 			PositiveKeywords: positive,
 			NegativeKeywords: negative,
+			IsFavorited:      record.IsFavorited,
 			PublishedAt:      record.PublishedAt,
 			CreatedAt:        record.CreatedAt,
 			UpdatedAt:        record.UpdatedAt,
@@ -576,6 +580,12 @@ func (s *Service) importPromptRecord(ctx context.Context, userID uint, record pr
 		return err
 	}
 
+	if err := s.prompts.UpdateFavorite(ctx, userID, result.PromptID, record.IsFavorited); err != nil {
+		if !errors.Is(err, gorm.ErrRecordNotFound) {
+			return fmt.Errorf("sync favorite flag: %w", err)
+		}
+	}
+
 	if err := s.syncImportedMetadata(ctx, result.PromptID, record, status); err != nil {
 		return err
 	}
@@ -680,6 +690,7 @@ func (s *Service) GetPrompt(ctx context.Context, input GetPromptInput) (PromptDe
 		Tags:             s.truncateTags(decodeTags(entity.Tags)),
 		PositiveKeywords: s.clampKeywordList(decodePromptKeywords(entity.PositiveKeywords)),
 		NegativeKeywords: s.clampKeywordList(decodePromptKeywords(entity.NegativeKeywords)),
+		IsFavorited:      entity.IsFavorited,
 		CreatedAt:        entity.CreatedAt,
 		UpdatedAt:        entity.UpdatedAt,
 		PublishedAt:      entity.PublishedAt,
@@ -721,6 +732,20 @@ func (s *Service) GetPrompt(ctx context.Context, input GetPromptInput) (PromptDe
 // DeletePrompt 删除 Prompt 及其关联的关键词/版本记录。
 func (s *Service) DeletePrompt(ctx context.Context, input DeletePromptInput) error {
 	if err := s.prompts.Delete(ctx, input.UserID, input.PromptID); err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return ErrPromptNotFound
+		}
+		return err
+	}
+	return nil
+}
+
+// UpdateFavorite 用于收藏或取消收藏 Prompt。
+func (s *Service) UpdateFavorite(ctx context.Context, input UpdateFavoriteInput) error {
+	if input.UserID == 0 || input.PromptID == 0 {
+		return errors.New("user id and prompt id are required")
+	}
+	if err := s.prompts.UpdateFavorite(ctx, input.UserID, input.PromptID, input.Favorited); err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return ErrPromptNotFound
 		}
@@ -802,11 +827,12 @@ type KeywordItem struct {
 
 // ListPromptsInput 定义“我的 Prompt”列表请求参数。
 type ListPromptsInput struct {
-	UserID   uint
-	Status   string
-	Query    string
-	Page     int
-	PageSize int
+	UserID        uint
+	Status        string
+	Query         string
+	Page          int
+	PageSize      int
+	FavoritedOnly bool
 }
 
 // ListVersionsInput 描述查询 Prompt 历史版本所需的参数。
@@ -825,6 +851,7 @@ type PromptSummary struct {
 	Tags             []string
 	PositiveKeywords []KeywordItem
 	NegativeKeywords []KeywordItem
+	IsFavorited      bool
 	UpdatedAt        time.Time
 	PublishedAt      *time.Time
 }
@@ -873,6 +900,7 @@ type PromptDetail struct {
 	Tags             []string
 	PositiveKeywords []KeywordItem
 	NegativeKeywords []KeywordItem
+	IsFavorited      bool
 	WorkspaceToken   string
 	CreatedAt        time.Time
 	UpdatedAt        time.Time
@@ -894,6 +922,13 @@ type PromptVersionDetail struct {
 type DeletePromptInput struct {
 	UserID   uint
 	PromptID uint
+}
+
+// UpdateFavoriteInput 描述收藏或取消收藏 Prompt 时的请求参数。
+type UpdateFavoriteInput struct {
+	UserID    uint
+	PromptID  uint
+	Favorited bool
 }
 
 // InterpretInput 描述解析自然语言所需的参数。
