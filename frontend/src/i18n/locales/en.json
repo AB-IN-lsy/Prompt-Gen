@@ -181,6 +181,11 @@
       "model": "Model: {{model}}",
       "updatedAt": "Updated: {{date}} {{time}}"
     },
+    "likeAction": "Like",
+    "unlikeAction": "Unlike",
+    "likeError": "Failed to update like status. Please try again later.",
+    "likeOfflineDisabled": "Likes are unavailable in offline mode.",
+    "likeCountLabel": "{{count}} likes",
     "downloadShort": "Save to Mine",
     "deleteShort": "Delete",
     "detailHeader": {

@@ -111,14 +111,14 @@ func setupPromptServiceWithConfig(t *testing.T, cfg promptsvc.Config) (*promptsv
 	sqlDB.SetMaxOpenConns(1)
 	sqlDB.SetMaxIdleConns(1)
 
-	if err := db.AutoMigrate(&promptdomain.Prompt{}, &promptdomain.Keyword{}, &promptdomain.PromptKeyword{}, &promptdomain.PromptVersion{}); err != nil {
+	if err := db.AutoMigrate(&promptdomain.Prompt{}, &promptdomain.Keyword{}, &promptdomain.PromptKeyword{}, &promptdomain.PromptLike{}, &promptdomain.PromptVersion{}); err != nil {
 		t.Fatalf("auto migrate: %v", err)
 	}
 
 	promptRepo := repository.NewPromptRepository(db)
 	keywordRepo := repository.NewKeywordRepository(db)
 	modelStub := &fakeModelInvoker{}
-	service := promptsvc.NewServiceWithConfig(
+	service, err := promptsvc.NewServiceWithConfig(
 		promptRepo,
 		keywordRepo,
 		modelStub,
@@ -127,6 +127,9 @@ func setupPromptServiceWithConfig(t *testing.T, cfg promptsvc.Config) (*promptsv
 		nil,
 		cfg,
 	)
+	if err != nil {
+		t.Fatalf("init prompt service: %v", err)
+	}
 	return service, promptRepo, keywordRepo, db, modelStub
 }
 
@@ -546,6 +549,94 @@ func TestPromptServiceUpdateFavorite(t *testing.T) {
 	}
 }
 
+func TestPromptServiceLikeToggle(t *testing.T) {
+	service, promptRepo, _, db, _ := setupPromptService(t)
+	defer func() {
+		sqlDB, _ := db.DB()
+		sqlDB.Close()
+	}()
+
+	ctx := context.Background()
+	prompt := promptdomain.Prompt{
+		UserID:           1,
+		Topic:            "点赞测试",
+		Body:             "内容",
+		Instructions:     "说明",
+		PositiveKeywords: `[{"word":"正向","weight":5}]`,
+		NegativeKeywords: `[]`,
+		Model:            "deepseek-chat",
+		Status:           promptdomain.PromptStatusDraft,
+		Tags:             "[]",
+	}
+	if err := promptRepo.Create(ctx, &prompt); err != nil {
+		t.Fatalf("create prompt: %v", err)
+	}
+
+	result, err := service.LikePrompt(ctx, promptsvc.UpdateLikeInput{
+		UserID:   1,
+		PromptID: prompt.ID,
+	})
+	if err != nil {
+		t.Fatalf("like prompt: %v", err)
+	}
+	if !result.Liked || result.LikeCount != 1 {
+		t.Fatalf("unexpected like result: %+v", result)
+	}
+
+	reloaded, err := promptRepo.FindByID(ctx, 1, prompt.ID)
+	if err != nil {
+		t.Fatalf("reload prompt: %v", err)
+	}
+	if reloaded.LikeCount != 1 || !reloaded.IsLiked {
+		t.Fatalf("unexpected prompt state after like: %+v", reloaded)
+	}
+
+	// 重复点赞不会重复计数。
+	result, err = service.LikePrompt(ctx, promptsvc.UpdateLikeInput{
+		UserID:   1,
+		PromptID: prompt.ID,
+	})
+	if err != nil {
+		t.Fatalf("duplicate like prompt: %v", err)
+	}
+	if result.LikeCount != 1 || !result.Liked {
+		t.Fatalf("duplicate like should keep count 1, got %+v", result)
+	}
+
+	list, err := service.ListPrompts(ctx, promptsvc.ListPromptsInput{
+		UserID: 1,
+	})
+	if err != nil {
+		t.Fatalf("list prompts: %v", err)
+	}
+	if len(list.Items) != 1 || !list.Items[0].IsLiked || list.Items[0].LikeCount != 1 {
+		t.Fatalf("unexpected list entry: %+v", list.Items)
+	}
+
+	result, err = service.UnlikePrompt(ctx, promptsvc.UpdateLikeInput{
+		UserID:   1,
+		PromptID: prompt.ID,
+	})
+	if err != nil {
+		t.Fatalf("unlike prompt: %v", err)
+	}
+	if result.Liked || result.LikeCount != 0 {
+		t.Fatalf("unexpected unlike result: %+v", result)
+	}
+
+	// 重复取消应保持 0。
+	result, err = service.UnlikePrompt(ctx, promptsvc.UpdateLikeInput{
+		UserID:   1,
+		PromptID: prompt.ID,
+	})
+	if err != nil {
+		t.Fatalf("duplicate unlike prompt: %v", err)
+	}
+	if result.LikeCount != 0 || result.Liked {
+		t.Fatalf("duplicate unlike should keep count 0, got %+v", result)
+	}
+}
+
 func TestPromptServiceGetPromptVersionDetail(t *testing.T) {
 	service, promptRepo, _, db, _ := setupPromptService(t)
 	defer func() {
@@ -617,7 +708,7 @@ func TestPromptServiceManualKeywordDuplicate(t *testing.T) {
 			},
 		},
 	}
-	serviceWithWorkspace := promptsvc.NewServiceWithConfig(
+	serviceWithWorkspace, err := promptsvc.NewServiceWithConfig(
 		promptRepo,
 		keywordRepo,
 		modelStub,
@@ -633,8 +724,11 @@ func TestPromptServiceManualKeywordDuplicate(t *testing.T) {
 			MaxListPageSize:     100,
 		},
 	)
+	if err != nil {
+		t.Fatalf("init prompt service with workspace: %v", err)
+	}
 
-	_, err := serviceWithWorkspace.AddManualKeyword(context.Background(), promptsvc.ManualKeywordInput{
+	_, err = serviceWithWorkspace.AddManualKeyword(context.Background(), promptsvc.ManualKeywordInput{
 		UserID:         1,
 		Topic:          "React",
 		Word:           "React",

@@ -248,6 +248,8 @@ func (h *PromptHandler) ListPrompts(c *gin.Context) {
 			"positive_keywords": toKeywordResponse(item.PositiveKeywords),
 			"negative_keywords": toKeywordResponse(item.NegativeKeywords),
 			"is_favorited":      item.IsFavorited,
+			"is_liked":          item.IsLiked,
+			"like_count":        item.LikeCount,
 			"updated_at":        item.UpdatedAt,
 			"published_at":      item.PublishedAt,
 		})
@@ -465,6 +467,8 @@ func (h *PromptHandler) GetPrompt(c *gin.Context) {
 		"positive_keywords": toKeywordResponse(detail.PositiveKeywords),
 		"negative_keywords": toKeywordResponse(detail.NegativeKeywords),
 		"is_favorited":      detail.IsFavorited,
+		"is_liked":          detail.IsLiked,
+		"like_count":        detail.LikeCount,
 		"workspace_token":   detail.WorkspaceToken,
 		"created_at":        detail.CreatedAt,
 		"updated_at":        detail.UpdatedAt,
@@ -534,6 +538,64 @@ func (h *PromptHandler) UpdateFavorite(c *gin.Context) {
 		return
 	}
 	response.Success(c, http.StatusOK, gin.H{"favorited": req.Favorited}, nil)
+}
+
+// LikePrompt 处理点赞请求并返回最新计数。
+func (h *PromptHandler) LikePrompt(c *gin.Context) {
+	h.handleLikeToggle(c, true)
+}
+
+// UnlikePrompt 处理取消点赞请求并返回最新计数。
+func (h *PromptHandler) UnlikePrompt(c *gin.Context) {
+	h.handleLikeToggle(c, false)
+}
+
+func (h *PromptHandler) handleLikeToggle(c *gin.Context, like bool) {
+	action := "like"
+	if !like {
+		action = "unlike"
+	}
+	log := h.scope(action)
+	userID, ok := extractUserID(c)
+	if !ok {
+		response.Fail(c, http.StatusUnauthorized, response.ErrUnauthorized, "missing user id", nil)
+		return
+	}
+	promptIDRaw := strings.TrimSpace(c.Param("id"))
+	promptID, err := strconv.ParseUint(promptIDRaw, 10, 64)
+	if err != nil || promptID == 0 {
+		response.Fail(c, http.StatusBadRequest, response.ErrBadRequest, "invalid prompt id", nil)
+		return
+	}
+
+	var (
+		result promptsvc.UpdateLikeOutput
+	)
+	if like {
+		result, err = h.service.LikePrompt(c.Request.Context(), promptsvc.UpdateLikeInput{
+			UserID:   userID,
+			PromptID: uint(promptID),
+		})
+	} else {
+		result, err = h.service.UnlikePrompt(c.Request.Context(), promptsvc.UpdateLikeInput{
+			UserID:   userID,
+			PromptID: uint(promptID),
+		})
+	}
+	if err != nil {
+		if errors.Is(err, promptsvc.ErrPromptNotFound) {
+			response.Fail(c, http.StatusNotFound, response.ErrNotFound, "prompt not found", nil)
+			return
+		}
+		log.Errorw("toggle like failed", "error", err, "user_id", userID, "prompt_id", promptID, "like", like)
+		response.Fail(c, http.StatusInternalServerError, response.ErrInternal, "更新点赞状态失败", nil)
+		return
+	}
+
+	response.Success(c, http.StatusOK, gin.H{
+		"liked":      result.Liked,
+		"like_count": result.LikeCount,
+	}, nil)
 }
 
 // Interpret 解析自然语言描述，返回主题与关键词，建议

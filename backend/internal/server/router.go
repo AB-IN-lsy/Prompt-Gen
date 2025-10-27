@@ -144,6 +144,8 @@ func NewRouter(opts RouterOptions) *gin.Engine {
 			prompts.POST("/generate", opts.PromptHandler.GeneratePrompt)
 			prompts.GET("/:id", opts.PromptHandler.GetPrompt)
 			prompts.PATCH("/:id/favorite", opts.PromptHandler.UpdateFavorite)
+			prompts.POST("/:id/like", opts.PromptHandler.LikePrompt)
+			prompts.DELETE("/:id/like", opts.PromptHandler.UnlikePrompt)
 			prompts.DELETE("/:id", opts.PromptHandler.DeletePrompt)
 			prompts.POST("", opts.PromptHandler.SavePrompt)
 		}
@@ -155,6 +157,8 @@ func NewRouter(opts RouterOptions) *gin.Engine {
 			}
 			publicPrompts.GET("", opts.PublicPromptHandler.List)
 			publicPrompts.GET("/:id", opts.PublicPromptHandler.Get)
+			publicPrompts.POST("/:id/like", opts.PublicPromptHandler.Like)
+			publicPrompts.DELETE("/:id/like", opts.PublicPromptHandler.Unlike)
 			publicPrompts.POST("/:id/download", opts.PublicPromptHandler.Download)
 			publicPrompts.DELETE("/:id", opts.PublicPromptHandler.Delete)
 			publicPrompts.POST("", opts.PublicPromptHandler.Submit)

@@ -43,10 +43,12 @@ type Prompt struct {
 	Status           string     `gorm:"size:16;not null;default:'draft';index"` // 当前状态：draft/published/archived。
 	Tags             string     `gorm:"type:text;not null"`                     // 自定义标签 JSON。
 	IsFavorited      bool       `gorm:"not null;default:false"`                 // 是否收藏。
+	LikeCount        uint       `gorm:"not null;default:0"`                     // 点赞数量。
 	PublishedAt      *time.Time // 最近发布的时间戳。
 	CreatedAt        time.Time  // 创建时间。
 	UpdatedAt        time.Time  // 最近更新时间。
 	LatestVersionNo  int        `gorm:"not null;default:1"` // 最近发布版本号。
+	IsLiked          bool       `gorm:"-"`                  // 当前用户是否点赞。
 }
 
 // Keyword 表示主题下的单个关键词，包含正负向、权重与来源信息。
@@ -69,6 +71,18 @@ type PromptKeyword struct {
 	KeywordID uint      `gorm:"primaryKey;index:idx_prompt_keyword_keyword"` // Keyword 主键。
 	Relation  string    `gorm:"size:16;not null"`                            // 关联类型：positive/negative。
 	CreatedAt time.Time // 关系创建时间。
+}
+
+// PromptLike 记录用户对 Prompt 的点赞关系。
+type PromptLike struct {
+	PromptID  uint      `gorm:"primaryKey;column:prompt_id"`
+	UserID    uint      `gorm:"primaryKey;column:user_id"`
+	CreatedAt time.Time `gorm:"column:created_at;autoCreateTime"`
+}
+
+// TableName 返回点赞关系使用的表名。
+func (PromptLike) TableName() string {
+	return "prompt_likes"
 }
 
 // PromptVersion 记录历史版本，便于用户回滚。

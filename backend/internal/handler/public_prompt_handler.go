@@ -133,9 +133,10 @@ func (h *PublicPromptHandler) List(c *gin.Context) {
 	}
 
 	filter := publicpromptsvc.ListFilter{
-		Query:    c.Query("q"),
-		Page:     page,
-		PageSize: pageSize,
+		Query:        c.Query("q"),
+		Page:         page,
+		PageSize:     pageSize,
+		ViewerUserID: userID,
 	}
 	statusParam := strings.TrimSpace(c.Query("status"))
 	if isAdmin(c) {
@@ -193,6 +194,8 @@ func (h *PublicPromptHandler) List(c *gin.Context) {
 				id := *item.ReviewerUserID
 				return &id
 			}(),
+			"like_count": item.LikeCount,
+			"is_liked":   item.IsLiked,
 		})
 	}
 
@@ -225,7 +228,7 @@ func (h *PublicPromptHandler) Get(c *gin.Context) {
 		return
 	}
 
-	entity, err := h.service.Get(c.Request.Context(), uint(idNum))
+	entity, err := h.service.Get(c.Request.Context(), uint(idNum), userID)
 	if err != nil {
 		if errors.Is(err, publicpromptsvc.ErrPublicPromptNotFound) {
 			response.Fail(c, http.StatusNotFound, response.ErrNotFound, "公共 Prompt 不存在", nil)
@@ -263,6 +266,8 @@ func (h *PublicPromptHandler) Get(c *gin.Context) {
 		"updated_at":        entity.UpdatedAt,
 		"review_reason":     reviewReason,
 		"author_user_id":    entity.AuthorUserID,
+		"like_count":        entity.LikeCount,
+		"is_liked":          entity.IsLiked,
 	}, nil)
 }
 
@@ -427,6 +432,59 @@ func (h *PublicPromptHandler) Download(c *gin.Context) {
 	response.Success(c, http.StatusOK, gin.H{
 		"prompt_id": prompt.ID,
 		"status":    prompt.Status,
+	}, nil)
+}
+
+// Like 为公共 Prompt 点赞。
+func (h *PublicPromptHandler) Like(c *gin.Context) {
+	h.handleLike(c, true)
+}
+
+// Unlike 取消公共 Prompt 点赞。
+func (h *PublicPromptHandler) Unlike(c *gin.Context) {
+	h.handleLike(c, false)
+}
+
+func (h *PublicPromptHandler) handleLike(c *gin.Context, like bool) {
+	action := "like"
+	if !like {
+		action = "unlike"
+	}
+	log := h.scope(action)
+	userID, ok := extractUserID(c)
+	if !ok {
+		response.Fail(c, http.StatusUnauthorized, response.ErrUnauthorized, "missing user id", nil)
+		return
+	}
+	idVal := strings.TrimSpace(c.Param("id"))
+	idNum, err := strconv.Atoi(idVal)
+	if err != nil || idNum <= 0 {
+		response.Fail(c, http.StatusBadRequest, response.ErrBadRequest, "invalid id", nil)
+		return
+	}
+
+	var result publicpromptsvc.LikeResult
+	if like {
+		result, err = h.service.Like(c.Request.Context(), userID, uint(idNum))
+	} else {
+		result, err = h.service.Unlike(c.Request.Context(), userID, uint(idNum))
+	}
+	if err != nil {
+		switch {
+		case errors.Is(err, publicpromptsvc.ErrPublicPromptNotFound):
+			response.Fail(c, http.StatusNotFound, response.ErrNotFound, "公共 Prompt 不存在", nil)
+		case errors.Is(err, publicpromptsvc.ErrLikeNotAvailable):
+			response.Fail(c, http.StatusBadRequest, response.ErrBadRequest, "当前公共 Prompt 不支持点赞", nil)
+		default:
+			log.Errorw("toggle public prompt like failed", "error", err, "prompt_id", idNum, "user_id", userID, "like", like)
+			response.Fail(c, http.StatusInternalServerError, response.ErrInternal, "更新点赞状态失败", nil)
+		}
+		return
+	}
+
+	response.Success(c, http.StatusOK, gin.H{
+		"liked":      result.Liked,
+		"like_count": result.LikeCount,
 	}, nil)
 }
 

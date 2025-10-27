@@ -33,7 +33,7 @@ func setupPublicPromptService(t *testing.T, allowSubmission bool) (*publicprompt
 	sqlDB.SetMaxOpenConns(1)
 	sqlDB.SetMaxIdleConns(1)
 
-	if err := db.AutoMigrate(&promptdomain.PublicPrompt{}, &promptdomain.Prompt{}); err != nil {
+	if err := db.AutoMigrate(&promptdomain.PublicPrompt{}, &promptdomain.Prompt{}, &promptdomain.PromptLike{}); err != nil {
 		t.Fatalf("auto migrate: %v", err)
 	}
 
@@ -181,6 +181,7 @@ func TestPublicPromptServiceListFilters(t *testing.T) {
 		OnlyApproved: true,
 		Page:         1,
 		PageSize:     10,
+		ViewerUserID: 1,
 	})
 	if err != nil {
 		t.Fatalf("list approved: %v", err)
@@ -194,6 +195,7 @@ func TestPublicPromptServiceListFilters(t *testing.T) {
 		AuthorUserID: 1,
 		Page:         1,
 		PageSize:     10,
+		ViewerUserID: 1,
 	})
 	if err != nil {
 		t.Fatalf("list pending: %v", err)
@@ -318,6 +320,88 @@ func TestPublicPromptServiceResubmitAfterReject(t *testing.T) {
 	}
 	if second.Title != "复古港风照片 2.0" || second.Summary != "重新提交" {
 		t.Fatalf("fields not updated: %+v", second)
+	}
+}
+
+func TestPublicPromptServiceLikeFlow(t *testing.T) {
+	service, repo, promptRepo, db := setupPublicPromptService(t, true)
+	defer func() {
+		sqlDB, _ := db.DB()
+		sqlDB.Close()
+	}()
+
+	ctx := context.Background()
+	basePrompt := promptdomain.Prompt{
+		UserID:           1,
+		Topic:            "公开点赞基础",
+		Body:             "正文",
+		Instructions:     "说明",
+		PositiveKeywords: `[]`,
+		NegativeKeywords: `[]`,
+		Tags:             `[]`,
+		Model:            "deepseek-chat",
+		Status:           promptdomain.PromptStatusPublished,
+		PublishedAt:      pointerTo(time.Now()),
+	}
+	if err := promptRepo.Create(ctx, &basePrompt); err != nil {
+		t.Fatalf("create prompt: %v", err)
+	}
+
+	entry := promptdomain.PublicPrompt{
+		SourcePromptID:   pointerTo(basePrompt.ID),
+		AuthorUserID:     1,
+		Title:            "公开条目",
+		Topic:            "Topic",
+		Summary:          "摘要",
+		Body:             "正文",
+		Instructions:     "说明",
+		PositiveKeywords: `[]`,
+		NegativeKeywords: `[]`,
+		Tags:             `[]`,
+		Model:            "deepseek-chat",
+		Language:         "zh-CN",
+		Status:           promptdomain.PublicPromptStatusApproved,
+	}
+	if err := repo.Create(ctx, &entry); err != nil {
+		t.Fatalf("create public prompt: %v", err)
+	}
+
+	viewerID := uint(2)
+	likeResult, err := service.Like(ctx, viewerID, entry.ID)
+	if err != nil {
+		t.Fatalf("like public prompt: %v", err)
+	}
+	if !likeResult.Liked || likeResult.LikeCount != 1 {
+		t.Fatalf("unexpected like result: %+v", likeResult)
+	}
+
+	detail, err := service.Get(ctx, entry.ID, viewerID)
+	if err != nil {
+		t.Fatalf("get public prompt: %v", err)
+	}
+	if detail.LikeCount != 1 || !detail.IsLiked {
+		t.Fatalf("like snapshot not populated: %+v", detail)
+	}
+
+	list, err := service.List(ctx, publicpromptsvc.ListFilter{
+		OnlyApproved: true,
+		Page:         1,
+		PageSize:     10,
+		ViewerUserID: viewerID,
+	})
+	if err != nil {
+		t.Fatalf("list public prompts: %v", err)
+	}
+	if len(list.Items) != 1 || list.Items[0].LikeCount != 1 || !list.Items[0].IsLiked {
+		t.Fatalf("list like snapshot mismatch: %+v", list.Items)
+	}
+
+	unlikeResult, err := service.Unlike(ctx, viewerID, entry.ID)
+	if err != nil {
+		t.Fatalf("unlike public prompt: %v", err)
+	}
+	if unlikeResult.Liked || unlikeResult.LikeCount != 0 {
+		t.Fatalf("unexpected unlike result: %+v", unlikeResult)
 	}
 }
 

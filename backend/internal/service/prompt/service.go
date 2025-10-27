@@ -55,6 +55,8 @@ type Service struct {
 	prompts             *repository.PromptRepository
 	keywords            *repository.KeywordRepository
 	model               ModelInvoker
+	auditModel          ModelInvoker
+	auditModelKey       string
 	workspace           WorkspaceStore
 	queue               PersistenceQueue
 	logger              *zap.SugaredLogger
@@ -122,6 +124,11 @@ const (
 	exportFilePermission os.FileMode = 0o600
 )
 
+const (
+	likeIncrement = 1
+	likeDecrement = -1
+)
+
 // auditStage 标记内容审核所处的业务阶段，便于提示模型给出针对性反馈。
 type auditStage string
 
@@ -161,10 +168,11 @@ type Config struct {
 	ExportDirectory     string
 	VersionRetention    int
 	ImportBatchSize     int
+	Audit               AuditConfig
 }
 
 // NewServiceWithConfig 构建 Service，并允许自定义分页等配置。
-func NewServiceWithConfig(prompts *repository.PromptRepository, keywords *repository.KeywordRepository, model ModelInvoker, workspace WorkspaceStore, queue PersistenceQueue, logger *zap.SugaredLogger, cfg Config) *Service {
+func NewServiceWithConfig(prompts *repository.PromptRepository, keywords *repository.KeywordRepository, model ModelInvoker, workspace WorkspaceStore, queue PersistenceQueue, logger *zap.SugaredLogger, cfg Config) (*Service, error) {
 	if logger == nil {
 		logger = zap.NewNop().Sugar()
 	}
@@ -209,10 +217,17 @@ func NewServiceWithConfig(prompts *repository.PromptRepository, keywords *reposi
 			logger.Warnw("fallback prompt export directory normalization failed", "error", fallbackErr)
 		}
 	}
+	auditInvoker, auditModelKey, err := buildAuditInvoker(cfg.Audit)
+	if err != nil {
+		return nil, fmt.Errorf("build audit invoker: %w", err)
+	}
+
 	return &Service{
 		prompts:             prompts,
 		keywords:            keywords,
 		model:               model,
+		auditModel:          auditInvoker,
+		auditModelKey:       strings.TrimSpace(auditModelKey),
 		workspace:           workspace,
 		queue:               queue,
 		logger:              logger,
@@ -226,7 +241,7 @@ func NewServiceWithConfig(prompts *repository.PromptRepository, keywords *reposi
 		exportDir:           normalisedExportDir,
 		versionKeepLimit:    cfg.VersionRetention,
 		importBatchSize:     cfg.ImportBatchSize,
-	}
+	}, nil
 }
 
 // KeywordLimit 暴露当前生效的关键词数量上限，供上层 Handler 使用。
@@ -282,6 +297,8 @@ func (s *Service) ListPrompts(ctx context.Context, input ListPromptsInput) (List
 			PositiveKeywords: positive,
 			NegativeKeywords: negative,
 			IsFavorited:      record.IsFavorited,
+			IsLiked:          record.IsLiked,
+			LikeCount:        record.LikeCount,
 			UpdatedAt:        record.UpdatedAt,
 			PublishedAt:      record.PublishedAt,
 		})
@@ -691,6 +708,8 @@ func (s *Service) GetPrompt(ctx context.Context, input GetPromptInput) (PromptDe
 		PositiveKeywords: s.clampKeywordList(decodePromptKeywords(entity.PositiveKeywords)),
 		NegativeKeywords: s.clampKeywordList(decodePromptKeywords(entity.NegativeKeywords)),
 		IsFavorited:      entity.IsFavorited,
+		IsLiked:          entity.IsLiked,
+		LikeCount:        entity.LikeCount,
 		CreatedAt:        entity.CreatedAt,
 		UpdatedAt:        entity.UpdatedAt,
 		PublishedAt:      entity.PublishedAt,
@@ -752,6 +771,70 @@ func (s *Service) UpdateFavorite(ctx context.Context, input UpdateFavoriteInput)
 		return err
 	}
 	return nil
+}
+
+// LikePrompt 处理用户对 Prompt 的点赞操作。
+func (s *Service) LikePrompt(ctx context.Context, input UpdateLikeInput) (UpdateLikeOutput, error) {
+	return s.changePromptLike(ctx, input, true)
+}
+
+// UnlikePrompt 处理用户对 Prompt 的取消点赞操作。
+func (s *Service) UnlikePrompt(ctx context.Context, input UpdateLikeInput) (UpdateLikeOutput, error) {
+	return s.changePromptLike(ctx, input, false)
+}
+
+// changePromptLike 根据动作新增或移除点赞关系，并返回变更后的计数。
+func (s *Service) changePromptLike(ctx context.Context, input UpdateLikeInput, like bool) (UpdateLikeOutput, error) {
+	if input.UserID == 0 || input.PromptID == 0 {
+		return UpdateLikeOutput{}, errors.New("user id and prompt id are required")
+	}
+	if _, err := s.prompts.FindByID(ctx, input.UserID, input.PromptID); err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return UpdateLikeOutput{}, ErrPromptNotFound
+		}
+		return UpdateLikeOutput{}, err
+	}
+
+	var delta int
+	if like {
+		created, err := s.prompts.AddLike(ctx, input.PromptID, input.UserID)
+		if err != nil {
+			return UpdateLikeOutput{}, fmt.Errorf("add prompt like: %w", err)
+		}
+		if created {
+			delta = likeIncrement
+		}
+	} else {
+		removed, err := s.prompts.RemoveLike(ctx, input.PromptID, input.UserID)
+		if err != nil {
+			return UpdateLikeOutput{}, fmt.Errorf("remove prompt like: %w", err)
+		}
+		if removed {
+			delta = likeDecrement
+		}
+	}
+
+	if delta != 0 {
+		if err := s.prompts.IncrementLikeCount(ctx, input.PromptID, delta); err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return UpdateLikeOutput{}, ErrPromptNotFound
+			}
+			return UpdateLikeOutput{}, fmt.Errorf("update like count: %w", err)
+		}
+	}
+
+	refreshed, err := s.prompts.FindByID(ctx, input.UserID, input.PromptID)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return UpdateLikeOutput{}, ErrPromptNotFound
+		}
+		return UpdateLikeOutput{}, err
+	}
+
+	return UpdateLikeOutput{
+		LikeCount: refreshed.LikeCount,
+		Liked:     refreshed.IsLiked,
+	}, nil
 }
 
 // StartPersistenceWorker 启动后台协程消费 Redis 队列并写入 MySQL。
@@ -852,6 +935,8 @@ type PromptSummary struct {
 	PositiveKeywords []KeywordItem
 	NegativeKeywords []KeywordItem
 	IsFavorited      bool
+	IsLiked          bool
+	LikeCount        uint
 	UpdatedAt        time.Time
 	PublishedAt      *time.Time
 }
@@ -901,6 +986,8 @@ type PromptDetail struct {
 	PositiveKeywords []KeywordItem
 	NegativeKeywords []KeywordItem
 	IsFavorited      bool
+	IsLiked          bool
+	LikeCount        uint
 	WorkspaceToken   string
 	CreatedAt        time.Time
 	UpdatedAt        time.Time
@@ -929,6 +1016,18 @@ type UpdateFavoriteInput struct {
 	UserID    uint
 	PromptID  uint
 	Favorited bool
+}
+
+// UpdateLikeInput 描述点赞或取消点赞 Prompt 时的请求参数。
+type UpdateLikeInput struct {
+	UserID   uint
+	PromptID uint
+}
+
+// UpdateLikeOutput 返回点赞状态变化后的关键数据。
+type UpdateLikeOutput struct {
+	LikeCount uint `json:"like_count"`
+	Liked     bool `json:"liked"`
 }
 
 // InterpretInput 描述解析自然语言所需的参数。
@@ -1033,15 +1132,25 @@ type GenerateOutput struct {
 // auditContent 使用用户选择的模型对文本进行内容审核，审核不通过时返回 ErrContentRejected。
 func (s *Service) auditContent(ctx context.Context, userID uint, modelKey string, text string, stage auditStage) error {
 	trimmedText := strings.TrimSpace(text)
-	trimmedModel := strings.TrimSpace(modelKey)
-	if trimmedText == "" || trimmedModel == "" {
+	if trimmedText == "" {
+		return nil
+	}
+	invoker := s.model
+	invokeModelKey := strings.TrimSpace(modelKey)
+	if s.auditModel != nil {
+		invoker = s.auditModel
+		if key := strings.TrimSpace(s.auditModelKey); key != "" {
+			invokeModelKey = key
+		}
+	}
+	if strings.TrimSpace(invokeModelKey) == "" {
 		return nil
 	}
 	req := buildAuditRequest(stage, trimmedText)
-	req.Model = trimmedModel
+	req.Model = invokeModelKey
 	modelCtx, cancel := s.modelInvocationContext(ctx)
 	defer cancel()
-	resp, err := s.model.InvokeChatCompletion(modelCtx, userID, trimmedModel, req)
+	resp, err := invoker.InvokeChatCompletion(modelCtx, userID, invokeModelKey, req)
 	if err != nil {
 		return fmt.Errorf("content audit failed: %w", err)
 	}

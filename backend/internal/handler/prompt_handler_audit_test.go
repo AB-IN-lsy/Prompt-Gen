@@ -58,12 +58,15 @@ func newTestService(t *testing.T, stub *handlerModelStub) (*promptsvc.Service, *
 		KeywordMaxLength:    promptsvc.DefaultKeywordMaxLength,
 		TagLimit:            promptsvc.DefaultTagLimit,
 		TagMaxLength:        promptsvc.DefaultTagMaxLength,
-		DefaultListPageSize: 10,
-		MaxListPageSize:     20,
+		DefaultListPageSize: promptsvc.DefaultPromptListPageSize,
+		MaxListPageSize:     promptsvc.DefaultPromptListMaxPageSize,
 		VersionRetention:    promptsvc.DefaultVersionRetentionLimit,
 	}
 
-	service := promptsvc.NewServiceWithConfig(promptRepo, keywordRepo, stub, nil, nil, nil, cfg)
+	service, err := promptsvc.NewServiceWithConfig(promptRepo, keywordRepo, stub, nil, nil, nil, cfg)
+	if err != nil {
+		t.Fatalf("init prompt service: %v", err)
+	}
 	return service, db
 }
 

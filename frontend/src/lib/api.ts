@@ -205,6 +205,8 @@ export interface PromptListItem {
   updated_at: string;
   published_at?: string | null;
   is_favorited?: boolean;
+  is_liked?: boolean;
+  like_count?: number;
 }
 
 export interface PromptListMeta {
@@ -235,6 +237,8 @@ export interface PublicPromptListItem {
   author_user_id: number;
   reviewer_user_id?: number | null;
   review_reason?: string | null;
+  is_liked: boolean;
+  like_count: number;
 }
 
 export interface PublicPromptListMeta {
@@ -260,6 +264,11 @@ export interface PublicPromptDetail extends PublicPromptListItem {
 export interface PublicPromptDownloadResult {
   promptId: number | null;
   status: string;
+}
+
+export interface PublicPromptLikeResult {
+  liked: boolean;
+  like_count: number;
 }
 
 export interface PublicPromptSubmitPayload {
@@ -335,6 +344,8 @@ export interface PromptDetailResponse {
   updated_at: string;
   published_at?: string | null;
   is_favorited?: boolean;
+  is_liked?: boolean;
+  like_count?: number;
 }
 
 export interface AuthTokens {
@@ -993,6 +1004,11 @@ export async function fetchMyPrompts(params: {
       items: (response.data?.items ?? []).map((item) => ({
         ...item,
         is_favorited: Boolean(item?.is_favorited),
+        is_liked: Boolean(item?.is_liked),
+        like_count:
+          typeof item?.like_count === "number" && Number.isFinite(item.like_count)
+            ? item.like_count
+            : 0,
       })),
       meta: {
         ...resolvedMeta,
@@ -1044,6 +1060,11 @@ export async function fetchPublicPrompts(params: {
             : Number(item.reviewer_user_id),
         review_reason:
           typeof item?.review_reason === "string" ? item.review_reason : undefined,
+        is_liked: Boolean(item?.is_liked),
+        like_count:
+          typeof item?.like_count === "number" && Number.isFinite(item.like_count)
+            ? item.like_count
+            : 0,
       } as PublicPromptListItem;
     });
     const effectivePageSize = params.pageSize ?? PUBLIC_PROMPT_LIST_PAGE_SIZE;
@@ -1098,6 +1119,11 @@ export async function fetchPublicPromptDetail(
           : Number(data.reviewer_user_id),
       review_reason:
         typeof data.review_reason === "string" ? data.review_reason : undefined,
+      is_liked: Boolean(data?.is_liked),
+      like_count:
+        typeof data?.like_count === "number" && Number.isFinite(data.like_count)
+          ? data.like_count
+          : 0,
       body: String(data.body ?? ""),
       instructions: String(data.instructions ?? ""),
       positive_keywords: positive,
@@ -1122,6 +1148,36 @@ export async function downloadPublicPrompt(
           ? response.data.prompt_id
           : null,
       status: String(response.data?.status ?? ""),
+    };
+  } catch (error) {
+    throw normaliseError(error);
+  }
+}
+
+export async function likePublicPrompt(id: number): Promise<PublicPromptLikeResult> {
+  try {
+    const response: AxiosResponse<{ liked?: boolean; like_count?: number }> = await http.post(`/public-prompts/${id}/like`);
+    return {
+      liked: Boolean(response.data?.liked),
+      like_count:
+        typeof response.data?.like_count === "number" && Number.isFinite(response.data.like_count)
+          ? response.data.like_count
+          : 0,
+    };
+  } catch (error) {
+    throw normaliseError(error);
+  }
+}
+
+export async function unlikePublicPrompt(id: number): Promise<PublicPromptLikeResult> {
+  try {
+    const response: AxiosResponse<{ liked?: boolean; like_count?: number }> = await http.delete(`/public-prompts/${id}/like`);
+    return {
+      liked: Boolean(response.data?.liked),
+      like_count:
+        typeof response.data?.like_count === "number" && Number.isFinite(response.data.like_count)
+          ? response.data.like_count
+          : 0,
     };
   } catch (error) {
     throw normaliseError(error);
@@ -1257,6 +1313,11 @@ export async function fetchPromptDetail(
     return {
       ...data,
       is_favorited: Boolean(data?.is_favorited),
+      is_liked: Boolean(data?.is_liked),
+      like_count:
+        typeof data?.like_count === "number" && Number.isFinite(data.like_count)
+          ? data.like_count
+          : 0,
     };
   } catch (error) {
     throw normaliseError(error);

@@ -24,6 +24,7 @@
   - keywordId：保持后端原有的数字 ID，来自接口字段 keyword_id。同步到后端（保存、生成、同步排序等接口）时，只要这个字段有值，就带着它；如果是全新创
     建、后端还没分配 ID 的关键词，就带 keywordId: undefined，让后端按现有逻辑生成。
 - **数据备份（JSON）**：`Settings.tsx` 的“应用设置”标签页提供“数据备份与导入”卡片，支持 JSON 导出/导入（合并/覆盖两种模式），会调用 `POST /api/prompts/export` 与 `POST /api/prompts/import`，并记录最近一次导出/导入的路径、数量与错误详情，操作完成后自动刷新 `MyPrompts` 列表。
+- **点赞数据预埋**：后端已提供 `POST/DELETE /api/prompts/:id/like` 以及 `like_count` 字段，前端暂不在个人列表展示按钮，待公共库或协作视图启用后即可直接复用。
 - **动效升级**：全局外壳引入基于 Reactbits 灵感的 `AuroraBackdrop` 背景（轻量级渐变+噪点），并在认证完成或离线直接进入时显示一次性的 `EntryTransition` 过场动画，营造更柔和的视觉层次。
 - **动效开关**：设置页“应用设置”新增「界面动效」开关，可随时开启/关闭欢迎过场与背景光效，偏好会同步保存到用户设置。
 - **Dashboard Spotlight Hero**：仪表盘顶区改为 Spotlight Hero 模式，融合欢迎语、快捷按钮与核心指标卡片，叠加柔光/噪点背景。

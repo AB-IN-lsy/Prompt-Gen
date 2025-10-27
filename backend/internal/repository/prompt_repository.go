@@ -74,6 +74,24 @@ func (r *PromptRepository) FindByID(ctx context.Context, userID, id uint) (*prom
 		First(&entity).Error; err != nil {
 		return nil, err
 	}
+	if userID != 0 {
+		likedMap, err := r.ListUserLikedPromptIDs(ctx, userID, []uint{id})
+		if err != nil {
+			return nil, err
+		}
+		entity.IsLiked = likedMap[id]
+	}
+	return &entity, nil
+}
+
+// FindByIDGlobal 根据 Prompt 主键查询记录，不限制所属用户，主要用于公共库或后台场景。
+func (r *PromptRepository) FindByIDGlobal(ctx context.Context, id uint) (*promptdomain.Prompt, error) {
+	var entity promptdomain.Prompt
+	if err := r.db.WithContext(ctx).
+		Where("id = ?", id).
+		First(&entity).Error; err != nil {
+		return nil, err
+	}
 	return &entity, nil
 }
 
@@ -204,6 +222,9 @@ func (r *PromptRepository) ListByUser(ctx context.Context, userID uint, filter P
 	if err := query.Order("updated_at DESC").Find(&records).Error; err != nil {
 		return nil, 0, fmt.Errorf("list prompts: %w", err)
 	}
+	if err := r.attachLikeStatus(ctx, userID, records); err != nil {
+		return nil, 0, err
+	}
 	return records, total, nil
 }
 
@@ -220,6 +241,107 @@ func (r *PromptRepository) UpdateFavorite(ctx context.Context, userID, promptID 
 		return gorm.ErrRecordNotFound
 	}
 	return nil
+}
+
+// AddLike 为指定 Prompt 新增一条点赞关系，重复点赞会被忽略。
+func (r *PromptRepository) AddLike(ctx context.Context, promptID, userID uint) (bool, error) {
+	like := promptdomain.PromptLike{
+		PromptID: promptID,
+		UserID:   userID,
+	}
+	result := r.db.WithContext(ctx).
+		Clauses(clause.OnConflict{DoNothing: true}).
+		Create(&like)
+	if result.Error != nil {
+		return false, fmt.Errorf("create prompt like: %w", result.Error)
+	}
+	return result.RowsAffected > 0, nil
+}
+
+// RemoveLike 取消点赞关系，若记录不存在则视为成功无动作。
+func (r *PromptRepository) RemoveLike(ctx context.Context, promptID, userID uint) (bool, error) {
+	result := r.db.WithContext(ctx).
+		Where("prompt_id = ? AND user_id = ?", promptID, userID).
+		Delete(&promptdomain.PromptLike{})
+	if result.Error != nil {
+		return false, fmt.Errorf("delete prompt like: %w", result.Error)
+	}
+	return result.RowsAffected > 0, nil
+}
+
+// IncrementLikeCount 按增量更新 Prompt 的点赞数量，内部使用 CASE 避免计数出现负值。
+func (r *PromptRepository) IncrementLikeCount(ctx context.Context, promptID uint, delta int) error {
+	if delta == 0 {
+		return nil
+	}
+	result := r.db.WithContext(ctx).
+		Model(&promptdomain.Prompt{}).
+		Where("id = ?", promptID).
+		UpdateColumn("like_count", gorm.Expr("CASE WHEN like_count + ? < 0 THEN 0 ELSE like_count + ? END", delta, delta))
+	if result.Error != nil {
+		return fmt.Errorf("update prompt like_count: %w", result.Error)
+	}
+	if result.RowsAffected == 0 {
+		return gorm.ErrRecordNotFound
+	}
+	return nil
+}
+
+// ListUserLikedPromptIDs 返回用户对指定 Prompt 集合的点赞命中情况。
+func (r *PromptRepository) ListUserLikedPromptIDs(ctx context.Context, userID uint, promptIDs []uint) (map[uint]bool, error) {
+	result := make(map[uint]bool, len(promptIDs))
+	if userID == 0 || len(promptIDs) == 0 {
+		return result, nil
+	}
+	var likedIDs []uint
+	if err := r.db.WithContext(ctx).
+		Model(&promptdomain.PromptLike{}).
+		Where("user_id = ? AND prompt_id IN ?", userID, promptIDs).
+		Pluck("prompt_id", &likedIDs).Error; err != nil {
+		return nil, fmt.Errorf("list prompt likes: %w", err)
+	}
+	for _, id := range likedIDs {
+		result[id] = true
+	}
+	return result, nil
+}
+
+// attachLikeStatus 将当前用户的点赞状态填充到 Prompt 列表中，便于上层直接使用。
+func (r *PromptRepository) attachLikeStatus(ctx context.Context, userID uint, prompts []promptdomain.Prompt) error {
+	if userID == 0 || len(prompts) == 0 {
+		return nil
+	}
+	ids := make([]uint, 0, len(prompts))
+	for _, item := range prompts {
+		ids = append(ids, item.ID)
+	}
+	likedMap, err := r.ListUserLikedPromptIDs(ctx, userID, ids)
+	if err != nil {
+		return err
+	}
+	for i := range prompts {
+		if likedMap[prompts[i].ID] {
+			prompts[i].IsLiked = true
+		}
+	}
+	return nil
+}
+
+// LikeSnapshot 返回指定 Prompt 当前的点赞总数与指定用户的点赞态度。
+func (r *PromptRepository) LikeSnapshot(ctx context.Context, promptID, viewerUserID uint) (uint, bool, error) {
+	entity, err := r.FindByIDGlobal(ctx, promptID)
+	if err != nil {
+		return 0, false, err
+	}
+	liked := false
+	if viewerUserID != 0 {
+		hits, err := r.ListUserLikedPromptIDs(ctx, viewerUserID, []uint{promptID})
+		if err != nil {
+			return 0, false, err
+		}
+		liked = hits[promptID]
+	}
+	return entity.LikeCount, liked, nil
 }
 
 func buildBooleanQuery(raw string) (string, bool) {

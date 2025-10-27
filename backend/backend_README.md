@@ -28,7 +28,14 @@
 - 引入 `MODEL_CREDENTIAL_MASTER_KEY` 环境变量，使用 AES-256-GCM 加解密用户提交的模型凭据。
 - 新增 `POST /api/prompts/import`，可上传导出的 JSON 文件并选择“合并/覆盖”模式批量回灌 Prompt，导入批大小由 `PROMPT_IMPORT_BATCH_SIZE` 控制。
 - “我的 Prompt” 支持收藏：新增 `PATCH /api/prompts/:id/favorite` 切换收藏状态，`GET /api/prompts` 返回 `is_favorited` 字段并支持 `favorited=true` 筛选列表。
+- “我的 Prompt” 支持点赞：新增 `POST /api/prompts/:id/like` 与 `DELETE /api/prompts/:id/like`，响应透出 `like_count` 与 `is_liked`，方便前端展示点赞态与热度。
 - 公共 Prompt 库上线：新增 `/api/public-prompts` 列表、详情与下载接口；投稿仅在在线模式开放，离线模式默认只读，避免本地环境误提交。
+  - 点赞串联逻辑：公共库的点赞只是代理到源 Prompt —— handler 会调用 service 的 `Like/Unlike`，再由 `PromptRepository.AddLike/RemoveLike` 写入 `prompt_likes` 表，并通过 `IncrementLikeCount` 同步 `prompts.like_count`，随后用 `LikeSnapshot` 返回最新的 `like_count` 与 `is_liked` 方便前端立即刷新。
+    1. 前端点击心形按钮后，会向 `/api/public-prompts/:id/like`（点赞）或 `DELETE /api/public-prompts/:id/like`（取消）发起请求。
+    2. `PublicPromptHandler.handleLike` 负责解析公共 Prompt ID 与登录用户 ID，随后调用 `Service.Like/Unlike`。
+    3. Service 层先查公共 Prompt 绑定的源 Prompt 编号，确保点赞动作落在真实的 Prompt 数据上。
+    4. 找到源 Prompt 后，调用 `PromptRepository.AddLike/RemoveLike` 对 `prompt_likes` 表增删记录，并用 `IncrementLikeCount` 更新 `prompts.like_count`。
+    5. 最后执行 `LikeSnapshot`，一次性读取“总点赞数 + 当前用户是否点赞”，填回到公共 Prompt 的 `LikeCount/IsLiked` 字段，HTTP 响应即可直接携带最新状态返回给前端。
 - Prompt 版本号策略：首次仅保存草稿不会产生版本（`latest_version_no=0`），首次发布才会生成版本 1；发布后再保存草稿不改变版本号，下次发布时会遍历历史版本取最大值再 +1，保证序号连续递增。
 - 数据库自动迁移包含 `user_model_credentials` 与 `changelog_entries` 表，服务启动即可创建所需数据结构。
 - 模型凭据禁用或删除时，会自动清理用户偏好的 `preferred_model`，避免指向不可用的模型；`PUT /api/users/me` 也会验证偏好模型是否存在并已启用。
@@ -163,6 +170,13 @@
 | `PROMPT_LIST_MAX_PAGE_SIZE` | “我的 Prompt”列表单页最大数量，默认 `100` |
 | `PROMPT_USE_FULLTEXT` | 设置为 `1` 时使用 FULLTEXT 检索（需提前创建 `ft_prompts_topic_tags` 索引） |
 | `PROMPT_IMPORT_BATCH_SIZE` | 导入 Prompt 时单批处理的最大条数，默认 `20` |
+| `PROMPT_AUDIT_ENABLED` | 是否启用内置的模型内容审核，在线模式默认开启 |
+| `PROMPT_AUDIT_PROVIDER` | 审核模型提供方，当前支持 `deepseek` |
+| `PROMPT_AUDIT_MODEL_KEY` | 调用审核时使用的模型标识，缺省时回退到 `deepseek-chat` |
+| `PROMPT_AUDIT_API_KEY` | 审核模型所需的 API Key（在线模式必须配置） |
+| `PROMPT_AUDIT_BASE_URL` | 审核模型的自定义接口地址，留空使用默认值 |
+
+> 在线模式下只要配置了 `PROMPT_AUDIT_API_KEY`，Prompt 服务会自动切换到内置 DeepSeek 审核器；本地模式始终跳过审核，便于开发调试。
 
 > ❗ **排障提示**：如果日志中出现  
 > `decode interpretation response: json: cannot unmarshal array into Go struct`，说明模型把 `instructions` 字段生成为数组。现有实现已兼容数组与字符串两种格式；若自定义提示词，请确保仍返回 JSON 对象，并将补充要求放在 `instructions` 字段（字符串或字符串数组均可）。
@@ -281,6 +295,8 @@ go run ./backend/cmd/sendmail -to you@example.com -name "测试账号"
 | `POST` | `/api/prompts/keywords/sync` | 同步排序与权重到工作区 | JSON：`workspace_token`、`positive_keywords[]`、`negative_keywords[]`（元素含 `word`、`polarity`、`weight`） |
 | `GET` | `/api/prompts` | 获取当前用户的 Prompt 列表 | Query：`status`（可选，draft/published）、`q`（模糊搜索 topic/tags）、`page`、`page_size`、`favorited`（可选，true/1 表示仅展示收藏项） |
 | `PATCH` | `/api/prompts/:id/favorite` | 收藏或取消收藏 Prompt | JSON：`favorited`（布尔值） |
+| `POST` | `/api/prompts/:id/like` | 点赞 Prompt 并返回最新计数 | 无 |
+| `DELETE` | `/api/prompts/:id/like` | 取消点赞 Prompt | 无 |
 | `POST` | `/api/prompts/export` | 导出当前用户的 Prompt 并返回本地保存路径 | 无 |
 | `POST` | `/api/prompts/import` | 导入导出的 Prompt JSON（支持合并/覆盖模式） | multipart：`file`（JSON 文件）、`mode`（可选，merge/overwrite）；或直接提交 JSON 正文 |
 | `GET` | `/api/prompts/:id` | 获取单条 Prompt 详情并返回最新工作区 token | 无 |
@@ -293,6 +309,8 @@ go run ./backend/cmd/sendmail -to you@example.com -name "测试账号"
 | `POST` | `/api/changelog` | 新增更新日志（管理员） | JSON：`locale`、`badge`、`title`、`summary`、`items[]`、`published_at` |
 | `PUT` | `/api/changelog/:id` | 编辑指定日志（管理员） | 同 `POST` |
 | `DELETE` | `/api/changelog/:id` | 删除指定日志（管理员） | 无 |
+| `POST` | `/api/public-prompts/:id/like` | 为公共 Prompt 点赞 | 无 |
+| `DELETE` | `/api/public-prompts/:id/like` | 取消公共 Prompt 点赞 | 无 |
 | `GET` | `/api/ip-guard/bans` | 查询仍在封禁期内的 IP 列表（管理员） | 无；需登录且具备 `is_admin=true` |
 | `DELETE` | `/api/ip-guard/bans/:ip` | 解除指定 IP 的封禁记录（管理员） | 路径参数 `ip`，需登录且具备 `is_admin=true` |
 
@@ -771,7 +789,7 @@ ALTER TABLE prompts
   | `favorited` | 可选，设置为 `true` / `1` 时仅返回已收藏 Prompt |
   | `page` / `page_size` | 可选，分页参数，默认 `page=1`、`page_size=10`，单页上限 100 |
 
-- **成功响应**：`200`，`data.items` 为 Prompt 列表，每项包含 `id`、`topic`、`model`、`status`、`tags`、`positive_keywords`、`negative_keywords`、`is_favorited`、`updated_at`、`published_at`；`meta` 返回 `page`、`page_size`、`current_count`、`total_items`、`total_pages`。
+- **成功响应**：`200`，`data.items` 为 Prompt 列表，每项包含 `id`、`topic`、`model`、`status`、`tags`、`positive_keywords`、`negative_keywords`、`is_favorited`、`is_liked`、`like_count`、`updated_at`、`published_at`；`meta` 返回 `page`、`page_size`、`current_count`、`total_items`、`total_pages`。
 
 #### GET /api/prompts/:id
 
@@ -789,6 +807,8 @@ ALTER TABLE prompts
       "status": "draft",
       "tags": ["前端", "面试"],
       "is_favorited": true,
+      "is_liked": true,
+      "like_count": 12,
       "positive_keywords": [{"word": "React", "weight": 5}],
       "negative_keywords": [{"word": "陈旧框架", "weight": 1}],
       "workspace_token": "c9f0d7...",
@@ -902,10 +922,23 @@ ALTER TABLE prompts
 - **成功响应**：`200`，返回 `{ "favorited": <bool> }`。
 - **常见错误**：Prompt 不存在或归属不同用户 → `404`。
 
+#### POST /api/prompts/:id/like
+
+- **用途**：为指定 Prompt 点赞，累计热度并回传最新计数。
+- **成功响应**：`200`，返回 `{ "liked": true, "like_count": <number> }`。
+- **常见错误**：Prompt 不存在或无访问权限 → `404`。
+
+#### DELETE /api/prompts/:id/like
+
+- **用途**：取消对指定 Prompt 的点赞。
+- **成功响应**：`200`，返回 `{ "liked": false, "like_count": <number> }`。
+- **常见错误**：Prompt 不存在或无访问权限 → `404`。
+
 #### GET /api/public-prompts
 
 - **用途**：获取公共 Prompt 列表，用于优质 Prompt 浏览。离线模式下接口保持可用但仅支持只读，投稿入口会被前端隐藏。
 - **查询参数**：`q`（关键词模糊搜索标题、主题、标签）、`status`（管理员可传 `pending`/`rejected` 查看待审条目；普通用户在传入 `pending`/`rejected` 时仅返回自己的投稿，默认返回全量 `approved` 数据）、`page`、`page_size`（默认 `9`，上限 `60`）。
+- **返回字段**：列表项附带 `like_count` 与 `is_liked`，分别表示总点赞数和当前用户是否已点赞。
 - **成功响应**：`200`
 
   ```json
@@ -923,6 +956,8 @@ ALTER TABLE prompts
           "status": "approved",
           "tags": ["面试", "前端"],
           "download_count": 32,
+          "like_count": 12,
+          "is_liked": true,
           "created_at": "2025-10-18T02:30:00Z",
           "updated_at": "2025-10-19T09:15:00Z",
           "author_user_id": 3,
@@ -969,6 +1004,8 @@ ALTER TABLE prompts
       ],
       "tags": ["面试", "前端"],
       "download_count": 32,
+      "like_count": 12,
+      "is_liked": true,
       "created_at": "2025-10-18T02:30:00Z",
       "updated_at": "2025-10-19T09:15:00Z"
     }
@@ -976,6 +1013,18 @@ ALTER TABLE prompts
   ```
 
 - **访问控制**：仅条目作者或管理员可以查看待审核或已驳回的详情，其余用户访问将返回 `403 Forbidden`；响应体在作者或管理员访问时会包含 `review_reason` 字段。
+
+#### POST /api/public-prompts/:id/like
+
+- **用途**：为公共 Prompt 点赞，底层会同步更新原始私有 Prompt 的点赞数。
+- **成功响应**：`200`，返回 `{ "liked": true, "like_count": <number> }`。
+- **常见错误**：公共条目不存在 → `404`；条目缺少原始 Prompt（早期录入数据）→ `400`。
+
+#### DELETE /api/public-prompts/:id/like
+
+- **用途**：取消公共 Prompt 的点赞。
+- **成功响应**：`200`，返回 `{ "liked": false, "like_count": <number> }`。
+- **常见错误**：公共条目不存在 → `404`；条目缺少原始 Prompt → `400`。
 
 #### POST /api/public-prompts/:id/download
 

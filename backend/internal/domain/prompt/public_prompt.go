@@ -32,6 +32,8 @@ type PublicPrompt struct {
 	UpdatedAt        time.Time  `gorm:"column:updated_at;autoUpdateTime"`
 	Reviewer         *UserBrief `gorm:"-"`
 	Author           *UserBrief `gorm:"-"`
+	LikeCount        uint       `gorm:"-"`
+	IsLiked          bool       `gorm:"-"`
 }
 
 // TableName 返回对应的表名。

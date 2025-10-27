@@ -146,9 +146,12 @@ func BuildApplication(ctx context.Context, logger *zap.SugaredLogger, resources 
 	modelHandler := handler.NewModelHandler(modelService)
 
 	// Prompt 服务与 Handler 较为复杂，涉及关键词管理、工作空间、持久化队列等。
-	promptCfg := loadPromptConfig(logger)
+	promptCfg := loadPromptConfig(logger, isLocalMode)
 	// 构建 Prompt 工作台服务，并注入关键词上限、限流配置等依赖。
-	promptService := promptsvc.NewServiceWithConfig(promptRepo, keywordRepo, modelService, workspaceStore, persistenceQueue, logger, promptCfg)
+	promptService, err := promptsvc.NewServiceWithConfig(promptRepo, keywordRepo, modelService, workspaceStore, persistenceQueue, logger, promptCfg)
+	if err != nil {
+		return nil, fmt.Errorf("init prompt service: %w", err)
+	}
 	promptRateLimit := loadPromptRateLimit(logger)
 	promptHandler := handler.NewPromptHandler(promptService, promptLimiter, promptRateLimit)
 	// 公开 Prompt 服务与 Handler 仅负责公开库的查询功能。
@@ -366,7 +369,19 @@ func loadPublicPromptListConfig(logger *zap.SugaredLogger) publicpromptsvc.Confi
 }
 
 // loadPromptConfig 汇总 Prompt 模块使用到的配置项。
-func loadPromptConfig(logger *zap.SugaredLogger) promptsvc.Config {
+func loadPromptConfig(logger *zap.SugaredLogger, isLocal bool) promptsvc.Config {
+	auditEnabled := parseBoolEnv("PROMPT_AUDIT_ENABLED", !isLocal)
+	if isLocal {
+		auditEnabled = false
+	}
+	auditProvider := strings.TrimSpace(os.Getenv("PROMPT_AUDIT_PROVIDER"))
+	auditModelKey := strings.TrimSpace(os.Getenv("PROMPT_AUDIT_MODEL_KEY"))
+	auditAPIKey := strings.TrimSpace(os.Getenv("PROMPT_AUDIT_API_KEY"))
+	auditBaseURL := strings.TrimSpace(os.Getenv("PROMPT_AUDIT_BASE_URL"))
+	if auditEnabled && auditAPIKey == "" {
+		logger.Warnw("audit enabled but API key missing, disabling", "provider", auditProvider)
+		auditEnabled = false
+	}
 	return promptsvc.Config{
 		KeywordLimit:        parseIntEnv("PROMPT_KEYWORD_LIMIT", promptsvc.DefaultKeywordLimit, logger),
 		KeywordMaxLength:    parseIntEnv("PROMPT_KEYWORD_MAX_LENGTH", promptsvc.DefaultKeywordMaxLength, logger),
@@ -378,6 +393,13 @@ func loadPromptConfig(logger *zap.SugaredLogger) promptsvc.Config {
 		ExportDirectory:     strings.TrimSpace(os.Getenv("PROMPT_EXPORT_DIR")),
 		VersionRetention:    parseIntEnv("PROMPT_VERSION_KEEP_LIMIT", promptsvc.DefaultVersionRetentionLimit, logger),
 		ImportBatchSize:     parseIntEnv("PROMPT_IMPORT_BATCH_SIZE", promptsvc.DefaultImportBatchSize, logger),
+		Audit: promptsvc.AuditConfig{
+			Enabled:  auditEnabled,
+			Provider: auditProvider,
+			ModelKey: auditModelKey,
+			APIKey:   auditAPIKey,
+			BaseURL:  auditBaseURL,
+		},
 	}
 }
 

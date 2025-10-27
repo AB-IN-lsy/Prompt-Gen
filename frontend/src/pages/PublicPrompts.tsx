@@ -19,6 +19,7 @@ import {
   AlertCircle,
   Copy,
   X,
+  Heart,
 } from "lucide-react";
 import { GlassCard } from "../components/ui/glass-card";
 import { SpotlightSearch } from "../components/ui/spotlight-search";
@@ -30,8 +31,11 @@ import {
   downloadPublicPrompt,
   fetchPublicPromptDetail,
   fetchPublicPrompts,
+  likePublicPrompt,
+  unlikePublicPrompt,
   type PublicPromptDownloadResult,
   type PublicPromptDetail,
+  type PublicPromptLikeResult,
   type PublicPromptListResponse,
   type PublicPromptListItem,
 } from "../lib/api";
@@ -236,6 +240,43 @@ export default function PublicPromptsPage(): JSX.Element {
     },
   });
 
+  const likeMutation = useMutation<PublicPromptLikeResult, unknown, { id: number; next: boolean }>({
+    mutationFn: ({ id, next }) => (next ? likePublicPrompt(id) : unlikePublicPrompt(id)),
+    onSuccess: (result, variables) => {
+      queryClient.setQueriesData<PublicPromptListResponse>({ queryKey: ["public-prompts"] }, (previous) => {
+        if (!previous) {
+          return previous;
+        }
+        return {
+          ...previous,
+          items: previous.items.map((item) =>
+            item.id === variables.id
+              ? { ...item, is_liked: result.liked, like_count: result.like_count }
+              : item,
+          ),
+        };
+      });
+      queryClient.setQueryData<PublicPromptDetail>(
+        ["public-prompts", "detail", variables.id],
+        (previous) => {
+          if (!previous) {
+            return previous;
+          }
+          return {
+            ...previous,
+            is_liked: result.liked,
+            like_count: result.like_count,
+          };
+        },
+      );
+    },
+    onError: (error: unknown) => {
+      const message =
+        error instanceof Error ? error.message : t("publicPrompts.likeError");
+      toast.error(message);
+    },
+  });
+
   const handleCloseDetail = () => {
     if (downloadMutation.isPending || deleteMutation.isPending) {
       return;
@@ -253,6 +294,17 @@ export default function PublicPromptsPage(): JSX.Element {
 
   const handleDownload = (id: number) => {
     downloadMutation.mutate(id);
+  };
+
+  const handleToggleLike = (id: number, liked: boolean) => {
+    if (offlineMode) {
+      toast.error(t("publicPrompts.likeOfflineDisabled"));
+      return;
+    }
+    if (likeMutation.isPending && likeMutation.variables?.id === id) {
+      return;
+    }
+    likeMutation.mutate({ id, next: !liked });
   };
 
   const allowDelete = isAdmin || offlineMode;
@@ -403,6 +455,8 @@ export default function PublicPromptsPage(): JSX.Element {
         {items.map((item) => {
           const detailActive = selectedId === item.id;
           const { label, className } = statusBadge(item.status);
+          const likePending = likeMutation.isPending && likeMutation.variables?.id === item.id;
+          const liked = Boolean(item.is_liked);
           return (
             <GlassCard
               key={item.id}
@@ -450,9 +504,43 @@ export default function PublicPromptsPage(): JSX.Element {
                   <Clock3 className="h-4 w-4" />
                   <span>{formatDateTime(item.updated_at, i18n.language).date}</span>
                 </div>
-                <div className="flex items-center gap-1 text-slate-500 dark:text-slate-400">
-                  <Download className="h-4 w-4" />
-                  <span>{item.download_count}</span>
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    className={cn(
+                      "inline-flex items-center gap-1 rounded-full border px-2.5 py-1 transition",
+                      liked
+                        ? "border-rose-300 bg-rose-50 text-rose-500 shadow-sm dark:border-rose-500/40 dark:bg-rose-500/10 dark:text-rose-200"
+                        : "border-slate-200 text-slate-500 hover:border-primary/30 hover:text-primary dark:border-slate-700 dark:text-slate-400 dark:hover:border-primary/30",
+                    )}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      handleToggleLike(item.id, liked);
+                    }}
+                    disabled={likePending}
+                    aria-pressed={liked}
+                    aria-label={liked
+                      ? t("publicPrompts.unlikeAction")
+                      : t("publicPrompts.likeAction")}
+                    title={liked
+                      ? t("publicPrompts.unlikeAction")
+                      : t("publicPrompts.likeAction")}
+                  >
+                    {likePending ? (
+                      <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <Heart
+                        className="h-3.5 w-3.5 transition"
+                        fill={liked ? "currentColor" : "none"}
+                        strokeWidth={liked ? 1.5 : 2}
+                      />
+                    )}
+                    <span>{item.like_count}</span>
+                  </button>
+                  <div className="flex items-center gap-1 text-slate-500 dark:text-slate-400">
+                    <Download className="h-4 w-4" />
+                    <span>{item.download_count}</span>
+                  </div>
                 </div>
               </div>
             </GlassCard>
@@ -497,6 +585,9 @@ export default function PublicPromptsPage(): JSX.Element {
       {selectedId && selectedDetail ? (
         (() => {
           const statusMeta = statusBadge(selectedDetail.status);
+          const detailLiked = Boolean(selectedDetail.is_liked);
+          const detailLikePending =
+            likeMutation.isPending && likeMutation.variables?.id === selectedDetail.id;
           return (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 px-4 py-8 backdrop-blur-sm"
@@ -553,6 +644,35 @@ export default function PublicPromptsPage(): JSX.Element {
                       </Badge>
                     </div>
                     <div className="ml-auto flex flex-wrap items-center gap-2">
+                      <button
+                        type="button"
+                        className={cn(
+                          "inline-flex h-10 items-center gap-2 rounded-full border px-4 text-sm font-medium transition",
+                          detailLiked
+                            ? "border-rose-300 bg-rose-50 text-rose-500 shadow-sm dark:border-rose-500/40 dark:bg-rose-500/10 dark:text-rose-200"
+                            : "border-slate-200 text-slate-500 hover:border-primary/30 hover:text-primary dark:border-slate-700 dark:text-slate-400 dark:hover:border-primary/30",
+                        )}
+                        onClick={() => handleToggleLike(selectedDetail.id, detailLiked)}
+                        disabled={detailLikePending}
+                        aria-pressed={detailLiked}
+                        aria-label={detailLiked
+                          ? t("publicPrompts.unlikeAction")
+                          : t("publicPrompts.likeAction")}
+                        title={detailLiked
+                          ? t("publicPrompts.unlikeAction")
+                          : t("publicPrompts.likeAction")}
+                      >
+                        {detailLikePending ? (
+                          <LoaderCircle className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <Heart
+                            className="h-4 w-4 transition"
+                            fill={detailLiked ? "currentColor" : "none"}
+                            strokeWidth={detailLiked ? 1.5 : 2}
+                          />
+                        )}
+                        <span>{t("publicPrompts.likeCountLabel", { count: selectedDetail.like_count })}</span>
+                      </button>
                       <MagneticButton
                         type="button"
                         className="h-10 whitespace-nowrap rounded-full bg-primary/90 px-4 text-white hover:bg-primary focus-visible:ring-primary/60 dark:bg-primary/80"

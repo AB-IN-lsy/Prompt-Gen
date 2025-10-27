@@ -26,6 +26,9 @@ var ErrReviewStatusInvalid = errors.New("审核状态不合法")
 // ErrPromptNotApproved 表示公共 Prompt 尚未通过审核，无法下载。
 var ErrPromptNotApproved = errors.New("公共 Prompt 尚未通过审核")
 
+// ErrLikeNotAvailable 表示当前公共 Prompt 无法执行点赞操作（缺少源 Prompt）。
+var ErrLikeNotAvailable = errors.New("当前公共 Prompt 暂不支持点赞")
+
 // DefaultListPageSize 定义公共库列表默认每页条目数。
 const DefaultListPageSize = 9
 
@@ -42,6 +45,7 @@ type Config struct {
 type Service struct {
 	repo            *repository.PublicPromptRepository
 	db              *gorm.DB
+	prompts         *repository.PromptRepository
 	logger          *zap.SugaredLogger
 	allowSubmission bool
 	defaultPageSize int
@@ -70,6 +74,7 @@ func NewServiceWithConfig(repo *repository.PublicPromptRepository, db *gorm.DB, 
 	return &Service{
 		repo:            repo,
 		db:              db,
+		prompts:         repository.NewPromptRepository(db),
 		logger:          logger,
 		allowSubmission: allowSubmission,
 		defaultPageSize: cfg.DefaultPageSize,
@@ -85,6 +90,7 @@ type ListFilter struct {
 	OnlyApproved bool
 	Page         int
 	PageSize     int
+	ViewerUserID uint
 }
 
 // ListResult 描述公共库列表查询的返回值。
@@ -94,6 +100,12 @@ type ListResult struct {
 	PageSize   int
 	Total      int64
 	TotalPages int
+}
+
+// LikeResult 描述公共 Prompt 点赞接口的返回值。
+type LikeResult struct {
+	LikeCount uint
+	Liked     bool
 }
 
 // List 返回公共库列表数据。
@@ -119,6 +131,9 @@ func (s *Service) List(ctx context.Context, filter ListFilter) (*ListResult, err
 	if err != nil {
 		return nil, err
 	}
+	if err := s.fillLikeSnapshot(ctx, filter.ViewerUserID, items); err != nil {
+		return nil, err
+	}
 	totalPages := 0
 	if filter.PageSize > 0 {
 		totalPages = int((total + int64(filter.PageSize) - 1) / int64(filter.PageSize))
@@ -138,7 +153,7 @@ func (s *Service) ListPageSizeBounds() (int, int) {
 }
 
 // Get 查询单条公共 Prompt 详情。
-func (s *Service) Get(ctx context.Context, id uint) (*promptdomain.PublicPrompt, error) {
+func (s *Service) Get(ctx context.Context, id uint, viewerUserID uint) (*promptdomain.PublicPrompt, error) {
 	entity, err := s.repo.FindByID(ctx, id)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -146,7 +161,20 @@ func (s *Service) Get(ctx context.Context, id uint) (*promptdomain.PublicPrompt,
 		}
 		return nil, fmt.Errorf("query public prompt: %w", err)
 	}
+	if err := s.populateLikeSnapshot(ctx, viewerUserID, entity); err != nil {
+		return nil, err
+	}
 	return entity, nil
+}
+
+// Like 为公共 Prompt 点赞，底层复用个人 Prompt 的点赞逻辑。
+func (s *Service) Like(ctx context.Context, userID, publicPromptID uint) (LikeResult, error) {
+	return s.toggleLike(ctx, userID, publicPromptID, true)
+}
+
+// Unlike 取消公共 Prompt 点赞。
+func (s *Service) Unlike(ctx context.Context, userID, publicPromptID uint) (LikeResult, error) {
+	return s.toggleLike(ctx, userID, publicPromptID, false)
 }
 
 // SubmitInput 描述公共 Prompt 提交所需的字段。
@@ -243,6 +271,98 @@ func (s *Service) Submit(ctx context.Context, input SubmitInput) (*promptdomain.
 		return nil, err
 	}
 	return entity, nil
+}
+
+// populateLikeSnapshot 填充单条公共 Prompt 的点赞数量与当前用户点赞态度。
+func (s *Service) populateLikeSnapshot(ctx context.Context, viewerUserID uint, entity *promptdomain.PublicPrompt) error {
+	if entity == nil || entity.SourcePromptID == nil || *entity.SourcePromptID == 0 {
+		return nil
+	}
+	count, liked, err := s.prompts.LikeSnapshot(ctx, *entity.SourcePromptID, viewerUserID)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			entity.LikeCount = 0
+			entity.IsLiked = false
+			return nil
+		}
+		return err
+	}
+	entity.LikeCount = count
+	entity.IsLiked = liked
+	return nil
+}
+
+// fillLikeSnapshot 批量填充公共 Prompt 列表的点赞数据。
+func (s *Service) fillLikeSnapshot(ctx context.Context, viewerUserID uint, items []promptdomain.PublicPrompt) error {
+	for i := range items {
+		if err := s.populateLikeSnapshot(ctx, viewerUserID, &items[i]); err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				continue
+			}
+			return err
+		}
+	}
+	return nil
+}
+
+// toggleLike 根据操作类型为公共 Prompt 调整点赞状态并返回最新统计结果。
+func (s *Service) toggleLike(ctx context.Context, userID, publicPromptID uint, like bool) (LikeResult, error) {
+	if userID == 0 || publicPromptID == 0 {
+		return LikeResult{}, errors.New("用户或公共 Prompt 信息缺失")
+	}
+	entity, err := s.repo.FindByID(ctx, publicPromptID)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return LikeResult{}, ErrPublicPromptNotFound
+		}
+		return LikeResult{}, fmt.Errorf("query public prompt: %w", err)
+	}
+	if entity.SourcePromptID == nil || *entity.SourcePromptID == 0 {
+		return LikeResult{}, ErrLikeNotAvailable
+	}
+
+	promptID := *entity.SourcePromptID
+	var delta int
+	if like {
+		created, err := s.prompts.AddLike(ctx, promptID, userID)
+		if err != nil {
+			return LikeResult{}, fmt.Errorf("add prompt like: %w", err)
+		}
+		if created {
+			delta = 1
+		}
+	} else {
+		removed, err := s.prompts.RemoveLike(ctx, promptID, userID)
+		if err != nil {
+			return LikeResult{}, fmt.Errorf("remove prompt like: %w", err)
+		}
+		if removed {
+			delta = -1
+		}
+	}
+
+	if delta != 0 {
+		if err := s.prompts.IncrementLikeCount(ctx, promptID, delta); err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return LikeResult{}, ErrPublicPromptNotFound
+			}
+			return LikeResult{}, fmt.Errorf("update prompt like count: %w", err)
+		}
+	}
+
+	count, liked, err := s.prompts.LikeSnapshot(ctx, promptID, userID)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return LikeResult{}, ErrPublicPromptNotFound
+		}
+		return LikeResult{}, fmt.Errorf("load prompt like snapshot: %w", err)
+	}
+	entity.LikeCount = count
+	entity.IsLiked = liked
+	return LikeResult{
+		LikeCount: count,
+		Liked:     liked,
+	}, nil
 }
 
 // ReviewInput 描述审核公共 Prompt 所需的参数。

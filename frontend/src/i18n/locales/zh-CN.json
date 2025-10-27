@@ -181,6 +181,11 @@
       "model": "使用模型：{{model}}",
       "updatedAt": "最近更新：{{date}} {{time}}"
     },
+    "likeAction": "点赞",
+    "unlikeAction": "取消点赞",
+    "likeError": "点赞操作失败，请稍后重试。",
+    "likeOfflineDisabled": "离线模式暂不支持点赞。",
+    "likeCountLabel": "{{count}} 人点赞",
     "downloadShort": "下载到我的库",
     "deleteShort": "删除",
     "detailHeader": {

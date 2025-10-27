@@ -75,6 +75,7 @@ func InitResources(ctx context.Context) (*Resources, error) {
 		&promptdomain.Prompt{},
 		&promptdomain.Keyword{},
 		&promptdomain.PromptKeyword{},
+		&promptdomain.PromptLike{},
 		&promptdomain.PromptVersion{},
 		&promptdomain.PublicPrompt{},
 	); err != nil {
@@ -151,6 +152,7 @@ func initLocalResources(ctx context.Context, flags config.RuntimeFlags) (*Resour
 		&promptdomain.Prompt{},
 		&promptdomain.Keyword{},
 		&promptdomain.PromptKeyword{},
+		&promptdomain.PromptLike{},
 		&promptdomain.PromptVersion{},
 		&promptdomain.PublicPrompt{},
 	); err != nil {
