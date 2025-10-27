@@ -204,6 +204,7 @@ export interface PromptListItem {
   negative_keywords: PromptListKeyword[];
   updated_at: string;
   published_at?: string | null;
+  is_favorited?: boolean;
 }
 
 export interface PromptListMeta {
@@ -333,6 +334,7 @@ export interface PromptDetailResponse {
   created_at: string;
   updated_at: string;
   published_at?: string | null;
+  is_favorited?: boolean;
 }
 
 export interface AuthTokens {
@@ -953,6 +955,7 @@ export async function fetchMyPrompts(params: {
   query?: string;
   page?: number;
   pageSize?: number;
+  favorited?: boolean;
 } = {}): Promise<PromptListResponse> {
   try {
     const response: AxiosResponse<{ items: PromptListItem[] }> & {
@@ -963,6 +966,12 @@ export async function fetchMyPrompts(params: {
         q: params.query,
         page: params.page,
         page_size: params.pageSize,
+        favorited:
+          typeof params.favorited === "boolean"
+            ? params.favorited
+              ? 1
+              : 0
+            : undefined,
       },
     });
     const meta = (response as typeof response & { meta?: PromptListMeta }).meta;
@@ -981,7 +990,10 @@ export async function fetchMyPrompts(params: {
     const currentCount =
       resolvedMeta.current_count ?? response.data?.items?.length ?? 0;
     return {
-      items: response.data?.items ?? [],
+      items: (response.data?.items ?? []).map((item) => ({
+        ...item,
+        is_favorited: Boolean(item?.is_favorited),
+      })),
       meta: {
         ...resolvedMeta,
         current_count: currentCount,
@@ -1241,7 +1253,32 @@ export async function fetchPromptDetail(
     const response: AxiosResponse<PromptDetailResponse> = await http.get(
       `/prompts/${id}`,
     );
-    return response.data;
+    const data = response.data;
+    return {
+      ...data,
+      is_favorited: Boolean(data?.is_favorited),
+    };
+  } catch (error) {
+    throw normaliseError(error);
+  }
+}
+
+/** 收藏或取消收藏 Prompt。 */
+export async function updatePromptFavorite(params: {
+  promptId: number;
+  favorited: boolean;
+}): Promise<{ favorited: boolean }> {
+  if (!params.promptId) {
+    throw new ApiError({ message: "Prompt id is required" });
+  }
+  try {
+    const response: AxiosResponse<{ favorited: boolean }> = await http.patch(
+      `/prompts/${params.promptId}/favorite`,
+      { favorited: params.favorited },
+    );
+    return {
+      favorited: Boolean(response.data?.favorited),
+    };
   } catch (error) {
     throw normaliseError(error);
   }

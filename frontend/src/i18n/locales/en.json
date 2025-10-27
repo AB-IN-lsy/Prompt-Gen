@@ -489,6 +489,10 @@
       "published": "Published",
       "archived": "Archived"
     },
+    "favoriteFilter": {
+      "label": "Show favorites",
+      "active": "Showing favorites"
+    },
     "table": {
       "topic": "Topic",
       "status": "Status",
@@ -516,10 +520,17 @@
       "view": "View details",
       "edit": "Edit",
       "delete": "Delete",
-      "publish": "Save"
+      "publish": "Save",
+      "favorite": "Add to favorites",
+      "unfavorite": "Remove from favorites"
     },
     "publishSuccess": "Prompt published successfully.",
     "publishFailed": "Failed to publish the prompt. Please try again later.",
+    "favorite": {
+      "success": "Prompt added to favorites.",
+      "removed": "Prompt removed from favorites.",
+      "failed": "Failed to update favorite state. Please try again later."
+    },
     "pagination": {
       "page": "Page {{page}} of {{total}}",
       "count": "{{count}} prompts on this page"

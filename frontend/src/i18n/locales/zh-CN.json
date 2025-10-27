@@ -489,6 +489,10 @@
       "published": "已发布",
       "archived": "已归档"
     },
+    "favoriteFilter": {
+      "label": "仅看收藏",
+      "active": "已筛选收藏"
+    },
     "table": {
       "topic": "主题",
       "status": "状态",
@@ -516,10 +520,17 @@
       "view": "查看详情",
       "edit": "编辑",
       "delete": "删除",
-      "publish": "保存"
+      "publish": "保存",
+      "favorite": "收藏",
+      "unfavorite": "取消收藏"
     },
     "publishSuccess": "已发布，状态已更新为“已发布”。",
     "publishFailed": "发布失败，请稍后再试。",
+    "favorite": {
+      "success": "已收藏该 Prompt。",
+      "removed": "已取消收藏。",
+      "failed": "更新收藏状态失败，请稍后重试。"
+    },
     "pagination": {
       "page": "第 {{page}} 页，共 {{total}} 页",
       "count": "本页展示 {{count}} 条 Prompt"

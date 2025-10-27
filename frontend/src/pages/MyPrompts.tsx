@@ -12,6 +12,7 @@ import {
   RefreshCcw,
   Sparkles,
   Settings,
+  Star,
 } from "lucide-react";
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
@@ -29,6 +30,7 @@ import {
   fetchMyPrompts,
   fetchPromptDetail,
   savePrompt,
+  updatePromptFavorite,
   normaliseKeywordSource,
   PromptDetailResponse,
   PromptListItem,
@@ -96,15 +98,18 @@ export default function MyPromptsPage(): JSX.Element {
   const [committedSearch, setCommittedSearch] = useState("");
   const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null);
   const [publishingId, setPublishingId] = useState<number | null>(null);
+  const [favoritedOnly, setFavoritedOnly] = useState(false);
+  const [favoritingId, setFavoritingId] = useState<number | null>(null);
 
   const listQuery = useQuery<PromptListResponse>({
-    queryKey: ["my-prompts", { status, page, committedSearch }],
+    queryKey: ["my-prompts", { status, page, committedSearch, favoritedOnly }],
     queryFn: () =>
       fetchMyPrompts({
         status: status === "all" ? undefined : status,
         page,
         pageSize: MY_PROMPTS_PAGE_SIZE,
         query: committedSearch || undefined,
+        favorited: favoritedOnly,
       }),
     placeholderData: (previousData) => previousData,
   });
@@ -255,6 +260,53 @@ export default function MyPromptsPage(): JSX.Element {
     },
   });
 
+  const favoriteMutation = useMutation({
+    mutationFn: (variables: { promptId: number; favorited: boolean }) =>
+      updatePromptFavorite(variables),
+    onMutate: (variables) => {
+      setFavoritingId(variables.promptId);
+    },
+    onSuccess: (_result, variables) => {
+      queryClient.setQueriesData<PromptListResponse>(
+        { queryKey: ["my-prompts"] },
+        (previous) => {
+          if (!previous) {
+            return previous;
+          }
+          return {
+            ...previous,
+            items: previous.items.map((record) =>
+              record.id === variables.promptId
+                ? { ...record, is_favorited: variables.favorited }
+                : record,
+            ),
+          };
+        },
+      );
+      queryClient.setQueryData<PromptDetailResponse>(
+        ["prompt-detail", variables.promptId],
+        (previous) =>
+          previous ? { ...previous, is_favorited: variables.favorited } : previous,
+      );
+      toast.success(
+        variables.favorited
+          ? t("myPrompts.favorite.success")
+          : t("myPrompts.favorite.removed"),
+      );
+    },
+    onError: (error: unknown) => {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : t("myPrompts.favorite.failed"),
+      );
+    },
+    onSettled: () => {
+      setFavoritingId(null);
+      void queryClient.invalidateQueries({ queryKey: ["my-prompts"] });
+    },
+  });
+
   const meta: PromptListMeta | undefined = listQuery.data?.meta;
   const items: PromptListItem[] = listQuery.data?.items ?? [];
   const totalPages = meta?.total_pages ?? 1;
@@ -314,10 +366,26 @@ export default function MyPromptsPage(): JSX.Element {
     setPage(1);
   };
 
+  const handleFavoriteFilterToggle = () => {
+    setFavoritedOnly((prev) => {
+      const next = !prev;
+      setPage(1);
+      return next;
+    });
+  };
+
   const handlePageChange = (nextPage: number) => {
     if (nextPage < 1) return;
     if (totalPages && nextPage > totalPages) return;
     setPage(nextPage);
+  };
+
+  const handleToggleFavorite = (item: PromptListItem) => {
+    if (!item) return;
+    favoriteMutation.mutate({
+      promptId: item.id,
+      favorited: !Boolean(item.is_favorited),
+    });
   };
 
   const statusOptions: Array<{ value: StatusFilter; label: string }> = useMemo(
@@ -395,6 +463,32 @@ export default function MyPromptsPage(): JSX.Element {
                 </option>
               ))}
             </select>
+            <Button
+              type="button"
+              size="sm"
+              variant={favoritedOnly ? "secondary" : "outline"}
+              aria-pressed={favoritedOnly}
+              onClick={handleFavoriteFilterToggle}
+              className={cn(
+                "whitespace-nowrap",
+                favoritedOnly
+                  ? "shadow-sm"
+                  : "border-slate-200 text-slate-500 dark:border-slate-700 dark:text-slate-300",
+              )}
+            >
+              <Star
+                className={cn(
+                  "h-4 w-4",
+                  favoritedOnly ? "text-amber-400" : "text-slate-400",
+                )}
+                fill={favoritedOnly ? "currentColor" : "none"}
+              />
+              <span className="ml-2">
+                {favoritedOnly
+                  ? t("myPrompts.favoriteFilter.active")
+                  : t("myPrompts.favoriteFilter.label")}
+              </span>
+            </Button>
           </div>
       </form>
 
@@ -466,6 +560,7 @@ export default function MyPromptsPage(): JSX.Element {
                   locale={i18n.language}
                   onView={() => navigate(`/prompts/${item.id}`)}
                   onEdit={() => editMutation.mutate(item.id)}
+                  onToggleFavorite={() => handleToggleFavorite(item)}
                   onPublish={() => {
                     if (publishMutation.isPending) {
                       return;
@@ -485,6 +580,10 @@ export default function MyPromptsPage(): JSX.Element {
                   }
                   isPublishing={
                     publishMutation.isPending && publishingId === item.id
+                  }
+                  isFavorited={Boolean(item.is_favorited)}
+                  isFavoriting={
+                    favoriteMutation.isPending && favoritingId === item.id
                   }
                 />
                 ))}
@@ -554,11 +653,14 @@ interface PromptRowProps {
   locale: string;
   onView: () => void;
   onEdit: () => void;
+  onToggleFavorite: () => void;
   onPublish: () => void;
   onDelete: () => void;
   isEditing: boolean;
   isDeleting: boolean;
   isPublishing: boolean;
+  isFavorited: boolean;
+  isFavoriting: boolean;
 }
 
 function promptListKeywordToInput(
@@ -579,11 +681,14 @@ function PromptRow({
   locale,
   onView,
   onEdit,
+  onToggleFavorite,
   onPublish,
   onDelete,
   isEditing,
   isDeleting,
   isPublishing,
+  isFavorited,
+  isFavoriting,
 }: PromptRowProps) {
   const { t } = useTranslation();
   const statusLabel = t(`myPrompts.statusBadge.${item.status}`);
@@ -591,14 +696,40 @@ function PromptRow({
   return (
     <tr className="group bg-white/40 transition duration-200 hover:-translate-y-0.5 hover:bg-primary/5 hover:shadow-[0_8px_20px_-10px_rgba(59,130,246,0.35)] hover:ring-2 hover:ring-primary/25 hover:ring-offset-2 hover:ring-offset-white dark:bg-slate-900/40 dark:hover:bg-primary/10 dark:hover:ring-offset-slate-900">
       <td className="px-6 py-4 align-top">
-        <div className="flex flex-col gap-1">
+        <div className="flex items-start gap-3">
           <button
             type="button"
-            onClick={onView}
-            className="bg-transparent text-left text-sm font-semibold text-slate-800 transition-all duration-200 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 dark:text-slate-100 dark:hover:text-primary-200 group-hover:text-primary group-hover:translate-x-1 dark:group-hover:text-primary-200"
+            onClick={onToggleFavorite}
+            disabled={isFavoriting}
+            aria-pressed={isFavorited}
+            aria-label={
+              isFavorited
+                ? t("myPrompts.actions.unfavorite")
+                : t("myPrompts.actions.favorite")
+            }
+            className={cn(
+              "flex h-9 w-9 items-center justify-center rounded-full border transition-colors duration-200",
+              "border-transparent bg-white/70 text-slate-400 hover:border-amber-200 hover:text-amber-500 dark:bg-slate-900/50 dark:text-slate-500 dark:hover:text-amber-300",
+              isFavorited
+                ? "border-amber-300 text-amber-500 dark:border-amber-400 dark:text-amber-200"
+                : "",
+              isFavoriting ? "opacity-60" : "",
+            )}
           >
-            {item.topic}
+            <Star
+              className="h-4 w-4"
+              fill={isFavorited ? "currentColor" : "none"}
+            />
           </button>
+          <div className="flex flex-col gap-1">
+            <button
+              type="button"
+              onClick={onView}
+              className="bg-transparent text-left text-sm font-semibold text-slate-800 transition-all duration-200 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 dark:text-slate-100 dark:hover:text-primary-200 group-hover:text-primary group-hover:translate-x-1 dark:group-hover:text-primary-200"
+            >
+              {item.topic}
+            </button>
+          </div>
         </div>
       </td>
       <td className="px-4 py-4 align-top">
