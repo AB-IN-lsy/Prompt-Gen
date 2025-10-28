@@ -11,6 +11,7 @@ import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import {
   Download,
+  ArrowDownUp,
   LoaderCircle,
   Sparkles,
   Clock3,
@@ -20,6 +21,7 @@ import {
   Copy,
   X,
   Heart,
+  Eye,
 } from "lucide-react";
 import { GlassCard } from "../components/ui/glass-card";
 import { SpotlightSearch } from "../components/ui/spotlight-search";
@@ -52,6 +54,7 @@ import { Textarea } from "../components/ui/textarea";
 import { PROMPT_COMMENT_PAGE_SIZE, PUBLIC_PROMPT_LIST_PAGE_SIZE } from "../config/prompt";
 
 type StatusFilter = "all" | "approved" | "pending" | "rejected";
+type SortOption = "score" | "downloads" | "likes" | "visits" | "updated_at" | "created_at";
 
 const formatDateTime = (value?: string | null, locale?: string) => {
   if (!value) {
@@ -76,6 +79,8 @@ const formatDateTime = (value?: string | null, locale?: string) => {
 const ensureUniqueIntegers = (values: (number | null | undefined)[]) =>
   values.filter((item, index, arr) => item != null && arr.indexOf(item) === index);
 
+const sortOptions: SortOption[] = ["score", "downloads", "likes", "visits", "updated_at", "created_at"];
+
 export default function PublicPromptsPage(): JSX.Element {
   const { t, i18n } = useTranslation();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -98,6 +103,7 @@ export default function PublicPromptsPage(): JSX.Element {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>(
     isAdmin ? "all" : "approved",
   );
+  const [sortBy, setSortBy] = useState<SortOption>("score");
   const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null);
   const [rejectDialog, setRejectDialog] = useState<{ commentId: number } | null>(null);
   const [rejectNote, setRejectNote] = useState("");
@@ -163,6 +169,7 @@ export default function PublicPromptsPage(): JSX.Element {
         search: debouncedSearch,
         status: statusFilter,
         admin: isAdmin,
+        sort: sortBy,
       },
     ],
     queryFn: () =>
@@ -171,6 +178,8 @@ export default function PublicPromptsPage(): JSX.Element {
         pageSize: PUBLIC_PROMPT_LIST_PAGE_SIZE,
         query: debouncedSearch || undefined,
         status: statusFilter === "all" ? undefined : statusFilter,
+        sortBy,
+        sortOrder: "desc",
       }),
     placeholderData: (previous) => previous,
   });
@@ -462,6 +471,11 @@ export default function PublicPromptsPage(): JSX.Element {
     setPage(1);
   };
 
+  const handleSortChange = (value: SortOption) => {
+    setSortBy(value);
+    setPage(1);
+  };
+
   const handleDownload = (id: number) => {
     downloadMutation.mutate(id);
   };
@@ -595,11 +609,11 @@ export default function PublicPromptsPage(): JSX.Element {
             <Tags className="h-4 w-4" />
             {t("publicPrompts.filters.title")}
           </div>
-          <div className="flex flex-wrap items-center gap-2">
-            {statusOptions.map((item) => (
-              <button
-                key={item}
-                type="button"
+        <div className="flex flex-wrap items-center gap-2">
+          {statusOptions.map((item) => (
+            <button
+              key={item}
+              type="button"
                 onClick={() => handleStatusChange(item)}
                 className={cn(
                   "rounded-full border px-3 py-1 text-xs font-medium transition-colors",
@@ -613,6 +627,32 @@ export default function PublicPromptsPage(): JSX.Element {
             ))}
           </div>
         </div>
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="inline-flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
+            <ArrowDownUp className="h-4 w-4" />
+            {t("publicPrompts.sort.title")}
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            {sortOptions.map((item) => (
+              <button
+                key={item}
+                type="button"
+                onClick={() => handleSortChange(item)}
+                className={cn(
+                  "rounded-full border px-3 py-1 text-xs font-medium transition-colors",
+                  sortBy === item
+                    ? "border-primary/40 bg-primary/10 text-primary dark:border-primary/30 dark:bg-primary/20"
+                    : "border-slate-200 text-slate-500 hover:border-primary/30 hover:text-primary dark:border-slate-700 dark:text-slate-400 dark:hover:border-primary/30",
+                )}
+              >
+                {t(`publicPrompts.sort.${item}`)}
+              </button>
+            ))}
+          </div>
+        </div>
+        <p className="text-xs text-slate-400 dark:text-slate-500">
+          {t("publicPrompts.scoreRefreshHint")}
+        </p>
       </div>
 
       <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
@@ -647,6 +687,9 @@ export default function PublicPromptsPage(): JSX.Element {
           const { label, className } = statusBadge(item.status);
           const likePending = likeMutation.isPending && likeMutation.variables?.id === item.id;
           const liked = Boolean(item.is_liked);
+          const scoreDisplay = Number.isFinite(item.quality_score)
+            ? item.quality_score.toFixed(1)
+            : "0.0";
           return (
             <GlassCard
               key={item.id}
@@ -677,6 +720,10 @@ export default function PublicPromptsPage(): JSX.Element {
                 })}
               </p>
             ) : null}
+              <div className="flex items-center gap-2 text-xs font-medium text-primary/80 dark:text-primary/70">
+                <Sparkles className="h-3.5 w-3.5" />
+                <span>{t("publicPrompts.qualityScoreBadge", { score: scoreDisplay })}</span>
+              </div>
               <div className="flex flex-wrap items-center gap-2">
                 {item.tags.slice(0, 4).map((tag) => (
                   <Badge key={`${item.id}-${tag}`} variant="outline" className="border-slate-200 text-slate-500 dark:border-slate-700 dark:text-slate-300">
@@ -695,6 +742,26 @@ export default function PublicPromptsPage(): JSX.Element {
                   <span>{formatDateTime(item.updated_at, i18n.language).date}</span>
                 </div>
                 <div className="flex items-center gap-3">
+                  {selectedDetail
+                    ? (() => {
+                        const scoreValue = Number.isFinite(selectedDetail.quality_score)
+                          ? selectedDetail.quality_score.toFixed(1)
+                          : "0.0";
+                        const scoreLabel = t("publicPrompts.qualityScoreLabel", {
+                          score: scoreValue,
+                        });
+                        return (
+                          <div
+                            className="flex items-center gap-1 text-primary/80 dark:text-primary/60"
+                            aria-label={scoreLabel}
+                            title={scoreLabel}
+                          >
+                            <Sparkles className="h-4 w-4" />
+                            <span>{scoreLabel}</span>
+                          </div>
+                        );
+                      })()
+                    : null}
                   <button
                     type="button"
                     className={cn(
@@ -727,6 +794,14 @@ export default function PublicPromptsPage(): JSX.Element {
                     )}
                     <span>{item.like_count}</span>
                   </button>
+                  <div
+                    className="flex items-center gap-1 text-slate-500 dark:text-slate-400"
+                    aria-label={t("publicPrompts.visitCountShort", { count: item.visit_count })}
+                    title={t("publicPrompts.visitCountShort", { count: item.visit_count })}
+                  >
+                    <Eye className="h-4 w-4" />
+                    <span>{item.visit_count}</span>
+                  </div>
                   <div className="flex items-center gap-1 text-slate-500 dark:text-slate-400">
                     <Download className="h-4 w-4" />
                     <span>{item.download_count}</span>
@@ -863,6 +938,14 @@ export default function PublicPromptsPage(): JSX.Element {
                         )}
                         <span>{t("publicPrompts.likeCountLabel", { count: selectedDetail.like_count })}</span>
                       </button>
+                      <div
+                        className="inline-flex h-10 items-center gap-2 rounded-full border border-slate-200 px-4 text-sm text-slate-500 dark:border-slate-700 dark:text-slate-400"
+                        aria-label={t("publicPrompts.visitCountLabel", { count: selectedDetail.visit_count })}
+                        title={t("publicPrompts.visitCountLabel", { count: selectedDetail.visit_count })}
+                      >
+                        <Eye className="h-4 w-4" />
+                        <span>{t("publicPrompts.visitCountLabel", { count: selectedDetail.visit_count })}</span>
+                      </div>
                       <MagneticButton
                         type="button"
                         className="h-10 whitespace-nowrap rounded-full bg-primary/90 px-4 text-white hover:bg-primary focus-visible:ring-primary/60 dark:bg-primary/80"

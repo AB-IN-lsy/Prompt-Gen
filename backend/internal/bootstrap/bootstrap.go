@@ -176,7 +176,7 @@ func BuildApplication(ctx context.Context, logger *zap.SugaredLogger, resources 
 	// 公开 Prompt 服务与 Handler 仅负责公开库的查询功能。
 	publicPromptRate := loadPublicPromptRateLimit(logger)
 	publicPromptListCfg := loadPublicPromptListConfig(logger)
-	publicPromptService := publicpromptsvc.NewServiceWithConfig(publicPromptRepo, resources.DBConn(), logger, !isLocalMode, publicPromptListCfg)
+	publicPromptService := publicpromptsvc.NewServiceWithConfig(publicPromptRepo, resources.DBConn(), logger, !isLocalMode, publicPromptListCfg, resources.Redis)
 	publicPromptHandler := handler.NewPublicPromptHandler(publicPromptService, publicPromptLimiter, publicPromptRate)
 
 	// IP 防护中间件也是可选的，且强依赖 Redis。
@@ -197,6 +197,10 @@ func BuildApplication(ctx context.Context, logger *zap.SugaredLogger, resources 
 	// 启动后台持久化任务（若 Redis 可用）。
 	if workspaceStore != nil && persistenceQueue != nil {
 		promptService.StartPersistenceWorker(ctx, 0)
+	}
+	if publicPromptService != nil {
+		publicPromptService.StartVisitFlushWorker(ctx)
+		publicPromptService.StartScoreRefreshWorker(ctx)
 	}
 	// 更新日志服务与 Handler 相对简单，主要负责变更条目的查询。
 	changelogService := changelogsrv.NewService(changelogRepo)
@@ -382,9 +386,41 @@ func loadPublicPromptRateLimit(logger *zap.SugaredLogger) handler.PublicPromptRa
 
 // loadPublicPromptListConfig 读取公共 Prompt 列表分页配置。
 func loadPublicPromptListConfig(logger *zap.SugaredLogger) publicpromptsvc.Config {
-	return publicpromptsvc.Config{
+	cfg := publicpromptsvc.Config{
 		DefaultPageSize: parseIntEnv("PUBLIC_PROMPT_LIST_PAGE_SIZE", publicpromptsvc.DefaultListPageSize, logger),
 		MaxPageSize:     parseIntEnv("PUBLIC_PROMPT_LIST_MAX_PAGE_SIZE", publicpromptsvc.DefaultListMaxPageSize, logger),
+	}
+	cfg.Visit = loadPublicPromptVisitConfig(logger)
+	cfg.Score = loadPublicPromptScoreConfig(logger)
+	return cfg
+}
+
+// loadPublicPromptVisitConfig 读取公共库访问量统计配置。
+func loadPublicPromptVisitConfig(logger *zap.SugaredLogger) publicpromptsvc.VisitConfig {
+	return publicpromptsvc.VisitConfig{
+		Enabled:       parseBoolEnv("PUBLIC_PROMPT_VISIT_ENABLED", true),
+		BufferKey:     strings.TrimSpace(os.Getenv("PUBLIC_PROMPT_VISIT_BUFFER_KEY")),
+		GuardPrefix:   strings.TrimSpace(os.Getenv("PUBLIC_PROMPT_VISIT_GUARD_PREFIX")),
+		GuardTTL:      parseDurationEnv("PUBLIC_PROMPT_VISIT_GUARD_TTL", time.Minute, logger),
+		FlushInterval: parseDurationEnv("PUBLIC_PROMPT_VISIT_FLUSH_INTERVAL", time.Minute, logger),
+		FlushBatch:    parseIntEnv("PUBLIC_PROMPT_VISIT_FLUSH_BATCH", 128, logger),
+		FlushLockKey:  strings.TrimSpace(os.Getenv("PUBLIC_PROMPT_VISIT_FLUSH_LOCK_KEY")),
+		FlushLockTTL:  parseDurationEnv("PUBLIC_PROMPT_VISIT_FLUSH_LOCK_TTL", 10*time.Second, logger),
+	}
+}
+
+// loadPublicPromptScoreConfig 读取公共库质量评分的权重配置，支持通过环境变量自定义排行策略。
+func loadPublicPromptScoreConfig(logger *zap.SugaredLogger) publicpromptsvc.ScoreConfig {
+	return publicpromptsvc.ScoreConfig{
+		Enabled:         parseBoolEnv("PUBLIC_PROMPT_SCORE_ENABLED", true),
+		LikeWeight:      parseFloatEnv("PUBLIC_PROMPT_SCORE_LIKE_WEIGHT", 0, logger),
+		DownloadWeight:  parseFloatEnv("PUBLIC_PROMPT_SCORE_DOWNLOAD_WEIGHT", 0, logger),
+		VisitWeight:     parseFloatEnv("PUBLIC_PROMPT_SCORE_VISIT_WEIGHT", 0, logger),
+		RecencyWeight:   parseFloatEnv("PUBLIC_PROMPT_SCORE_RECENCY_WEIGHT", 0, logger),
+		RecencyHalfLife: parseDurationEnv("PUBLIC_PROMPT_SCORE_RECENCY_HALF_LIFE", 0, logger),
+		BaseScore:       parseFloatEnv("PUBLIC_PROMPT_SCORE_BASE", 0, logger),
+		RefreshInterval: parseDurationEnv("PUBLIC_PROMPT_SCORE_REFRESH_INTERVAL", 0, logger),
+		RefreshBatch:    parseIntEnv("PUBLIC_PROMPT_SCORE_REFRESH_BATCH", 0, logger),
 	}
 }
 
@@ -507,4 +543,18 @@ func parseBoolEnv(key string, defaultValue bool) bool {
 	default:
 		return defaultValue
 	}
+}
+
+// parseFloatEnv 解析浮点型环境变量，失败时记录告警并返回默认值，避免配置错误影响服务。
+func parseFloatEnv(key string, defaultValue float64, logger *zap.SugaredLogger) float64 {
+	raw := strings.TrimSpace(os.Getenv(key))
+	if raw == "" {
+		return defaultValue
+	}
+	value, err := strconv.ParseFloat(raw, 64)
+	if err != nil {
+		logger.Warnw("invalid float env, fallback to default", "key", key, "value", raw, "default", defaultValue, "error", err)
+		return defaultValue
+	}
+	return value
 }

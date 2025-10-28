@@ -145,6 +145,16 @@
       "pending": "待审核",
       "rejected": "已驳回"
     },
+    "sort": {
+      "title": "排序",
+      "score": "综合评分",
+      "downloads": "下载量",
+      "likes": "点赞数",
+      "visits": "浏览量",
+      "updated_at": "最近更新",
+      "created_at": "最新发布"
+    },
+    "scoreRefreshHint": "评分由后台定期刷新，展示结果可能会有轻微延迟。",
     "empty": "暂无符合条件的公共 Prompt，请换个关键词试试。",
     "noSummary": "还没有简介，点击卡片查看详情。",
     "downloadAction": "下载到我的 Prompt",
@@ -187,6 +197,10 @@
     "likeError": "点赞操作失败，请稍后重试。",
     "likeOfflineDisabled": "离线模式暂不支持点赞。",
     "likeCountLabel": "{{count}} 人点赞",
+    "visitCountShort": "{{count}} 次浏览",
+    "visitCountLabel": "浏览 {{count}} 次",
+    "qualityScoreBadge": "评分 {{score}}",
+    "qualityScoreLabel": "综合评分 {{score}}",
     "downloadShort": "下载到我的库",
     "deleteShort": "删除",
     "detailHeader": {

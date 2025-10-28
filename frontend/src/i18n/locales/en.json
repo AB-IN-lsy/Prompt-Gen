@@ -145,6 +145,16 @@
       "pending": "Pending",
       "rejected": "Rejected"
     },
+    "sort": {
+      "title": "Sort",
+      "score": "Quality score",
+      "downloads": "Downloads",
+      "likes": "Likes",
+      "visits": "Views",
+      "updated_at": "Recently updated",
+      "created_at": "Newest"
+    },
+    "scoreRefreshHint": "Scores refresh in scheduled batches, so a slight delay is expected.",
     "empty": "No public prompts match your filters yet. Try another keyword.",
     "noSummary": "No summary yet – open the card to view full details.",
     "downloadAction": "Download to My Prompts",
@@ -187,6 +197,10 @@
     "likeError": "Failed to update like status. Please try again later.",
     "likeOfflineDisabled": "Likes are unavailable in offline mode.",
     "likeCountLabel": "{{count}} likes",
+    "visitCountShort": "{{count}} views",
+    "visitCountLabel": "{{count}} views",
+    "qualityScoreBadge": "Score {{score}}",
+    "qualityScoreLabel": "Quality score {{score}}",
     "downloadShort": "Save to Mine",
     "deleteShort": "Delete",
     "detailHeader": {

@@ -7,6 +7,7 @@ import {
   CheckCircle2,
   Clock3,
   LoaderCircle,
+  Sparkles,
   ShieldBan,
   Tags,
   Trash2,
@@ -427,6 +428,11 @@ function PublicPromptDetailPanel({
     onDelete();
   };
 
+  const scoreValue = Number.isFinite(detail.quality_score)
+    ? detail.quality_score.toFixed(1)
+    : "0.0";
+  const scoreLabel = t("publicPrompts.qualityScoreLabel", { score: scoreValue });
+
   return (
     <div className="flex h-full flex-col gap-4">
       <div className="space-y-1">
@@ -450,6 +456,10 @@ function PublicPromptDetailPanel({
               detail.updated_at ? new Date(detail.updated_at) : new Date(),
             )}
           </span>
+        </div>
+        <div className="flex items-center gap-2 text-primary/80 dark:text-primary/60">
+          <Sparkles className="h-4 w-4" />
+          <span>{scoreLabel}</span>
         </div>
       </div>
 

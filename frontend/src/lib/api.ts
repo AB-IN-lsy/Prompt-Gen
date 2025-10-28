@@ -232,6 +232,8 @@ export interface PublicPromptListItem {
   status: "pending" | "approved" | "rejected" | string;
   tags: string[];
   download_count: number;
+  visit_count: number;
+  quality_score: number;
   created_at: string;
   updated_at: string;
   author_user_id: number;
@@ -1074,6 +1076,8 @@ export async function fetchPublicPrompts(params: {
   page?: number;
   pageSize?: number;
   authorId?: number;
+  sortBy?: string;
+  sortOrder?: "asc" | "desc";
 } = {}): Promise<PublicPromptListResponse> {
   try {
     const response: AxiosResponse<{ items: any[] }> & {
@@ -1085,6 +1089,8 @@ export async function fetchPublicPrompts(params: {
         page: params.page,
         page_size: params.pageSize,
         author_id: params.authorId,
+        sort_by: params.sortBy,
+        sort_order: params.sortOrder,
       },
     });
     const items = (response.data?.items ?? []).map((item) => {
@@ -1099,6 +1105,10 @@ export async function fetchPublicPrompts(params: {
         status: String(item?.status ?? "pending"),
         tags,
         download_count: Number(item?.download_count ?? 0),
+        visit_count:
+          typeof item?.visit_count === "number" && Number.isFinite(item.visit_count)
+            ? Number(item.visit_count)
+            : 0,
         created_at: String(item?.created_at ?? ""),
         updated_at: String(item?.updated_at ?? ""),
         author_user_id: Number(item?.author_user_id ?? 0),
@@ -1112,6 +1122,10 @@ export async function fetchPublicPrompts(params: {
         like_count:
           typeof item?.like_count === "number" && Number.isFinite(item.like_count)
             ? item.like_count
+            : 0,
+        quality_score:
+          typeof item?.quality_score === "number" && Number.isFinite(item.quality_score)
+            ? item.quality_score
             : 0,
       } as PublicPromptListItem;
     });
@@ -1162,6 +1176,14 @@ export async function fetchPublicPromptDetail(
           : null,
       tags,
       download_count: Number(data.download_count ?? 0),
+      visit_count:
+        typeof data?.visit_count === "number" && Number.isFinite(data.visit_count)
+          ? Number(data.visit_count)
+          : 0,
+      quality_score:
+        typeof data?.quality_score === "number" && Number.isFinite(data.quality_score)
+          ? Number(data.quality_score)
+          : 0,
       created_at: String(data.created_at ?? ""),
       updated_at: String(data.updated_at ?? ""),
       author_user_id: Number(data.author_user_id ?? 0),
@@ -1823,4 +1845,3 @@ function parsePromptCommentAuthor(value: unknown): PromptCommentAuthor | null {
         : undefined,
   };
 }
-

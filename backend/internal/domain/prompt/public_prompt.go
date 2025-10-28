@@ -28,12 +28,14 @@ type PublicPrompt struct {
 	ReviewerUserID   *uint      `gorm:"column:reviewer_user_id"`
 	ReviewReason     string     `gorm:"size:255"`
 	DownloadCount    uint       `gorm:"column:download_count;not null;default:0"`
+	QualityScore     float64    `gorm:"column:quality_score;not null;default:0"`
 	CreatedAt        time.Time  `gorm:"column:created_at;autoCreateTime"`
 	UpdatedAt        time.Time  `gorm:"column:updated_at;autoUpdateTime"`
 	Reviewer         *UserBrief `gorm:"-"`
 	Author           *UserBrief `gorm:"-"`
 	LikeCount        uint       `gorm:"-"`
 	IsLiked          bool       `gorm:"-"`
+	VisitCount       uint64     `gorm:"-"`
 }
 
 // TableName 返回对应的表名。

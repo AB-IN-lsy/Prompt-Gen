@@ -132,11 +132,32 @@ func (h *PublicPromptHandler) List(c *gin.Context) {
 		pageSize = maxPageSize
 	}
 
+	sortByParam := strings.ToLower(strings.TrimSpace(c.DefaultQuery("sort_by", "score")))
+	allowedSorts := map[string]bool{
+		"score":      true,
+		"downloads":  true,
+		"likes":      true,
+		"visits":     true,
+		"updated_at": true,
+		"created_at": true,
+		"":           true,
+	}
+	if !allowedSorts[sortByParam] {
+		sortByParam = ""
+	}
+	sortOrderParam := strings.ToLower(strings.TrimSpace(c.DefaultQuery("sort_order", "desc")))
+	sortOrder := "DESC"
+	if sortOrderParam == "asc" {
+		sortOrder = "ASC"
+	}
+
 	filter := publicpromptsvc.ListFilter{
 		Query:        c.Query("q"),
 		Page:         page,
 		PageSize:     pageSize,
 		ViewerUserID: userID,
+		SortBy:       sortByParam,
+		SortOrder:    sortOrder,
 	}
 	statusParam := strings.TrimSpace(c.Query("status"))
 	if isAdmin(c) {
@@ -194,8 +215,10 @@ func (h *PublicPromptHandler) List(c *gin.Context) {
 				id := *item.ReviewerUserID
 				return &id
 			}(),
-			"like_count": item.LikeCount,
-			"is_liked":   item.IsLiked,
+			"like_count":    item.LikeCount,
+			"is_liked":      item.IsLiked,
+			"visit_count":   item.VisitCount,
+			"quality_score": item.QualityScore,
 		})
 	}
 
@@ -269,6 +292,8 @@ func (h *PublicPromptHandler) Get(c *gin.Context) {
 		"author_user_id":    entity.AuthorUserID,
 		"like_count":        entity.LikeCount,
 		"is_liked":          entity.IsLiked,
+		"visit_count":       entity.VisitCount,
+		"quality_score":     entity.QualityScore,
 	}, nil)
 }
 

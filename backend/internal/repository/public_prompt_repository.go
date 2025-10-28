@@ -9,6 +9,7 @@ import (
 	promptdomain "electron-go-app/backend/internal/domain/prompt"
 
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 // PublicPromptListFilter 描述公共库查询所需的过滤条件。
@@ -19,6 +20,8 @@ type PublicPromptListFilter struct {
 	OnlyApproved bool
 	Limit        int
 	Offset       int
+	SortBy       string
+	SortOrder    string
 }
 
 // PublicPromptRepository 负责公共 Prompt 库的增删查改。
@@ -67,8 +70,32 @@ func (r *PublicPromptRepository) List(ctx context.Context, filter PublicPromptLi
 		query = query.Offset(filter.Offset)
 	}
 
+	sortBy := strings.ToLower(strings.TrimSpace(filter.SortBy))
+	sortOrder := strings.ToUpper(strings.TrimSpace(filter.SortOrder))
+	if sortOrder != "ASC" && sortOrder != "DESC" {
+		sortOrder = "DESC"
+	}
+	switch sortBy {
+	case "score":
+		query = query.Order(fmt.Sprintf("quality_score %s", sortOrder)).Order("created_at DESC")
+	case "downloads":
+		query = query.Order(fmt.Sprintf("download_count %s", sortOrder)).Order("created_at DESC")
+	case "likes":
+		expr := fmt.Sprintf("(SELECT like_count FROM prompts WHERE prompts.id = public_prompts.source_prompt_id) %s", sortOrder)
+		query = query.Order(clause.Expr{SQL: expr}).Order("created_at DESC")
+	case "visits":
+		expr := fmt.Sprintf("(SELECT visit_count FROM prompts WHERE prompts.id = public_prompts.source_prompt_id) %s", sortOrder)
+		query = query.Order(clause.Expr{SQL: expr}).Order("created_at DESC")
+	case "updated_at":
+		query = query.Order(fmt.Sprintf("updated_at %s", sortOrder))
+	case "created_at":
+		query = query.Order(fmt.Sprintf("created_at %s", sortOrder))
+	default:
+		query = query.Order("created_at DESC")
+	}
+
 	var records []promptdomain.PublicPrompt
-	if err := query.Order("created_at DESC").Find(&records).Error; err != nil {
+	if err := query.Find(&records).Error; err != nil {
 		return nil, 0, fmt.Errorf("list public prompts: %w", err)
 	}
 	return records, total, nil
@@ -138,6 +165,35 @@ func (r *PublicPromptRepository) IncrementDownload(ctx context.Context, id uint)
 		Where("id = ?", id).
 		UpdateColumn("download_count", gorm.Expr("download_count + 1")).Error; err != nil {
 		return fmt.Errorf("increment download count: %w", err)
+	}
+	return nil
+}
+
+// ListForScore 按主键递增分页返回参与评分计算所需的公共 Prompt 字段。
+func (r *PublicPromptRepository) ListForScore(ctx context.Context, afterID uint, limit int) ([]promptdomain.PublicPrompt, error) {
+	query := r.db.WithContext(ctx).
+		Select("id", "source_prompt_id", "download_count", "updated_at").
+		Order("id ASC")
+	if afterID > 0 {
+		query = query.Where("id > ?", afterID)
+	}
+	if limit > 0 {
+		query = query.Limit(limit)
+	}
+	var records []promptdomain.PublicPrompt
+	if err := query.Find(&records).Error; err != nil {
+		return nil, fmt.Errorf("list public prompts for score: %w", err)
+	}
+	return records, nil
+}
+
+// UpdateQualityScore 根据主键更新质量评分。
+func (r *PublicPromptRepository) UpdateQualityScore(ctx context.Context, id uint, score float64) error {
+	if err := r.db.WithContext(ctx).
+		Model(&promptdomain.PublicPrompt{}).
+		Where("id = ?", id).
+		UpdateColumn("quality_score", score).Error; err != nil {
+		return fmt.Errorf("update quality score: %w", err)
 	}
 	return nil
 }

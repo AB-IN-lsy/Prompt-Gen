@@ -37,6 +37,7 @@
     3. Service 层先查公共 Prompt 绑定的源 Prompt 编号，确保点赞动作落在真实的 Prompt 数据上。
     4. 找到源 Prompt 后，调用 `PromptRepository.AddLike/RemoveLike` 对 `prompt_likes` 表增删记录，并用 `IncrementLikeCount` 更新 `prompts.like_count`。
     5. 最后执行 `LikeSnapshot`，一次性读取“总点赞数 + 当前用户是否点赞”，填回到公共 Prompt 的 `LikeCount/IsLiked` 字段，HTTP 响应即可直接携带最新状态返回给前端。
+- 公共 Prompt 访问量统计改用 Redis 缓冲 + 后台刷库：详情页按用户 ID 设置 1 分钟去重窗口，访问增量先写入 `prompt:visit:buffer` Hash，后台协程依据 `PUBLIC_PROMPT_VISIT_*` 环境变量批量刷新 MySQL，接口会返回“已落库值 + 缓存值”，方便前端即时展示最新访问数。
 - Prompt 版本号策略：首次仅保存草稿不会产生版本（`latest_version_no=0`），首次发布才会生成版本 1；发布后再保存草稿不改变版本号，下次发布时会遍历历史版本取最大值再 +1，保证序号连续递增。
 - 数据库自动迁移包含 `user_model_credentials` 与 `changelog_entries` 表，服务启动即可创建所需数据结构。
 - 模型凭据禁用或删除时，会自动清理用户偏好的 `preferred_model`，避免指向不可用的模型；`PUT /api/users/me` 也会验证偏好模型是否存在并已启用。
@@ -191,6 +192,27 @@
 | `PUBLIC_PROMPT_SUBMIT_WINDOW` | 投稿限流窗口，默认 `30m` |
 | `PUBLIC_PROMPT_DOWNLOAD_LIMIT` | 下载接口限流次数，默认 `30` |
 | `PUBLIC_PROMPT_DOWNLOAD_WINDOW` | 下载限流窗口，默认 `1h` |
+
+### 公共 Prompt 访问统计（仅在线模式）
+
+| 变量 | 作用 |
+| --- | --- |
+| `PUBLIC_PROMPT_VISIT_ENABLED` | 是否开启访问量统计（默认开启，在线模式才生效） |
+| `PUBLIC_PROMPT_VISIT_BUFFER_KEY` | Redis Hash 缓冲键，默认 `prompt:visit:buffer`，按 Prompt ID 累加访问增量 |
+| `PUBLIC_PROMPT_VISIT_GUARD_PREFIX` / `PUBLIC_PROMPT_VISIT_GUARD_TTL` | 去重键前缀与 TTL，默认按用户 ID 1 分钟内仅计一次访问 |
+| `PUBLIC_PROMPT_VISIT_FLUSH_INTERVAL` | 后台协程刷新的间隔，默认 `1m` |
+| `PUBLIC_PROMPT_VISIT_FLUSH_BATCH` | 单次刷库处理的最大 Prompt 数，默认 `128` |
+| `PUBLIC_PROMPT_VISIT_FLUSH_LOCK_KEY` / `PUBLIC_PROMPT_VISIT_FLUSH_LOCK_TTL` | 分布式锁键名与有效期，防止多实例同时刷新 |
+
+> 访问量刷新流程：详情接口命中后先设置去重键，再将增量写入 Redis 缓冲 Hash；后台协程每隔 `PUBLIC_PROMPT_VISIT_FLUSH_INTERVAL` 读取 Hash，将增量累加到 `prompts.visit_count` 并移除已处理字段。HTTP 响应会返回“落库值 + 缓存增量”，确保前端立即看到最新访问次数。
+
+访问统计的整体节奏如下：
+
+1. **读取访问量**：接口在返回公共 Prompt 数据之前，会先查询 MySQL 中的 `prompts.visit_count`，再从 Redis 缓冲 `prompt:visit:buffer` 读取尚未落库的增量，两个值相加后回传给前端。
+2. **记录本次访问**：详情接口校验用户级去重键（默认 1 分钟），通过后优先调用 `HINCRBY prompt:visit:buffer <promptID> 1` 写入 Redis；若 Redis 不可用，则回退到直接更新 MySQL。
+3. **批量落库**：后台协程依据 `PUBLIC_PROMPT_VISIT_FLUSH_INTERVAL` 定期触发 `flushVisitBuffer`，抢占分布式锁后批量读取缓冲增量，加到 `prompts.visit_count` 并 `HDEL` 清理已处理字段，从而保证 Redis 与 MySQL 数据一致。
+
+> 这样设计的好处是：读取只做一次简单查询，写入则通过 Redis 做缓冲和去重，把大量的单次 `UPDATE` 合并成定时批量更新，既保证访问统计即时准确，又显著降低 MySQL 写压力。
 
 ### IP 防护（可选）
 
@@ -1028,8 +1050,8 @@ ALTER TABLE prompts
 #### GET /api/public-prompts
 
 - **用途**：获取公共 Prompt 列表，用于优质 Prompt 浏览。离线模式下接口保持可用但仅支持只读，投稿入口会被前端隐藏。
-- **查询参数**：`q`（关键词模糊搜索标题、主题、标签）、`status`（管理员可传 `pending`/`rejected` 查看待审条目；普通用户在传入 `pending`/`rejected` 时仅返回自己的投稿，默认返回全量 `approved` 数据）、`page`、`page_size`（默认 `9`，上限 `60`）。
-- **返回字段**：列表项附带 `like_count` 与 `is_liked`，分别表示总点赞数和当前用户是否已点赞。
+- **查询参数**：`q`（关键词模糊搜索标题、主题、标签）、`status`（管理员可传 `pending`/`rejected` 查看待审条目；普通用户在传入 `pending`/`rejected` 时仅返回自己的投稿，默认返回全量 `approved` 数据）、`page`、`page_size`（默认 `9`，上限 `60`）、`sort_by`（可选，支持 `score`/`downloads`/`likes`/`visits`/`updated_at`/`created_at`，默认 `score`）、`sort_order`（可选，`asc` 或 `desc`，默认 `desc`）。
+- **返回字段**：列表项附带 `like_count` / `is_liked`（点赞总数与当前用户点赞态）、`visit_count`（实时访问量，等于数据库值加上 Redis 缓冲增量）以及 `quality_score`（综合评分，越高代表热度/质量越优）。
 - **成功响应**：`200`
 
   ```json
@@ -1048,6 +1070,8 @@ ALTER TABLE prompts
           "tags": ["面试", "前端"],
           "download_count": 32,
           "like_count": 12,
+          "visit_count": 87,
+          "quality_score": 7.6,
           "is_liked": true,
           "created_at": "2025-10-18T02:30:00Z",
           "updated_at": "2025-10-19T09:15:00Z",
@@ -1067,10 +1091,12 @@ ALTER TABLE prompts
   ```
 
 - **访问控制**：非管理员用户传入 `status=pending` 或 `status=rejected` 时，仅返回其本人投稿的记录；默认或 `status=approved` 场景下返回全量已通过条目。`meta.current_count` 会返回当前页实际条目数，方便前端在栅格布局中展示分页摘要。
+  质量评分字段基于点赞、下载、访问与最近更新时间的指数衰减组合，由后台定时任务按 `PUBLIC_PROMPT_SCORE_REFRESH_INTERVAL` 配置（默认 5 分钟）批量重算，单批处理数量由 `PUBLIC_PROMPT_SCORE_REFRESH_BATCH` 控制；权重调节参考 `PUBLIC_PROMPT_SCORE_*` 环境变量，可根据运营策略微调排序。
 
 #### GET /api/public-prompts/:id
 
 - **用途**：查询公共 Prompt 详情，返回正文、说明及关键词快照。普通用户访问未审核（`pending`/`rejected`）条目会得到 `403`。
+- **返回字段**：除基础信息外，响应包含 `visit_count`、`like_count` 与 `quality_score`，方便前端展示实时人气指标。
 - **成功响应**：`200`
 
   ```json
@@ -1095,7 +1121,9 @@ ALTER TABLE prompts
       ],
       "tags": ["面试", "前端"],
       "download_count": 32,
+      "quality_score": 7.6,
       "like_count": 12,
+      "visit_count": 87,
       "is_liked": true,
       "created_at": "2025-10-18T02:30:00Z",
       "updated_at": "2025-10-19T09:15:00Z"

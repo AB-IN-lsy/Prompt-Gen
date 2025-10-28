@@ -51,6 +51,7 @@ type Prompt struct {
 	Tags             string     `gorm:"type:text;not null"`                     // 自定义标签 JSON。
 	IsFavorited      bool       `gorm:"not null;default:false"`                 // 是否收藏。
 	LikeCount        uint       `gorm:"not null;default:0"`                     // 点赞数量。
+	VisitCount       uint64     `gorm:"not null;default:0"`                     // 访问次数。
 	PublishedAt      *time.Time // 最近发布的时间戳。
 	CreatedAt        time.Time  // 创建时间。
 	UpdatedAt        time.Time  // 最近更新时间。

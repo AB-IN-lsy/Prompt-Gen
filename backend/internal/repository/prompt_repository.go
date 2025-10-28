@@ -287,6 +287,24 @@ func (r *PromptRepository) IncrementLikeCount(ctx context.Context, promptID uint
 	return nil
 }
 
+// IncrementVisitCount 按增量更新 Prompt 的访问次数，确保访问量只增不出现负值。
+func (r *PromptRepository) IncrementVisitCount(ctx context.Context, promptID uint, delta int) error {
+	if delta == 0 {
+		return nil
+	}
+	result := r.db.WithContext(ctx).
+		Model(&promptdomain.Prompt{}).
+		Where("id = ?", promptID).
+		UpdateColumn("visit_count", gorm.Expr("CASE WHEN visit_count + ? < 0 THEN 0 ELSE visit_count + ? END", delta, delta))
+	if result.Error != nil {
+		return fmt.Errorf("update prompt visit_count: %w", result.Error)
+	}
+	if result.RowsAffected == 0 {
+		return gorm.ErrRecordNotFound
+	}
+	return nil
+}
+
 // ListUserLikedPromptIDs 返回用户对指定 Prompt 集合的点赞命中情况。
 func (r *PromptRepository) ListUserLikedPromptIDs(ctx context.Context, userID uint, promptIDs []uint) (map[uint]bool, error) {
 	result := make(map[uint]bool, len(promptIDs))
