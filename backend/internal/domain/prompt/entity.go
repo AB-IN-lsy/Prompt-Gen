@@ -22,6 +22,13 @@ const (
 	PromptStatusArchived  = "archived"
 )
 
+// PromptCommentStatus 表示评论的审核状态。
+const (
+	PromptCommentStatusPending  = "pending"
+	PromptCommentStatusApproved = "approved"
+	PromptCommentStatusRejected = "rejected"
+)
+
 // PromptKeywordItem 映射 Prompt 中正负关键词 JSON 数组的元素结构。
 type PromptKeywordItem struct {
 	KeywordID uint   `json:"keyword_id,omitempty"`
@@ -83,6 +90,28 @@ type PromptLike struct {
 // TableName 返回点赞关系使用的表名。
 func (PromptLike) TableName() string {
 	return "prompt_likes"
+}
+
+// PromptComment 记录 Prompt 下的评论，支持楼中楼与审核流程。
+type PromptComment struct {
+	ID             uint       `gorm:"primaryKey"`                                // 评论主键。
+	PromptID       uint       `gorm:"not null;index:idx_prompt_comments_prompt"` // 关联 Prompt 编号。
+	UserID         uint       `gorm:"not null;index:idx_prompt_comments_user"`   // 评论用户编号。
+	ParentID       *uint      `gorm:"index:idx_prompt_comments_parent"`          // 直接父级评论编号。
+	RootID         *uint      `gorm:"index:idx_prompt_comments_root"`            // 顶层评论编号，便于批量查询子楼层。
+	Body           string     `gorm:"type:text;not null"`                        // 评论正文。
+	Status         string     `gorm:"size:16;not null;default:'pending';index"`  // 审核状态：pending/approved/rejected。
+	ReviewNote     string     `gorm:"type:text"`                                 // 审核备注，可选。
+	ReviewerUserID *uint      `gorm:"index:idx_prompt_comments_reviewer"`        // 审核人编号。
+	ReplyCount     int        `gorm:"-"`                                         // 当前评论的可见子回复数量。
+	Author         *UserBrief `gorm:"-"`                                         // 评论用户信息。
+	CreatedAt      time.Time  `gorm:"autoCreateTime"`                            // 创建时间。
+	UpdatedAt      time.Time  `gorm:"autoUpdateTime"`                            // 最近更新时间。
+}
+
+// TableName 返回评论表名称。
+func (PromptComment) TableName() string {
+	return "prompt_comments"
 }
 
 // PromptVersion 记录历史版本，便于用户回滚。

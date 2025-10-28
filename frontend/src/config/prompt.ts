@@ -99,3 +99,13 @@ export const PUBLIC_PROMPT_LIST_PAGE_SIZE =
   Number.isInteger(rawPublicPromptPageSize) && rawPublicPromptPageSize > 0
     ? rawPublicPromptPageSize
     : 9;
+
+const rawPromptCommentPageSize = Number.parseInt(
+  import.meta.env.VITE_PROMPT_COMMENT_PAGE_SIZE ?? "",
+  10,
+);
+
+export const PROMPT_COMMENT_PAGE_SIZE =
+  Number.isInteger(rawPromptCommentPageSize) && rawPromptCommentPageSize > 0
+    ? rawPromptCommentPageSize
+    : 10;

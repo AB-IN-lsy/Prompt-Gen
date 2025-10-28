@@ -14,17 +14,18 @@ import (
 )
 
 type RouterOptions struct {
-	AuthHandler         *handler.AuthHandler
-	UserHandler         *handler.UserHandler
-	UploadHandler       *handler.UploadHandler
-	ModelHandler        *handler.ModelHandler
-	ChangelogHandler    *handler.ChangelogHandler
-	PromptHandler       *handler.PromptHandler
-	PublicPromptHandler *handler.PublicPromptHandler
-	AuthMW              middleware.Authenticator
-	IPGuard             *middleware.IPGuardMiddleware
-	IPGuardHandler      *handler.IPGuardHandler
-	StaticFS            http.FileSystem
+	AuthHandler          *handler.AuthHandler
+	UserHandler          *handler.UserHandler
+	UploadHandler        *handler.UploadHandler
+	ModelHandler         *handler.ModelHandler
+	ChangelogHandler     *handler.ChangelogHandler
+	PromptHandler        *handler.PromptHandler
+	PromptCommentHandler *handler.PromptCommentHandler
+	PublicPromptHandler  *handler.PublicPromptHandler
+	AuthMW               middleware.Authenticator
+	IPGuard              *middleware.IPGuardMiddleware
+	IPGuardHandler       *handler.IPGuardHandler
+	StaticFS             http.FileSystem
 }
 
 // NewRouter 构建应用的 Gin Engine，汇总所有 REST 接口与公共中间件配置。
@@ -126,30 +127,37 @@ func NewRouter(opts RouterOptions) *gin.Engine {
 			models.DELETE("/:id", opts.ModelHandler.Delete)
 		}
 
-		if opts.PromptHandler != nil {
+		if opts.PromptHandler != nil || opts.PromptCommentHandler != nil {
 			prompts := api.Group("/prompts")
 			if opts.AuthMW != nil {
 				prompts.Use(opts.AuthMW.Handle())
 			}
-			prompts.GET("", opts.PromptHandler.ListPrompts)
-			prompts.GET("/:id/versions", opts.PromptHandler.ListPromptVersions)
-			prompts.GET("/:id/versions/:version", opts.PromptHandler.GetPromptVersion)
-			prompts.POST("/export", opts.PromptHandler.ExportPrompts)
-			prompts.POST("/import", opts.PromptHandler.ImportPrompts)
-			prompts.POST("/interpret", opts.PromptHandler.Interpret)
-			prompts.POST("/keywords/augment", opts.PromptHandler.AugmentKeywords)
-			prompts.POST("/keywords/manual", opts.PromptHandler.AddManualKeyword)
-			prompts.POST("/keywords/remove", opts.PromptHandler.RemoveKeyword)
-			prompts.POST("/keywords/sync", opts.PromptHandler.SyncKeywords)
-			prompts.POST("/generate", opts.PromptHandler.GeneratePrompt)
-			prompts.GET("/:id", opts.PromptHandler.GetPrompt)
-			prompts.PATCH("/:id/favorite", opts.PromptHandler.UpdateFavorite)
-			prompts.POST("/:id/like", opts.PromptHandler.LikePrompt)
-			prompts.DELETE("/:id/like", opts.PromptHandler.UnlikePrompt)
-			prompts.DELETE("/:id", opts.PromptHandler.DeletePrompt)
-			prompts.POST("", opts.PromptHandler.SavePrompt)
+			if opts.PromptHandler != nil {
+				prompts.GET("", opts.PromptHandler.ListPrompts)
+				prompts.GET("/:id/versions", opts.PromptHandler.ListPromptVersions)
+				prompts.GET("/:id/versions/:version", opts.PromptHandler.GetPromptVersion)
+				prompts.POST("/export", opts.PromptHandler.ExportPrompts)
+				prompts.POST("/import", opts.PromptHandler.ImportPrompts)
+				prompts.POST("/interpret", opts.PromptHandler.Interpret)
+				prompts.POST("/keywords/augment", opts.PromptHandler.AugmentKeywords)
+				prompts.POST("/keywords/manual", opts.PromptHandler.AddManualKeyword)
+				prompts.POST("/keywords/remove", opts.PromptHandler.RemoveKeyword)
+				prompts.POST("/keywords/sync", opts.PromptHandler.SyncKeywords)
+				prompts.POST("/generate", opts.PromptHandler.GeneratePrompt)
+				prompts.GET("/:id", opts.PromptHandler.GetPrompt)
+				prompts.PATCH("/:id/favorite", opts.PromptHandler.UpdateFavorite)
+				prompts.POST("/:id/like", opts.PromptHandler.LikePrompt)
+				prompts.DELETE("/:id/like", opts.PromptHandler.UnlikePrompt)
+				prompts.DELETE("/:id", opts.PromptHandler.DeletePrompt)
+				prompts.POST("", opts.PromptHandler.SavePrompt)
+			}
+			if opts.PromptCommentHandler != nil {
+				prompts.GET("/:id/comments", opts.PromptCommentHandler.List)
+				prompts.POST("/:id/comments", opts.PromptCommentHandler.Create)
+				prompts.POST("/comments/:id/review", opts.PromptCommentHandler.Review)
+				prompts.DELETE("/comments/:id", opts.PromptCommentHandler.Delete)
+			}
 		}
-
 		if opts.PublicPromptHandler != nil {
 			publicPrompts := api.Group("/public-prompts")
 			if opts.AuthMW != nil {

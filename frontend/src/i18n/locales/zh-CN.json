@@ -170,7 +170,8 @@
     "status": {
       "approved": "已通过",
       "pending": "待审核",
-      "rejected": "已驳回"
+      "rejected": "已驳回",
+      "all": "全部"
     },
     "keywords": {
       "positive": "正向关键词",
@@ -193,6 +194,41 @@
       "subtitle": "暂无简介"
     },
     "subtitleFallback": "暂无简介"
+  },
+  "comments": {
+    "title": "评论区",
+    "subtitle": "分享你的使用心得或给作者提建议。",
+    "placeholder": "请输入评论内容…",
+    "replyPlaceholder": "请输入回复内容…",
+    "submit": "发布评论",
+    "reply": "回复",
+    "cancelReply": "取消回复",
+    "empty": "暂时还没有评论，快来抢沙发吧！",
+    "loadError": "加载评论失败，请稍后重试。",
+    "createSuccess": "评论已发布。",
+    "createPending": "评论已提交，待审核后显示。",
+    "reviewSuccess": "评论状态已更新。",
+    "status": {
+      "approved": "已通过",
+      "pending": "待审核",
+      "rejected": "已驳回",
+      "all": "全部"
+    },
+    "pendingBadge": "待审核",
+    "rejectedBadge": "已驳回",
+    "actions": {
+      "approve": "通过",
+      "reject": "驳回"
+    },
+    "pagination": "第 {{page}} / {{totalPages}} 页，共 {{totalItems}} 条评论",
+    "total": "共有 {{count}} 条评论",
+    "replyCount": "共有 {{count}} 条回复",
+    "anonymous": "匿名用户",
+    "notePlaceholder": "可选填写审核备注",
+    "emptyBody": "评论内容不能为空。",
+    "offlineDisabled": "离线模式暂不支持发表评论。",
+    "rejectConfirmTitle": "确认驳回这条评论吗？",
+    "rejectConfirmDescription": "评论会立即被隐藏，你也可以在上方输入驳回说明。"
   },
   "publicPromptReview": {
     "eyebrow": "公共库审核",

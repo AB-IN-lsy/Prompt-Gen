@@ -156,3 +156,19 @@ func (r *UserRepository) ExistsOtherByUsername(ctx context.Context, username str
 	}
 	return count > 0, nil
 }
+
+// ListByIDs 批量查询用户并返回以 ID 为键的映射。
+func (r *UserRepository) ListByIDs(ctx context.Context, ids []uint) (map[uint]*user.User, error) {
+	result := make(map[uint]*user.User, len(ids))
+	if len(ids) == 0 {
+		return result, nil
+	}
+	var records []user.User
+	if err := r.db.WithContext(ctx).Where("id IN ?", ids).Find(&records).Error; err != nil {
+		return nil, err
+	}
+	for i := range records {
+		result[records[i].ID] = &records[i]
+	}
+	return result, nil
+}

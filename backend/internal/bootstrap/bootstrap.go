@@ -2,7 +2,7 @@
  * @Author: NEFU AB-IN
  * @Date: 2025-10-09 20:51:28
  * @FilePath: \electron-go-app\backend\internal\bootstrap\bootstrap.go
- * @LastEditTime: 2025-10-25 13:16:32
+ * @LastEditTime: 2025-10-28 14:03:03
  */
 package bootstrap
 
@@ -31,6 +31,7 @@ import (
 	changelogsrv "electron-go-app/backend/internal/service/changelog"
 	modelsvc "electron-go-app/backend/internal/service/model"
 	promptsvc "electron-go-app/backend/internal/service/prompt"
+	promptcommentsvc "electron-go-app/backend/internal/service/promptcomment"
 	publicpromptsvc "electron-go-app/backend/internal/service/publicprompt"
 	usersvc "electron-go-app/backend/internal/service/user"
 
@@ -68,6 +69,7 @@ func BuildApplication(ctx context.Context, logger *zap.SugaredLogger, resources 
 	promptRepo := repository.NewPromptRepository(resources.DBConn())
 	keywordRepo := repository.NewKeywordRepository(resources.DBConn())
 	publicPromptRepo := repository.NewPublicPromptRepository(resources.DBConn())
+	promptCommentRepo := repository.NewPromptCommentRepository(resources.DBConn())
 
 	isLocalMode := strings.EqualFold(cfg.Mode, config.ModeLocal)
 
@@ -115,6 +117,13 @@ func BuildApplication(ctx context.Context, logger *zap.SugaredLogger, resources 
 		promptLimiter = ratelimit.NewMemoryLimiter()
 	}
 
+	var commentLimiter ratelimit.Limiter
+	if resources.Redis != nil {
+		commentLimiter = ratelimit.NewRedisLimiter(resources.Redis, "prompt_comment")
+	} else {
+		commentLimiter = ratelimit.NewMemoryLimiter()
+	}
+
 	var publicPromptLimiter ratelimit.Limiter
 	if resources.Redis != nil {
 		publicPromptLimiter = ratelimit.NewRedisLimiter(resources.Redis, "public_prompt")
@@ -126,6 +135,7 @@ func BuildApplication(ctx context.Context, logger *zap.SugaredLogger, resources 
 		logger.Infow("disabling rate limiters in local mode")
 		limiter = nil
 		promptLimiter = nil
+		commentLimiter = nil
 		publicPromptLimiter = nil
 	}
 
@@ -154,6 +164,15 @@ func BuildApplication(ctx context.Context, logger *zap.SugaredLogger, resources 
 	}
 	promptRateLimit := loadPromptRateLimit(logger)
 	promptHandler := handler.NewPromptHandler(promptService, promptLimiter, promptRateLimit)
+	// 构建 Prompt 评论服务与 Handler，注入评论审核配置与限流器。
+	commentCfg := loadPromptCommentConfig(logger)
+	var commentAudit promptcommentsvc.AuditFunc
+	if promptService != nil {
+		commentAudit = promptService.AuditCommentContent
+	}
+	commentService := promptcommentsvc.NewService(promptCommentRepo, promptRepo, userRepo, commentAudit, logger, commentCfg)
+	commentRateLimit := loadPromptCommentRateLimit(logger)
+	commentHandler := handler.NewPromptCommentHandler(commentService, commentLimiter, commentRateLimit)
 	// 公开 Prompt 服务与 Handler 仅负责公开库的查询功能。
 	publicPromptRate := loadPublicPromptRateLimit(logger)
 	publicPromptListCfg := loadPublicPromptListConfig(logger)
@@ -205,17 +224,18 @@ func BuildApplication(ctx context.Context, logger *zap.SugaredLogger, resources 
 		authenticator = middleware.NewAuthMiddleware(cfg.JWTSecret)
 	}
 	router := server.NewRouter(server.RouterOptions{
-		AuthHandler:         authHandler,
-		UserHandler:         userHandler,
-		UploadHandler:       uploadHandler,
-		ModelHandler:        modelHandler,
-		ChangelogHandler:    changelogHandler,
-		PromptHandler:       promptHandler,
-		PublicPromptHandler: publicPromptHandler,
-		AuthMW:              authenticator,
-		IPGuard:             ipGuard,
-		IPGuardHandler:      ipGuardHandler,
-		StaticFS:            staticFS,
+		AuthHandler:          authHandler,
+		UserHandler:          userHandler,
+		UploadHandler:        uploadHandler,
+		ModelHandler:         modelHandler,
+		ChangelogHandler:     changelogHandler,
+		PromptHandler:        promptHandler,
+		PromptCommentHandler: commentHandler,
+		PublicPromptHandler:  publicPromptHandler,
+		AuthMW:               authenticator,
+		IPGuard:              ipGuard,
+		IPGuardHandler:       ipGuardHandler,
+		StaticFS:             staticFS,
 	})
 
 	return &Application{
@@ -365,6 +385,33 @@ func loadPublicPromptListConfig(logger *zap.SugaredLogger) publicpromptsvc.Confi
 	return publicpromptsvc.Config{
 		DefaultPageSize: parseIntEnv("PUBLIC_PROMPT_LIST_PAGE_SIZE", publicpromptsvc.DefaultListPageSize, logger),
 		MaxPageSize:     parseIntEnv("PUBLIC_PROMPT_LIST_MAX_PAGE_SIZE", publicpromptsvc.DefaultListMaxPageSize, logger),
+	}
+}
+
+// loadPromptCommentConfig 读取评论模块的分页与审核配置。
+func loadPromptCommentConfig(logger *zap.SugaredLogger) promptcommentsvc.Config {
+	defaultPage := parseIntEnv("PROMPT_COMMENT_PAGE_SIZE", 10, logger)
+	maxPage := parseIntEnv("PROMPT_COMMENT_MAX_PAGE_SIZE", 60, logger)
+	maxLength := parseIntEnv("PROMPT_COMMENT_MAX_LENGTH", 1000, logger)
+	if maxLength <= 0 {
+		maxLength = 1000
+	}
+	requireApproval := parseBoolEnv("PROMPT_COMMENT_REQUIRE_APPROVAL", false)
+	return promptcommentsvc.Config{
+		DefaultPageSize: defaultPage,
+		MaxPageSize:     maxPage,
+		RequireApproval: requireApproval,
+		MaxBodyLength:   maxLength,
+	}
+}
+
+// loadPromptCommentRateLimit 读取评论创建的限流参数。
+func loadPromptCommentRateLimit(logger *zap.SugaredLogger) handler.PromptCommentRateLimit {
+	limit := parseIntEnv("PROMPT_COMMENT_RATE_LIMIT", 12, logger)
+	window := parseDurationEnv("PROMPT_COMMENT_RATE_WINDOW", 30*time.Second, logger)
+	return handler.PromptCommentRateLimit{
+		CreateLimit:  limit,
+		CreateWindow: window,
 	}
 }
 

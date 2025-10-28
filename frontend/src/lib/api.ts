@@ -259,6 +259,54 @@ export interface PublicPromptDetail extends PublicPromptListItem {
   instructions: string;
   positive_keywords: PublicPromptKeywordItem[];
   negative_keywords: PublicPromptKeywordItem[];
+  source_prompt_id?: number | null;
+}
+
+export interface PromptCommentAuthor {
+  id: number;
+  username: string;
+  email: string;
+  avatar_url?: string;
+}
+
+export interface PromptComment {
+  id: number;
+  prompt_id: number;
+  user_id: number;
+  parent_id?: number | null;
+  root_id?: number | null;
+  body: string;
+  status: "pending" | "approved" | "rejected" | string;
+  reply_count: number;
+  author?: PromptCommentAuthor | null;
+  review_note?: string | null;
+  reviewer_user_id?: number | null;
+  created_at: string;
+  updated_at: string;
+  replies?: PromptComment[];
+}
+
+export interface PromptCommentListMeta {
+  page: number;
+  page_size: number;
+  total_items: number;
+  total_pages: number;
+  current_count: number;
+}
+
+export interface PromptCommentListResponse {
+  items: PromptComment[];
+  meta: PromptCommentListMeta;
+}
+
+export interface PromptCommentCreatePayload {
+  body: string;
+  parentId?: number | null;
+}
+
+export interface PromptCommentReviewPayload {
+  status: "approved" | "rejected" | "pending";
+  note?: string;
 }
 
 export interface PublicPromptDownloadResult {
@@ -1108,6 +1156,10 @@ export async function fetchPublicPromptDetail(
       model: String(data.model ?? ""),
       language: String(data.language ?? "zh-CN"),
       status: String(data.status ?? "pending"),
+      source_prompt_id:
+        typeof data.source_prompt_id === "number" && Number.isFinite(data.source_prompt_id)
+          ? data.source_prompt_id
+          : null,
       tags,
       download_count: Number(data.download_count ?? 0),
       created_at: String(data.created_at ?? ""),
@@ -1239,6 +1291,74 @@ export async function deletePublicPrompt(id: number): Promise<void> {
     throw normaliseError(error);
   }
 }
+
+export async function fetchPromptComments(
+  promptId: number,
+  params: { page?: number; pageSize?: number; status?: string } = {},
+): Promise<PromptCommentListResponse> {
+  try {
+    const response: AxiosResponse<{ items: any[] }> & { meta?: PromptCommentListMeta } = await http.get(
+      `/prompts/${promptId}/comments`,
+      {
+        params: {
+          page: params.page,
+          page_size: params.pageSize,
+          status: params.status,
+        },
+      },
+    );
+    const items = (response.data?.items ?? []).map((item) => parsePromptComment(item));
+    const fallbackMeta: PromptCommentListMeta = {
+      page: params.page ?? 1,
+      page_size: params.pageSize ?? items.length,
+      total_items: items.length,
+      total_pages: 1,
+      current_count: items.length,
+    };
+    const meta = response.meta ?? fallbackMeta;
+    return {
+      items,
+      meta: {
+        ...meta,
+        current_count: meta.current_count ?? items.length,
+      },
+    };
+  } catch (error) {
+    throw normaliseError(error);
+  }
+}
+
+export async function createPromptComment(
+  promptId: number,
+  payload: PromptCommentCreatePayload,
+): Promise<PromptComment> {
+  try {
+    const response: AxiosResponse<Record<string, unknown>> = await http.post(`/prompts/${promptId}/comments`, {
+      body: payload.body,
+      parent_id:
+        typeof payload.parentId === "number" && payload.parentId > 0 ? payload.parentId : undefined,
+    });
+    return parsePromptComment(response.data);
+  } catch (error) {
+    throw normaliseError(error);
+  }
+}
+
+export async function reviewPromptComment(
+  commentId: number,
+  payload: PromptCommentReviewPayload,
+): Promise<PromptComment> {
+  try {
+    const response: AxiosResponse<Record<string, unknown>> = await http.post(`/prompts/comments/${commentId}/review`, {
+      status: payload.status,
+      note: payload.note,
+    });
+    return parsePromptComment(response.data);
+  } catch (error) {
+    throw normaliseError(error);
+  }
+}
+
 /** 导出当前用户的 Prompt 并返回生成的本地文件路径。 */
 export async function exportPrompts(): Promise<PromptExportResult> {
   try {
@@ -1650,3 +1770,57 @@ export {
   getTokenPair as getAuthTokens,
   setTokenPair as setAuthTokens,
 } from "./tokenStorage";
+
+function parsePromptComment(raw: Record<string, unknown>): PromptComment {
+  const comment: PromptComment = {
+    id: Number(raw.id ?? 0),
+    prompt_id: Number(raw.prompt_id ?? 0),
+    user_id: Number(raw.user_id ?? 0),
+    parent_id:
+      raw.parent_id === null || raw.parent_id === undefined
+        ? null
+        : Number(raw.parent_id),
+    root_id:
+      raw.root_id === null || raw.root_id === undefined
+        ? null
+        : Number(raw.root_id),
+    body: String(raw.body ?? ""),
+    status: String(raw.status ?? "approved"),
+    reply_count:
+      typeof raw.reply_count === "number" && Number.isFinite(raw.reply_count)
+        ? raw.reply_count
+        : 0,
+    author: parsePromptCommentAuthor(raw.author),
+    review_note:
+      typeof raw.review_note === "string" ? raw.review_note : undefined,
+    reviewer_user_id:
+      raw.reviewer_user_id === null || raw.reviewer_user_id === undefined
+        ? undefined
+        : Number(raw.reviewer_user_id),
+    created_at: String(raw.created_at ?? ""),
+    updated_at: String(raw.updated_at ?? ""),
+  };
+  if (Array.isArray(raw.replies)) {
+    comment.replies = raw.replies.map((item) =>
+      parsePromptComment((item ?? {}) as Record<string, unknown>),
+    );
+  }
+  return comment;
+}
+
+function parsePromptCommentAuthor(value: unknown): PromptCommentAuthor | null {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+  const record = value as Record<string, unknown>;
+  return {
+    id: Number(record.id ?? 0),
+    username: String(record.username ?? ""),
+    email: String(record.email ?? ""),
+    avatar_url:
+      typeof record.avatar_url === "string" && record.avatar_url !== ""
+        ? record.avatar_url
+        : undefined,
+  };
+}
+

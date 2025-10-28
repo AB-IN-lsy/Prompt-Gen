@@ -252,6 +252,7 @@ func (h *PublicPromptHandler) Get(c *gin.Context) {
 		"id":                entity.ID,
 		"title":             entity.Title,
 		"topic":             entity.Topic,
+		"source_prompt_id":  entity.SourcePromptID,
 		"summary":           entity.Summary,
 		"body":              entity.Body,
 		"instructions":      entity.Instructions,

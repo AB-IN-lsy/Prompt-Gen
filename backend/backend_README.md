@@ -29,6 +29,7 @@
 - 新增 `POST /api/prompts/import`，可上传导出的 JSON 文件并选择“合并/覆盖”模式批量回灌 Prompt，导入批大小由 `PROMPT_IMPORT_BATCH_SIZE` 控制。
 - “我的 Prompt” 支持收藏：新增 `PATCH /api/prompts/:id/favorite` 切换收藏状态，`GET /api/prompts` 返回 `is_favorited` 字段并支持 `favorited=true` 筛选列表。
 - “我的 Prompt” 支持点赞：新增 `POST /api/prompts/:id/like` 与 `DELETE /api/prompts/:id/like`，响应透出 `like_count` 与 `is_liked`，方便前端展示点赞态与热度。
+- Prompt 评论模块上线：新增 `prompt_comments` 表与 `/api/prompts/:id/comments`、`/api/prompts/comments/:id/review` 等接口，支持楼中楼回复、分页查询与自动审核；管理员可通过 `DELETE /api/prompts/comments/:id` 直接移除整条讨论线程。
 - 公共 Prompt 库上线：新增 `/api/public-prompts` 列表、详情与下载接口；投稿仅在在线模式开放，离线模式默认只读，避免本地环境误提交。
   - 点赞串联逻辑：公共库的点赞只是代理到源 Prompt —— handler 会调用 service 的 `Like/Unlike`，再由 `PromptRepository.AddLike/RemoveLike` 写入 `prompt_likes` 表，并通过 `IncrementLikeCount` 同步 `prompts.like_count`，随后用 `LikeSnapshot` 返回最新的 `like_count` 与 `is_liked` 方便前端立即刷新。
     1. 前端点击心形按钮后，会向 `/api/public-prompts/:id/like`（点赞）或 `DELETE /api/public-prompts/:id/like`（取消）发起请求。
@@ -177,7 +178,6 @@
 | `PROMPT_AUDIT_BASE_URL` | 审核模型的自定义接口地址，留空使用默认值 |
 
 > 在线模式下只要配置了 `PROMPT_AUDIT_API_KEY`，Prompt 服务会自动切换到内置 DeepSeek 审核器；本地模式始终跳过审核，便于开发调试。
-
 > ❗ **排障提示**：如果日志中出现  
 > `decode interpretation response: json: cannot unmarshal array into Go struct`，说明模型把 `instructions` 字段生成为数组。现有实现已兼容数组与字符串两种格式；若自定义提示词，请确保仍返回 JSON 对象，并将补充要求放在 `instructions` 字段（字符串或字符串数组均可）。
 
@@ -305,6 +305,10 @@ go run ./backend/cmd/sendmail -to you@example.com -name "测试账号"
 | `POST` | `/api/prompts/generate` | 调模型生成 Prompt 正文 | JSON：`topic`、`model_key`、`positive_keywords[]`、`negative_keywords[]`、`workspace_token`（可选） |
 | `POST` | `/api/prompts` | 保存草稿或发布 Prompt | JSON：`prompt_id`、`topic`、`body`、`status`、`publish`、`positive_keywords[]`、`negative_keywords[]`、`workspace_token`（可选） |
 | `DELETE` | `/api/prompts/:id` | 删除指定 Prompt 及其历史版本/关键词关联 | 无 |
+| `GET` | `/api/prompts/:id/comments` | 查询 Prompt 评论（含楼中楼） | Query：`page`、`page_size`、`status`（管理员可选 `all/pending/rejected`），需登录 |
+| `POST` | `/api/prompts/:id/comments` | 新增评论或回复 | JSON：`body`、`parent_id`（可选），需登录；写库前会执行内容审核 |
+| `POST` | `/api/prompts/comments/:id/review` | 审核评论（管理员） | JSON：`status`（`approved/rejected/pending`）、`note`（可选），需管理员权限 |
+| `DELETE` | `/api/prompts/comments/:id` | 删除评论（管理员） | 级联移除评论及其子回复，需管理员权限 |
 | `GET` | `/api/changelog` | 获取更新日志列表 | Query：`locale`（可选，默认 `en`） |
 | `POST` | `/api/changelog` | 新增更新日志（管理员） | JSON：`locale`、`badge`、`title`、`summary`、`items[]`、`published_at` |
 | `PUT` | `/api/changelog/:id` | 编辑指定日志（管理员） | 同 `POST` |
@@ -934,6 +938,93 @@ ALTER TABLE prompts
 - **成功响应**：`200`，返回 `{ "liked": false, "like_count": <number> }`。
 - **常见错误**：Prompt 不存在或无访问权限 → `404`。
 
+#### GET /api/prompts/:id/comments
+
+- **用途**：分页获取指定 Prompt 的评论线程（顶层评论 + 楼中楼回复）。
+- **查询参数**：
+  - `page` / `page_size`：分页参数，默认分别为 `1` 与 `PROMPT_COMMENT_PAGE_SIZE`。
+  - `status`：普通用户默认仅返回已通过评论；管理员可传 `approved` / `pending` / `rejected` 或 `all` 查看所有记录。
+- **成功响应**：`200`
+
+  ```json
+  {
+    "success": true,
+    "data": {
+      "items": [
+        {
+          "id": 12,
+          "prompt_id": 8,
+          "user_id": 3,
+          "body": "这条 Prompt 很好用！",
+          "status": "approved",
+          "reply_count": 1,
+          "author": { "id": 3, "username": "alice", "avatar_url": "https://..." },
+          "created_at": "2025-10-25T08:30:00Z",
+          "updated_at": "2025-10-25T08:30:00Z",
+          "replies": [
+            {
+              "id": 13,
+              "parent_id": 12,
+              "body": "感谢反馈～",
+              "status": "approved",
+              "author": { "id": 1, "username": "admin" },
+              "created_at": "2025-10-25T09:05:00Z",
+              "updated_at": "2025-10-25T09:05:00Z"
+            }
+          ]
+        }
+      ]
+    },
+    "meta": {
+      "page": 1,
+      "page_size": 10,
+      "total_items": 4,
+      "total_pages": 1,
+      "current_count": 1
+    }
+  }
+  ```
+
+- **说明**：`reply_count` 代表该楼层下已通过的回复数；管理员额外能读取 `review_note` 与 `reviewer_user_id` 字段。
+
+#### POST /api/prompts/:id/comments
+
+- **用途**：发表新的评论或在指定楼层下回复。
+- **请求体**
+
+  ```json
+  {
+    "body": "写得很详细，点个赞！",
+    "parent_id": 12
+  }
+  ```
+
+- **成功响应**：`201`，返回新建评论对象。
+- **内容审核**：若环境变量开启 `PROMPT_AUDIT_ENABLED=1` 且配置了可用的审核模型，后端会在写库前调用模型审查。违规时返回 `400`，错误码为 `CONTENT_REJECTED`，并在 `error.details.reason` 中附带模型判定的中文描述。
+- **常见错误**：评论内容为空或超长 → `400`；父级评论不存在或尚未通过审核 → `400`；目标 Prompt 不存在 → `404`。
+
+#### POST /api/prompts/comments/:id/review
+
+- **用途**：管理员审阅评论，支持改回 `pending`、通过或驳回并附加备注。
+- **请求体**
+
+  ```json
+  {
+    "status": "approved",
+    "note": "人工审核通过"
+  }
+  ```
+
+- **成功响应**：`200`，返回更新后的评论对象（附带审核人信息与备注）。
+- **常见错误**：评论不存在 → `404`；非法状态值 → `400`。
+
+#### DELETE /api/prompts/comments/:id
+
+- **用途**：管理员删除指定评论及其所有子回复（级联删除）。
+- **成功响应**：`200`，返回 `{ "id": <被删除的评论 ID> }`。
+- **常见错误**：评论不存在或已被删除 → `404`。
+- **提示**：删除操作不可恢复，如需临时隐藏评论可优先使用审核接口将其标记为 `rejected`。
+
 #### GET /api/public-prompts
 
 - **用途**：获取公共 Prompt 列表，用于优质 Prompt 浏览。离线模式下接口保持可用但仅支持只读，投稿入口会被前端隐藏。
@@ -1388,3 +1479,88 @@ backend/
 - 再给它套一个 35 秒的 timeout，避免长时间阻塞。
 - 如果外层有更严格的 Deadline，就尊重原有限制。
 - 这样既保留 Request 链上的 Value / Trace，又不会被 Gin 提前 cancel。
+
+### Prompt 评论实现概览
+
+#### 1. 评论表结构掌握两条“线”
+
+| 字段 | 作用 | 举例 |
+| --- | --- | --- |
+| `parent_id` | 这条评论直接回复了谁，没有回复就为 `NULL` | 回复了 3 号评论，则 `parent_id = 3` |
+| `root_id` | 顶层楼层编号，方便一次性把整串楼中楼取出来 | 楼中楼的所有回复都指向同一个首层 ID |
+| `status` | `pending/approved/rejected` 三种状态 | 结合配置决定是否需要人工审核 |
+| `review_note` / `reviewer_user_id` | 记录审核人和备注 | 管理后台展示用 |
+
+简单记：**parent 表示“楼上是谁”，root 表示“整栋楼是哪栋”**。
+
+#### 2. 从发评论到落库的完整流程
+
+1. 前端请求 POST /api/prompts/:id/comments，携带正文和可选的 parent_id。
+2. 后端先做几项检查：内容是否为空、是否超过最大长度、目标 Prompt 是否存在、父评论是否属于同一个 Prompt。
+3. 如果环境变量里开启了审核（PROMPT_AUDIT_ENABLED=1 且有模型的 API Key），正文会先送到审核模型（例如 DeepSeek）跑一遍，命中违规会直接返回
+   CONTENT_REJECTED 错误，前端可以把 error.details.reason 展示给用户。
+4. 审核通过后写入数据库：
+    - 顶层评论插进去时，先写一条记录，随后把它自己的 id 回填到 root_id，表示“这条楼的楼主”。
+    - 回复评论则在插入时直接写好 parent_id 和 root_id，其中 root_id 等于它所回复的第一条顶层评论的 id。
+5. 写库成功后，服务会补上作者的基本信息返回给前端，方便立刻渲染头像、昵称。
+
+- root_id 有什么用？
+  - 它让我们能快速把“同一栋楼”的所有回复取出来。列表接口的做法是：
+    1. 先取一页顶层评论。
+    2. 使用这些顶层评论的 id 作为 root_id 去查询所有子回复。
+    3. 通过 root_id 分组，把回复挂到各自的楼主下面，前端拿到的就是一颗颗完整的楼中楼树状结构。
+  - 如果没有 root_id，我们只能一条一条地查出每一层的回复，接口次数会暴增，性能也很差。
+
+#### 3. 评论自动审核怎么触发？
+
+- 在 `bootstrap` 里，我们把 Prompt 模块现成的 `AuditCommentContent` 注入进评论服务。
+- 只要 `.env` 配置了：
+  - `PROMPT_AUDIT_ENABLED=1`
+  - `PROMPT_AUDIT_API_KEY`（比如 DeepSeek 的 Key）
+  - 可选的 `PROMPT_AUDIT_MODEL_KEY`
+- Service 在创建评论时就会把正文丢给模型：
+  - 如果模型返回“违规”，接口直接报错，错误码是 `CONTENT_REJECTED`，并在 `error.details.reason` 写清原因；
+  - 如果模型返回“通过”，再根据 `PROMPT_COMMENT_REQUIRE_APPROVAL` 决定是直接显示（`approved`）还是进入待审核（`pending`）。
+- 离线模式或没配审核 Key 时，审核函数为空，评论会直接落库。
+
+#### 4. 评论列表为什么能带楼中楼？
+
+- `GET /api/prompts/:id/comments` 的 Service 会按照以下步骤执行：
+  1. 先查询这一页的顶层评论（`parent_id IS NULL`）。
+  2. 把这些顶层 ID 一次性取出来，到数据库里把它们的所有子回复拉回来。
+  3. 用 `root_id` 把每个回复归到对应的楼主下面，同时统计每栋楼的回复数量填到 `reply_count`。
+  4. 批量附带作者信息，最后组装成 `items = [{ root, replies[] }]` 的结构返回给前端。
+- 这种“先批量拉主楼，再批量拉子楼”的方式避免了 N+1 查询，性能比较稳。
+
+#### 5. 管理员能做什么？
+
+- **审核**：
+  - 接口：`POST /api/prompts/comments/:id/review`
+  - 可把状态改成 `approved` / `rejected` / `pending`，并写审核备注。
+- **删除**：
+  - 接口：`DELETE /api/prompts/comments/:id`
+  - 调用仓储的 `DeleteCascade`，一次性删除该 ID 以及所有子回复（避免遗留悬挂数据）。
+  - 删除后返回被操作的 ID，让前端可以及时刷新列表。
+
+#### 6. 相关配置快速对照
+
+| 变量 | 默认值 | 含义 |
+| --- | --- | --- |
+| `PROMPT_COMMENT_PAGE_SIZE` | 10 | 评论列表默认每页条数 |
+| `PROMPT_COMMENT_MAX_PAGE_SIZE` | 60 | 评论单页最大条数（防止一次性抓太多） |
+| `PROMPT_COMMENT_MAX_LENGTH` | 1000 | 评论最大字符数 |
+| `PROMPT_COMMENT_REQUIRE_APPROVAL` | 0 | 是否需要管理员审核后才展示 |
+| `PROMPT_COMMENT_RATE_LIMIT` | 12 | 单个用户窗口期内允许的评论次数 |
+| `PROMPT_COMMENT_RATE_WINDOW` | `1m` | 上述限流的时间窗口 |
+
+#### 7. 测试覆盖
+
+- `backend/tests/unit/prompt_comment_service_test.go`：
+  - 顶层/回复创建；
+  - 审核函数被调用 & 拒绝时直接报错；
+  - 级联删除后表内数据归零。
+- `backend/tests/unit/prompt_comment_handler_test.go`：
+  - 非管理员无法删除评论；
+  - 管理员删除后接口返回 200，并确认数据库里的评论被清干净。
+
+掌握这几个点之后，基本可以从“发评论 → 自动审核 → 列表展示 → 审核/删除治理”的全链路自主排查问题。

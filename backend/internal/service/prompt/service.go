@@ -135,6 +135,7 @@ type auditStage string
 const (
 	auditStageInterpretInput auditStage = "interpret_input"
 	auditStageGenerateOutput auditStage = "generate_output"
+	auditStageCommentBody    auditStage = "comment_body"
 )
 
 var (
@@ -1163,6 +1164,11 @@ func (s *Service) auditContent(ctx context.Context, userID uint, modelKey string
 		return fmt.Errorf("%w: %s", ErrContentRejected, reason)
 	}
 	return nil
+}
+
+// AuditCommentContent 对评论文本执行内容审核。
+func (s *Service) AuditCommentContent(ctx context.Context, userID uint, content string) error {
+	return s.auditContent(ctx, userID, "", content, auditStageCommentBody)
 }
 
 // SaveInput 描述保存草稿或发布 Prompt 的参数。
@@ -2639,8 +2645,11 @@ func (s *Service) clampTagValue(tag string) string {
 // buildAuditRequest 根据业务阶段构造内容审核提示词，要求模型返回允许与否。
 func buildAuditRequest(stage auditStage, content string) modeldomain.ChatCompletionRequest {
 	stageHint := "解析前的用户输入"
-	if stage == auditStageGenerateOutput {
+	switch stage {
+	case auditStageGenerateOutput:
 		stageHint = "模型生成的 Prompt 文本"
+	case auditStageCommentBody:
+		stageHint = "用户评论内容"
 	}
 	system := "你是一名内容审核助手，需要识别文本中是否包含黄赌毒、暴力、仇恨、违法或其他违反政策的内容。输出必须严格遵循 JSON 结构。"
 	builder := &strings.Builder{}

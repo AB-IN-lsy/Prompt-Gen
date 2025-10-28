@@ -31,6 +31,9 @@ import {
   downloadPublicPrompt,
   fetchPublicPromptDetail,
   fetchPublicPrompts,
+  fetchPromptComments,
+  createPromptComment,
+  reviewPromptComment,
   likePublicPrompt,
   unlikePublicPrompt,
   type PublicPromptDownloadResult,
@@ -38,12 +41,15 @@ import {
   type PublicPromptLikeResult,
   type PublicPromptListResponse,
   type PublicPromptListItem,
+  type PromptComment,
+  type PromptCommentListResponse,
 } from "../lib/api";
 import { cn } from "../lib/utils";
 import { useAuth } from "../hooks/useAuth";
 import { isLocalMode } from "../lib/runtimeMode";
 import { Button } from "../components/ui/button";
-import { PUBLIC_PROMPT_LIST_PAGE_SIZE } from "../config/prompt";
+import { Textarea } from "../components/ui/textarea";
+import { PROMPT_COMMENT_PAGE_SIZE, PUBLIC_PROMPT_LIST_PAGE_SIZE } from "../config/prompt";
 
 type StatusFilter = "all" | "approved" | "pending" | "rejected";
 
@@ -81,6 +87,11 @@ export default function PublicPromptsPage(): JSX.Element {
   const offlineMode = isLocalMode();
 
   const [page, setPage] = useState(1);
+  const [commentPage, setCommentPage] = useState(1);
+  const [commentBody, setCommentBody] = useState("");
+  const [replyDrafts, setReplyDrafts] = useState<Record<number, string>>({});
+  const [replyTarget, setReplyTarget] = useState<number | null>(null);
+  const [commentStatusFilter, setCommentStatusFilter] = useState<"approved" | "pending" | "rejected" | "all">("approved");
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [searchInput, setSearchInput] = useState(queryFromUrl);
   const [debouncedSearch, setDebouncedSearch] = useState(queryFromUrl);
@@ -88,6 +99,8 @@ export default function PublicPromptsPage(): JSX.Element {
     isAdmin ? "all" : "approved",
   );
   const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null);
+  const [rejectDialog, setRejectDialog] = useState<{ commentId: number } | null>(null);
+  const [rejectNote, setRejectNote] = useState("");
 
   useEffect(() => {
     if (selectedId == null) {
@@ -211,9 +224,166 @@ export default function PublicPromptsPage(): JSX.Element {
     return ["approved", "pending", "rejected"] as StatusFilter[];
   }, [isAdmin]);
 
+  const commentStatusOptions = useMemo(() => {
+    if (isAdmin) {
+      return ["all", "approved", "pending", "rejected"] as ("approved" | "pending" | "rejected" | "all")[];
+    }
+    return ["approved"] as ("approved" | "pending" | "rejected" | "all")[];
+  }, [isAdmin]);
+
   const selectedDetail: PublicPromptDetail | undefined = detailQuery.data;
   const isDownloadingSelected =
     downloadMutation.isPending && downloadMutation.variables === selectedDetail?.id;
+  const sourcePromptId = selectedDetail?.source_prompt_id ?? null;
+
+  useEffect(() => {
+    setCommentPage(1);
+    setCommentBody("");
+    setReplyDrafts({});
+    setReplyTarget(null);
+    setCommentStatusFilter(isAdmin ? "all" : "approved");
+  }, [sourcePromptId, isAdmin]);
+
+  const commentQuery = useQuery<PromptCommentListResponse>({
+    queryKey: ["prompt-comments", sourcePromptId, commentPage, commentStatusFilter],
+    enabled: sourcePromptId != null,
+    placeholderData: (previous) => previous,
+    queryFn: () =>
+      fetchPromptComments(sourcePromptId ?? 0, {
+        page: commentPage,
+        pageSize: PROMPT_COMMENT_PAGE_SIZE,
+        status: commentStatusFilter === "all" ? undefined : commentStatusFilter,
+      }),
+  });
+
+  const commentItems: PromptComment[] = commentQuery.data?.items ?? [];
+  const commentMeta = commentQuery.data?.meta;
+  const isLoadingComments = commentQuery.isLoading || commentQuery.isFetching;
+
+  const commentError = commentQuery.error;
+
+  const commentErrorMessage = commentError
+    ? commentError instanceof Error
+      ? commentError.message
+      : t("comments.loadError")
+    : null;
+
+  const isCommentBodyEmpty = commentBody.trim().length === 0;
+
+  const commentMutation = useMutation<PromptComment, unknown, { body: string; parentId?: number | null }>({
+    mutationFn: async ({ body, parentId }) => {
+      if (offlineMode) {
+        throw new Error(t("comments.offlineDisabled"));
+      }
+      if (sourcePromptId == null) {
+        throw new Error(t("comments.loadError"));
+      }
+      return createPromptComment(sourcePromptId, {
+        body,
+        parentId: typeof parentId === "number" && parentId > 0 ? parentId : null,
+      });
+    },
+    onSuccess: (result, variables) => {
+      if (result.status === "approved") {
+        toast.success(t("comments.createSuccess"));
+      } else if (result.status === "pending") {
+        toast.success(t("comments.createPending"));
+      } else {
+        toast.success(t("comments.createSuccess"));
+      }
+      setCommentBody("");
+      if (!variables.parentId) {
+        // noop
+      } else {
+        setReplyDrafts((prev) => ({ ...prev, [variables.parentId!]: "" }));
+        setReplyTarget(null);
+      }
+      void queryClient.invalidateQueries({ queryKey: ["prompt-comments", sourcePromptId] });
+    },
+    onError: (error: unknown) => {
+      const message = error instanceof Error ? error.message : t("errors.generic");
+      toast.error(message);
+    },
+  });
+
+  const commentReviewMutation = useMutation<PromptComment, unknown, { commentId: number; status: "approved" | "rejected"; note?: string }>({
+    mutationFn: ({ commentId, status, note }) => reviewPromptComment(commentId, { status, note }),
+    onSuccess: () => {
+      toast.success(t("comments.reviewSuccess"));
+      setRejectDialog(null);
+      setRejectNote("");
+      void queryClient.invalidateQueries({ queryKey: ["prompt-comments", sourcePromptId] });
+    },
+    onError: (error: unknown) => {
+      const message = error instanceof Error ? error.message : t("errors.generic");
+      toast.error(message);
+    },
+  });
+
+  const handleSubmitComment = () => {
+    const trimmed = commentBody.trim();
+    if (offlineMode) {
+      toast.error(t("comments.offlineDisabled"));
+      return;
+    }
+    if (!sourcePromptId) {
+      toast.error(t("comments.loadError"));
+      return;
+    }
+    if (trimmed === "") {
+      toast.error(t("comments.emptyBody"));
+      return;
+    }
+    commentMutation.mutate({ body: trimmed });
+  };
+
+  const handleReplyDraftChange = (commentId: number, value: string) => {
+    setReplyDrafts((prev) => ({ ...prev, [commentId]: value }));
+  };
+
+  const handleSubmitReply = (commentId: number) => {
+    const draft = (replyDrafts[commentId] ?? "").trim();
+    if (offlineMode) {
+      toast.error(t("comments.offlineDisabled"));
+      return;
+    }
+    if (!sourcePromptId) {
+      toast.error(t("comments.loadError"));
+      return;
+    }
+    if (draft === "") {
+      toast.error(t("comments.emptyBody"));
+      return;
+    }
+    commentMutation.mutate({ body: draft, parentId: commentId });
+  };
+
+  const handleStartReply = (commentId: number) => {
+    setReplyTarget(commentId);
+    setReplyDrafts((prev) => ({ ...prev, [commentId]: prev[commentId] ?? "" }));
+  };
+
+  const handleCancelReply = () => {
+    setReplyTarget(null);
+  };
+
+  const handleReviewComment = (commentId: number, nextStatus: "approved" | "rejected", existingNote = "") => {
+    if (commentReviewMutation.isPending) {
+      return;
+    }
+    if (nextStatus === "rejected") {
+      setRejectDialog({ commentId });
+      setRejectNote(existingNote ?? "");
+      return;
+    }
+    commentReviewMutation.mutate({ commentId, status: nextStatus });
+  };
+
+  const handleCommentStatusChange = (value: "approved" | "pending" | "rejected" | "all") => {
+    setCommentStatusFilter(value);
+    setCommentPage(1);
+  };
+
   const deleteMutation = useMutation<void, unknown, number>({
     mutationFn: (id: number) => deletePublicPrompt(id),
     onSuccess: (_, id) => {
@@ -244,7 +414,7 @@ export default function PublicPromptsPage(): JSX.Element {
     mutationFn: ({ id, next }) => (next ? likePublicPrompt(id) : unlikePublicPrompt(id)),
     onSuccess: (result, variables) => {
       queryClient.setQueriesData<PublicPromptListResponse>({ queryKey: ["public-prompts"] }, (previous) => {
-        if (!previous) {
+        if (!previous || !Array.isArray(previous.items)) {
           return previous;
         }
         return {
@@ -335,6 +505,26 @@ export default function PublicPromptsPage(): JSX.Element {
     } catch {
       toast.error(t("publicPrompts.copyBodyFailure"));
     }
+  };
+
+  const commentStatusBadge = (status: string) => {
+    const normalized = status.toLowerCase();
+    if (normalized === "pending") {
+      return {
+        label: t("comments.pendingBadge"),
+        className: "bg-amber-100 text-amber-600 border-amber-200 dark:bg-amber-400/10 dark:text-amber-300 dark:border-amber-500/30",
+      };
+    }
+    if (normalized === "rejected") {
+      return {
+        label: t("comments.rejectedBadge"),
+        className: "bg-rose-100 text-rose-600 border-rose-200 dark:bg-rose-400/10 dark:text-rose-300 dark:border-rose-500/30",
+      };
+    }
+    return {
+      label: t("comments.status.approved"),
+      className: "bg-emerald-100 text-emerald-600 border-emerald-200 dark:bg-emerald-400/10 dark:text-emerald-300 dark:border-emerald-500/30",
+    };
   };
 
   const statusBadge = (status: string) => {
@@ -797,7 +987,283 @@ export default function PublicPromptsPage(): JSX.Element {
                 <pre className="mt-3 max-h-[40vh] overflow-y-auto whitespace-pre-wrap break-words rounded-2xl bg-slate-900/5 p-4 text-sm leading-relaxed text-slate-600 dark:bg-slate-900/80 dark:text-slate-200">
                   {selectedDetail.body}
                 </pre>
-              </GlassCard>
+              </GlassCard>        <GlassCard className="bg-white/85 dark:bg-slate-900/70 md:col-span-2">
+          <div className="flex flex-col gap-4">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <span className="text-xs font-semibold uppercase tracking-[0.3em] text-slate-400">
+                  {t("comments.title")}
+                </span>
+                <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                  {t("comments.subtitle")}
+                </p>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge className="border-transparent bg-primary/10 text-primary dark:bg-primary/20">
+                  {t("comments.total", { count: commentMeta?.total_items ?? commentItems.length })}
+                </Badge>
+                {isAdmin ? (
+                  <div className="flex items-center gap-2">
+                    {commentStatusOptions.map((option) => (
+                      <button
+                        key={`comment-status-${option}`}
+                        type="button"
+                        onClick={() => handleCommentStatusChange(option)}
+                        className={cn(
+                          "rounded-full border px-3 py-1 text-xs font-medium transition-colors",
+                          commentStatusFilter === option
+                            ? "border-primary/40 bg-primary/10 text-primary dark:border-primary/30 dark:bg-primary/20"
+                            : "border-slate-200 text-slate-500 hover:border-primary/30 hover:text-primary dark:border-slate-700 dark:text-slate-400 dark:hover:border-primary/30",
+                        )}
+                      >
+                        {option === "all"
+                          ? t("comments.status.all")
+                          : t(`comments.status.${option}`)}
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-3">
+              <Textarea
+                rows={3}
+                value={commentBody}
+                onChange={(event) => setCommentBody(event.target.value)}
+                placeholder={t("comments.placeholder")}
+                disabled={commentMutation.isPending || sourcePromptId == null}
+              />
+              <div className="flex justify-end">
+                <Button
+                  type="button"
+                  className="inline-flex items-center gap-2"
+                  onClick={handleSubmitComment}
+                  disabled={commentMutation.isPending || sourcePromptId == null || isCommentBodyEmpty || offlineMode}
+                >
+                  {commentMutation.isPending ? <LoaderCircle className="h-4 w-4 animate-spin" /> : null}
+                  {t("comments.submit")}
+                </Button>
+              </div>
+            </div>
+
+            {commentErrorMessage ? (
+              <p className="text-sm text-rose-500 dark:text-rose-300">{commentErrorMessage}</p>
+            ) : null}
+
+            {offlineMode ? (
+              <p className="text-xs text-slate-400 dark:text-slate-500">
+                {t("comments.offlineDisabled")}
+              </p>
+            ) : null}
+
+            {isLoadingComments ? (
+              <div className="flex flex-col gap-3">
+                {Array.from({ length: 3 }).map((_, index) => (
+                  <div
+                    key={`comment-skeleton-${index}`}
+                    className="animate-pulse rounded-2xl border border-slate-200/60 bg-white/60 p-4 dark:border-slate-800/60 dark:bg-slate-900/40"
+                  >
+                    <div className="h-4 w-32 rounded bg-slate-200 dark:bg-slate-700" />
+                    <div className="mt-3 h-3 w-full rounded bg-slate-200 dark:bg-slate-700" />
+                    <div className="mt-2 h-3 w-3/4 rounded bg-slate-200 dark:bg-slate-700" />
+                  </div>
+                ))}
+              </div>
+            ) : commentItems.length === 0 ? (
+              <p className="text-sm text-slate-400 dark:text-slate-500">
+                {t("comments.empty")}
+              </p>
+            ) : (
+              <div className="flex flex-col gap-4">
+                {commentItems.map((item) => {
+                  const statusMeta = commentStatusBadge(item.status);
+                  const replyDraftValue = replyDrafts[item.id] ?? "";
+                  const isReplyDraftEmpty = replyDraftValue.trim().length === 0;
+                  return (
+                    <div
+                      key={`comment-${item.id}`}
+                      className="flex flex-col gap-4 rounded-2xl border border-slate-200/60 bg-white/60 p-4 dark:border-slate-800/60 dark:bg-slate-900/40"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex flex-col gap-1">
+                          <span className="text-sm font-semibold text-slate-700 dark:text-slate-200">
+                            {item.author?.username ?? t("comments.anonymous")}
+                          </span>
+                          <span className="text-xs text-slate-400 dark:text-slate-500">
+                            {formatDateTime(item.created_at, i18n.language).date} · {formatDateTime(item.created_at, i18n.language).time}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {item.status !== "approved" ? (
+                            <Badge className={statusMeta.className}>{statusMeta.label}</Badge>
+                          ) : null}
+                          {isAdmin ? (
+                            <div className="flex items-center gap-2">
+                              <Button
+                                type="button"
+                                variant="outline"
+                                className="h-8 px-3 text-xs"
+                                disabled={commentReviewMutation.isPending || item.status === "approved"}
+                                onClick={() => handleReviewComment(item.id, "approved")}
+                              >
+                                {t("comments.actions.approve")}
+                              </Button>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                className="h-8 px-3 text-xs text-rose-500 border-rose-300 hover:bg-rose-50 dark:border-rose-500/40 dark:text-rose-200 dark:hover:bg-rose-500/10"
+                                disabled={commentReviewMutation.isPending || item.status === "rejected"}
+                                onClick={() => handleReviewComment(item.id, "rejected", item.review_note ?? "")}
+                              >
+                                {t("comments.actions.reject")}
+                              </Button>
+                            </div>
+                          ) : null}
+                        </div>
+                      </div>
+                      <p className="whitespace-pre-wrap text-sm leading-relaxed text-slate-600 dark:text-slate-300">{item.body}</p>
+                      {item.review_note && isAdmin ? (
+                        <p className="text-xs text-slate-500 dark:text-slate-400">{item.review_note}</p>
+                      ) : null}
+                      <div className="flex flex-wrap items-center gap-3 text-xs text-slate-400 dark:text-slate-500">
+                        <button
+                          type="button"
+                          className="inline-flex items-center gap-1 rounded-full border border-slate-200 px-3 py-1 transition hover:border-primary/30 hover:text-primary dark:border-slate-700 dark:text-slate-400 dark:hover:border-primary/30"
+                          onClick={() => handleStartReply(item.id)}
+                          disabled={commentMutation.isPending || sourcePromptId == null || item.status !== "approved" || offlineMode}
+                        >
+                          {t("comments.reply")}
+                        </button>
+                        <span>{t("comments.replyCount", { count: item.reply_count })}</span>
+                      </div>
+                      {replyTarget === item.id ? (
+                        <div className="flex flex-col gap-2 rounded-xl border border-slate-200/60 bg-white/70 p-3 dark:border-slate-800/60 dark:bg-slate-900/30">
+                          <Textarea
+                            rows={3}
+                            value={replyDraftValue}
+                            onChange={(event) => handleReplyDraftChange(item.id, event.target.value)}
+                            placeholder={t("comments.replyPlaceholder")}
+                            disabled={commentMutation.isPending || offlineMode}
+                          />
+                          <div className="flex items-center justify-end gap-2">
+                            <Button
+                              type="button"
+                              variant="outline"
+                              className="h-8 px-3 text-xs"
+                              onClick={handleCancelReply}
+                              disabled={commentMutation.isPending}
+                            >
+                              {t("comments.cancelReply")}
+                            </Button>
+                            <Button
+                              type="button"
+                              className="h-8 px-3 text-xs"
+                              onClick={() => handleSubmitReply(item.id)}
+                              disabled={commentMutation.isPending}
+                            >
+                              {commentMutation.isPending ? (
+                                <LoaderCircle className="mr-1 h-3.5 w-3.5 animate-spin" />
+                              ) : null}
+                              {t("comments.reply")}
+                            </Button>
+                          </div>
+                        </div>
+                      ) : null}
+                      {item.replies && item.replies.length > 0 ? (
+                        <div className="flex flex-col gap-3 border-l border-slate-200/60 pl-4 dark:border-slate-800/60">
+                          {item.replies.map((reply) => {
+                            const replyMeta = commentStatusBadge(reply.status);
+                            return (
+                              <div
+                                key={`reply-${item.id}-${reply.id}`}
+                                className="flex flex-col gap-2 rounded-2xl border border-slate-200/60 bg-white/60 p-3 dark:border-slate-800/60 dark:bg-slate-900/40"
+                              >
+                                <div className="flex items-start justify-between gap-3">
+                                  <div className="flex flex-col gap-1">
+                                    <span className="text-sm font-medium text-slate-700 dark:text-slate-200">
+                                      {reply.author?.username ?? t("comments.anonymous")}
+                                    </span>
+                                    <span className="text-xs text-slate-400 dark:text-slate-500">
+                                      {formatDateTime(reply.created_at, i18n.language).date} · {formatDateTime(reply.created_at, i18n.language).time}
+                                    </span>
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    {reply.status !== "approved" ? (
+                                      <Badge className={replyMeta.className}>{replyMeta.label}</Badge>
+                                    ) : null}
+                                    {isAdmin ? (
+                                      <div className="flex items-center gap-1">
+                                        <Button
+                                          type="button"
+                                          variant="ghost"
+                                          className="h-8 px-2 text-xs"
+                                          disabled={commentReviewMutation.isPending || reply.status === "approved"}
+                                          onClick={() => handleReviewComment(reply.id, "approved")}
+                                        >
+                                          {t("comments.actions.approve")}
+                                        </Button>
+                                        <Button
+                                          type="button"
+                                          variant="ghost"
+                                          className="h-8 px-2 text-xs text-rose-500 hover:text-rose-600 dark:text-rose-200 dark:hover:text-rose-100"
+                                          disabled={commentReviewMutation.isPending || reply.status === "rejected"}
+                                          onClick={() => handleReviewComment(reply.id, "rejected", reply.review_note ?? "")}
+                                        >
+                                          {t("comments.actions.reject")}
+                                        </Button>
+                                      </div>
+                                    ) : null}
+                                  </div>
+                                </div>
+                                <p className="whitespace-pre-wrap text-sm leading-relaxed text-slate-600 dark:text-slate-300">
+                                  {reply.body}
+                                </p>
+                                {reply.review_note && isAdmin ? (
+                                  <p className="text-xs text-slate-500 dark:text-slate-400">{reply.review_note}</p>
+                                ) : null}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      ) : null}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {commentMeta ? (
+              <div className="flex flex-col gap-2 pt-2 text-xs text-slate-400 dark:text-slate-500 md:flex-row md:items-center md:justify-between">
+                <span>{t("comments.pagination", { page: commentMeta.page, totalPages: commentMeta.total_pages, totalItems: commentMeta.total_items })}</span>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    className="rounded-full border border-slate-200 px-3 py-1 text-xs text-slate-500 transition hover:border-primary/30 hover:text-primary disabled:cursor-not-allowed disabled:opacity-40 dark:border-slate-700 dark:text-slate-400 dark:hover:border-primary/30"
+                    onClick={() => setCommentPage((prev) => Math.max(prev - 1, 1))}
+                    disabled={commentPage <= 1}
+                  >
+                    {t("publicPrompts.prevPage")}
+                  </button>
+                  <button
+                    type="button"
+                    className="rounded-full border border-slate-200 px-3 py-1 text-xs text-slate-500 transition hover:border-primary/30 hover:text-primary disabled:cursor-not-allowed disabled:opacity-40 dark:border-slate-700 dark:text-slate-400 dark:hover:border-primary/30"
+                    onClick={() =>
+                      setCommentPage((prev) =>
+                        commentMeta ? Math.min(prev + 1, commentMeta.total_pages) : prev + 1,
+                      )
+                    }
+                    disabled={commentMeta ? commentPage >= commentMeta.total_pages : true}
+                  >
+                    {t("publicPrompts.nextPage")}
+                  </button>
+                </div>
+              </div>
+            ) : null}
+          </div>
+        </GlassCard>
+
+
             </div>
             </div>
           </GlassCard>
@@ -833,6 +1299,38 @@ export default function PublicPromptsPage(): JSX.Element {
           }
         }}
       />
+      <ConfirmDialog
+        open={rejectDialog != null}
+        title={t("comments.rejectConfirmTitle")}
+        description={t("comments.rejectConfirmDescription")}
+        confirmLabel={t("comments.actions.reject")}
+        cancelLabel={t("common.cancel")}
+        loading={commentReviewMutation.isPending}
+        onCancel={() => {
+          if (!commentReviewMutation.isPending) {
+            setRejectDialog(null);
+            setRejectNote("");
+          }
+        }}
+        onConfirm={() => {
+          if (!rejectDialog || commentReviewMutation.isPending) {
+            return;
+          }
+          commentReviewMutation.mutate({
+            commentId: rejectDialog.commentId,
+            status: "rejected",
+            note: rejectNote.trim() ? rejectNote.trim() : undefined,
+          });
+        }}
+      >
+        <Textarea
+          rows={3}
+          value={rejectNote}
+          onChange={(event) => setRejectNote(event.target.value)}
+          placeholder={t("comments.notePlaceholder")}
+          disabled={commentReviewMutation.isPending}
+        />
+      </ConfirmDialog>
     </div>
   );
 }

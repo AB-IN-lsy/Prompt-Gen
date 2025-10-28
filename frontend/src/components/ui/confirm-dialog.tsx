@@ -18,6 +18,7 @@ interface ConfirmDialogProps {
     loading?: boolean;
     onConfirm: () => void;
     onCancel: () => void;
+    children?: ReactNode;
 }
 
 export function ConfirmDialog({
@@ -29,6 +30,7 @@ export function ConfirmDialog({
     loading = false,
     onConfirm,
     onCancel,
+    children,
 }: ConfirmDialogProps) {
     const confirmRef = useRef<HTMLButtonElement | null>(null);
 
@@ -80,6 +82,7 @@ export function ConfirmDialog({
                         </p>
                     ) : null}
                 </div>
+                {children ? <div className="space-y-3">{children}</div> : null}
                 <div className="flex items-center justify-end gap-3">
                     <Button
                         type="button"

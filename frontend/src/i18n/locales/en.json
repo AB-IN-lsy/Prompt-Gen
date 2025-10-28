@@ -170,7 +170,8 @@
     "status": {
       "approved": "Approved",
       "pending": "Pending",
-      "rejected": "Rejected"
+      "rejected": "Rejected",
+      "all": "All"
     },
     "keywords": {
       "positive": "Positive keywords",
@@ -193,6 +194,41 @@
       "subtitle": "No summary provided yet."
     },
     "subtitleFallback": "No summary provided yet."
+  },
+  "comments": {
+    "title": "Comments",
+    "subtitle": "Share your tips or questions with the community.",
+    "placeholder": "Share your thoughts…",
+    "replyPlaceholder": "Write a reply…",
+    "submit": "Post Comment",
+    "reply": "Reply",
+    "cancelReply": "Cancel",
+    "empty": "No comments yet. Be the first to start the discussion!",
+    "loadError": "Failed to load comments. Please try again later.",
+    "createSuccess": "Comment posted.",
+    "createPending": "Comment submitted and pending review.",
+    "reviewSuccess": "Comment status updated.",
+    "status": {
+      "approved": "Approved",
+      "pending": "Pending",
+      "rejected": "Rejected",
+      "all": "All"
+    },
+    "pendingBadge": "Pending",
+    "rejectedBadge": "Rejected",
+    "actions": {
+      "approve": "Approve",
+      "reject": "Reject"
+    },
+    "pagination": "Page {{page}} / {{totalPages}}, {{totalItems}} comments total",
+    "total": "{{count}} comments in total",
+    "replyCount": "{{count}} replies",
+    "anonymous": "Anonymous",
+    "notePlaceholder": "Optional review note",
+    "emptyBody": "Comment cannot be empty.",
+    "offlineDisabled": "Comments are unavailable in offline mode.",
+    "rejectConfirmTitle": "Reject this comment?",
+    "rejectConfirmDescription": "The comment will be hidden immediately. You may include an optional note above."
   },
   "publicPromptReview": {
     "eyebrow": "Public review",

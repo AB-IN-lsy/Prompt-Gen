@@ -43,7 +43,8 @@ func (PublicPrompt) TableName() string {
 
 // UserBrief 仅用于在公共库中展示作者或审核人的简要信息。
 type UserBrief struct {
-	ID       uint   `json:"id"`
-	Username string `json:"username"`
-	Email    string `json:"email"`
+	ID        uint   `json:"id"`
+	Username  string `json:"username"`
+	Email     string `json:"email"`
+	AvatarURL string `json:"avatar_url"`
 }
