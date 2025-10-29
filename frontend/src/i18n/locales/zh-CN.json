@@ -6,6 +6,20 @@
       "ready": "正在唤醒工作台…"
     }
   },
+  "desktopCloseDialog": {
+    "title": "关闭 Prompt Gen？",
+    "description": "最小化到托盘后程序会继续在后台运行，稍后仍可从托盘图标重新打开。",
+    "remember": "记住我的选择",
+    "actions": {
+      "tray": "最小化到托盘",
+      "quit": "直接退出",
+      "cancel": "暂不关闭"
+    },
+    "hints": {
+      "tray": "后台运行时可以随时从托盘唤醒。",
+      "quit": "结束所有后台任务并完全退出应用。"
+    }
+  },
   "nav": {
     "dashboard": "Dashboard",
     "myPrompts": "我的 Prompt",
@@ -394,6 +408,7 @@
     "modelTitle": "选择生成模型",
     "modelHint": "解析需求、补词与生成都会使用该模型。",
     "modelEmptyHint": "暂无可用模型，请先在设置页配置。",
+    "modelManageLink": "配置模型",
     "descriptionEyebrow": "需求解析",
     "descriptionTitle": "告诉我们你想要什么",
     "descriptionPlaceholder": "例如：生成一份聚焦 React Hooks 的技术面试 Prompt",

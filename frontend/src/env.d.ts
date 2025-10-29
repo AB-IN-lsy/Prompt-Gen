@@ -20,6 +20,18 @@ type ElectronWindowState = {
     isAlwaysOnTop: boolean;
 };
 
+type DesktopCloseBehavior = "tray" | "quit";
+
+interface DesktopClosePromptPayload {
+    defaultBehavior: DesktopCloseBehavior;
+}
+
+interface DesktopCloseDecisionPayload {
+    behavior: DesktopCloseBehavior | "ask";
+    remember?: boolean;
+    cancelled?: boolean;
+}
+
 interface DesktopAPI {
     minimize(): Promise<void>;
     toggleMaximize(): Promise<ElectronWindowState>;
@@ -28,6 +40,8 @@ interface DesktopAPI {
     getWindowState(): Promise<ElectronWindowState>;
     onWindowState(callback: (state: ElectronWindowState) => void): () => void;
     executeEditCommand(command: "undo" | "redo" | "cut" | "copy" | "paste" | "delete" | "selectAll" | "reload"): Promise<void>;
+    onClosePrompt?(callback: (payload: DesktopClosePromptPayload) => void): () => void;
+    submitCloseDecision?(decision: DesktopCloseDecisionPayload): void;
 }
 
 declare global {

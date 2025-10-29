@@ -11,8 +11,7 @@ const {
     ipcMain,
     globalShortcut,
     Tray,
-    nativeImage,
-    dialog
+    nativeImage
 } = require("electron");
 const path = require("path");
 const fs = require("fs");
@@ -41,6 +40,7 @@ let mainWindow;
 let tray;
 let isClosePromptVisible = false;
 let hasShownTrayBalloon = false;
+let pendingCloseResolver = null;
 
 const CLOSE_BEHAVIOR = {
     ASK: "ask",
@@ -53,6 +53,9 @@ const CLOSE_BEHAVIOR_LABEL = {
     [CLOSE_BEHAVIOR.TRAY]: "关闭行为：最小化到托盘",
     [CLOSE_BEHAVIOR.QUIT]: "关闭行为：直接退出"
 };
+
+const CLOSE_PROMPT_REQUEST_CHANNEL = "window:close-prompt";
+const CLOSE_PROMPT_DECISION_CHANNEL = "window:close-decision";
 
 const preferencesFilePath = (() => {
     try {
@@ -265,39 +268,32 @@ const hideWindowToTray = (win) => {
     }
 };
 
-const promptCloseBehavior = async (win) => {
-    const { response, checkboxChecked } = await dialog.showMessageBox(win ?? null, {
-        type: "question",
-        buttons: ["最小化到托盘", "直接退出", "取消"],
-        defaultId: 0,
-        cancelId: 2,
-        title: "关闭窗口",
-        message: "关闭后要如何处理 Prompt Gen？",
-        detail: "您可以选择保留后台运行（最小化到托盘）或完全退出应用。",
-        checkboxLabel: "记住我的选择",
-        checkboxChecked: false,
-        noLink: true
-    });
+const promptCloseBehavior = (win) => {
+    if (!win || win.isDestroyed()) {
+        return Promise.resolve({
+            behavior: CLOSE_BEHAVIOR.ASK,
+            remember: false,
+            cancelled: true
+        });
+    }
+    if (pendingCloseResolver) {
+        return Promise.resolve({
+            behavior: CLOSE_BEHAVIOR.ASK,
+            remember: false,
+            cancelled: true
+        });
+    }
 
-    if (response === 0) {
-        return {
-            behavior: CLOSE_BEHAVIOR.TRAY,
-            remember: checkboxChecked,
-            cancelled: false
-        };
-    }
-    if (response === 1) {
-        return {
-            behavior: CLOSE_BEHAVIOR.QUIT,
-            remember: checkboxChecked,
-            cancelled: false
-        };
-    }
-    return {
-        behavior: CLOSE_BEHAVIOR.ASK,
-        remember: false,
-        cancelled: true
-    };
+    return new Promise((resolve) => {
+        pendingCloseResolver = resolve;
+        const suggested =
+            closeBehaviorPreference === CLOSE_BEHAVIOR.QUIT
+                ? CLOSE_BEHAVIOR.QUIT
+                : CLOSE_BEHAVIOR.TRAY;
+        win.webContents.send(CLOSE_PROMPT_REQUEST_CHANNEL, {
+            defaultBehavior: suggested
+        });
+    });
 };
 
 const handleMainWindowClose = (event, win) => {
@@ -519,6 +515,28 @@ ipcMain.handle("window:execute-edit-command", (event, command) => {
     }
 });
 
+ipcMain.on(CLOSE_PROMPT_DECISION_CHANNEL, (_event, payload) => {
+    if (!pendingCloseResolver) {
+        return;
+    }
+    const incoming = payload && typeof payload === "object" ? payload : {};
+    const candidateBehavior =
+        incoming.behavior === CLOSE_BEHAVIOR.TRAY || incoming.behavior === CLOSE_BEHAVIOR.QUIT
+            ? incoming.behavior
+            : CLOSE_BEHAVIOR.ASK;
+    const resolved = {
+        behavior: candidateBehavior,
+        remember: Boolean(incoming.remember),
+        cancelled: Boolean(incoming.cancelled)
+    };
+    if (resolved.cancelled) {
+        resolved.behavior = CLOSE_BEHAVIOR.ASK;
+        resolved.remember = false;
+    }
+    pendingCloseResolver(resolved);
+    pendingCloseResolver = null;
+});
+
 function createMainWindow() {
     if (mainWindow && !mainWindow.isDestroyed()) {
         return mainWindow;
@@ -589,6 +607,8 @@ function createMainWindow() {
     });
     mainWindow.on("closed", () => {
         mainWindow = null;
+        pendingCloseResolver = null;
+        isClosePromptVisible = false;
     });
 
     return mainWindow;

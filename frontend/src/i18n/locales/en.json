@@ -6,6 +6,20 @@
       "ready": "Bringing your workspace online…"
     }
   },
+  "desktopCloseDialog": {
+    "title": "Close Prompt Gen?",
+    "description": "Minimizing to the tray keeps Prompt Gen running so you can bring it back whenever you need.",
+    "remember": "Remember my choice",
+    "actions": {
+      "tray": "Minimize to tray",
+      "quit": "Exit completely",
+      "cancel": "Keep running"
+    },
+    "hints": {
+      "tray": "Reopen Prompt Gen from the tray icon at any time.",
+      "quit": "Stop all background tasks and exit the app."
+    }
+  },
   "nav": {
     "dashboard": "Dashboard",
     "myPrompts": "My Prompts",
@@ -394,6 +408,7 @@
     "modelTitle": "Choose a model",
     "modelHint": "The selected model will be used to interpret, augment and generate prompts.",
     "modelEmptyHint": "No models available yet. Configure them in settings.",
+    "modelManageLink": "Manage models",
     "descriptionEyebrow": "Natural language",
     "descriptionTitle": "Describe your need",
     "descriptionPlaceholder": "e.g. generate an interview prompt focusing on React Hooks",

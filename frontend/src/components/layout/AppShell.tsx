@@ -17,7 +17,7 @@ import {
     type KeyboardEvent
 } from "react";
 import { useTranslation } from "react-i18next";
-import { motion } from "framer-motion";
+import { AnimatePresence, motion } from "framer-motion";
 import { cn, resolveAssetUrl } from "../../lib/utils";
 import { isLocalMode } from "../../lib/runtimeMode";
 import {
@@ -222,100 +222,115 @@ export function AppShell({ children, rightSlot }: AppShellProps) {
             <div className={`relative z-10 flex h-full w-full flex-col ${shellBackgroundClass}`}>
             <TitleBar />
             <DesktopContextMenu />
-            {mobileNavOpen ? (
-                <div
-                    className="fixed inset-0 z-40 flex md:hidden"
-                    role="dialog"
-                    aria-modal="true"
-                    aria-labelledby="app-shell-mobile-nav-title"
-                >
-                    <div
-                        className="absolute inset-0 bg-slate-950/60 backdrop-blur-sm"
-                        onClick={closeMobileNav}
-                    />
-                    <div
-                        id="app-shell-mobile-nav"
-                        className="relative flex h-full w-72 max-w-[80%] flex-col border-r border-white/40 bg-white/95 px-4 py-6 shadow-2xl transition dark:border-slate-800/70 dark:bg-slate-900/95"
+            <AnimatePresence>
+                {mobileNavOpen ? (
+                    <motion.div
+                        key="mobile-nav"
+                        className="fixed inset-0 z-40 flex md:hidden"
+                        role="dialog"
+                        aria-modal="true"
+                        aria-labelledby="app-shell-mobile-nav-title"
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        transition={{ duration: 0.18, ease: "easeOut" }}
                     >
-                        <div className="mb-6 flex items-center justify-between">
-                            <div className="flex items-center gap-3">
-                                <Sparkles className="h-6 w-6 text-primary" />
-                                <span
-                                    id="app-shell-mobile-nav-title"
-                                    className="text-lg font-semibold text-primary"
-                                >
-                                    {t("app.name")}
-                                </span>
-                            </div>
-                            <button
-                                type="button"
-                                onClick={closeMobileNav}
-                                className="flex h-9 w-9 items-center justify-center rounded-xl border border-white/60 bg-white/80 text-slate-600 shadow-sm transition hover:border-primary/50 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 dark:border-slate-800 dark:bg-slate-900/70 dark:text-slate-300 dark:hover:border-primary/40"
-                                aria-label={t("appShell.mobileMenu.close")}
-                            >
-                                <X className="h-5 w-5" />
-                            </button>
-                        </div>
-                        <nav className="flex flex-1 flex-col gap-2 overflow-y-auto">
-                            {primaryNavItems.map(({ labelKey, icon: Icon, to }) => (
-                                <NavLink
-                                    key={to}
-                                    to={to}
-                                    onClick={closeMobileNav}
-                                    className={({ isActive }) =>
-                                        cn(
-                                            "flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium transition",
-                                            isActive
-                                                ? "bg-primary text-white shadow-glow"
-                                                : "text-slate-600 hover:bg-white/80 hover:text-primary hover:shadow-sm dark:text-slate-300 dark:hover:bg-slate-800/80"
-                                        )
-                                    }
-                                >
-                                    <Icon className="h-4 w-4" />
-                                    {t(labelKey)}
-                                </NavLink>
-                            ))}
-                            {profile?.user.is_admin && adminNavList.length > 0 ? (
-                                <div className="mt-4 flex flex-col gap-2 border-t border-white/60 pt-4 dark:border-slate-800/60">
-                                    <span className="px-3 text-xs font-medium uppercase tracking-[0.3em] text-slate-400">
-                                        {t("nav.adminSection")}
+                        <motion.div
+                            className="absolute inset-0 bg-slate-950/60 backdrop-blur-sm"
+                            onClick={closeMobileNav}
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            transition={{ duration: 0.18, ease: "easeOut" }}
+                        />
+                        <motion.div
+                            id="app-shell-mobile-nav"
+                            className="relative flex h-full w-72 max-w-[80%] flex-col border-r border-white/40 bg-white/95 px-4 py-6 shadow-2xl dark:border-slate-800/70 dark:bg-slate-900/95"
+                            initial={{ x: "-100%" }}
+                            animate={{ x: 0 }}
+                            exit={{ x: "-100%" }}
+                            transition={{ duration: 0.24, ease: [0.16, 1, 0.3, 1] }}
+                        >
+                            <div className="mb-6 flex items-center justify-between">
+                                <div className="flex items-center gap-3">
+                                    <Sparkles className="h-6 w-6 text-primary" />
+                                    <span
+                                        id="app-shell-mobile-nav-title"
+                                        className="text-lg font-semibold text-primary"
+                                    >
+                                        {t("app.name")}
                                     </span>
-                                    {adminNavList.map(({ labelKey, icon: Icon, to }) => (
-                                        <NavLink
-                                            key={to}
-                                            to={to}
-                                            onClick={closeMobileNav}
-                                            className={({ isActive }) =>
-                                                cn(
-                                                    "flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium transition",
-                                                    isActive
-                                                        ? "bg-primary text-white shadow-glow"
-                                                        : "text-slate-600 hover:bg-white/80 hover:text-primary hover:shadow-sm dark:text-slate-300 dark:hover:bg-slate-800/80"
-                                                )
-                                            }
-                                        >
-                                            <Icon className="h-4 w-4" />
-                                            {t(labelKey)}
-                                        </NavLink>
-                                    ))}
                                 </div>
+                                <button
+                                    type="button"
+                                    onClick={closeMobileNav}
+                                    className="flex h-9 w-9 items-center justify-center rounded-xl border border-white/60 bg-white/80 text-slate-600 shadow-sm transition hover:border-primary/50 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 dark:border-slate-800 dark:bg-slate-900/70 dark:text-slate-300 dark:hover:border-primary/40"
+                                    aria-label={t("appShell.mobileMenu.close")}
+                                >
+                                    <X className="h-5 w-5" />
+                                </button>
+                            </div>
+                            <nav className="flex flex-1 flex-col gap-2 overflow-y-auto">
+                                {primaryNavItems.map(({ labelKey, icon: Icon, to }) => (
+                                    <NavLink
+                                        key={to}
+                                        to={to}
+                                        onClick={closeMobileNav}
+                                        className={({ isActive }) =>
+                                            cn(
+                                                "flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium transition",
+                                                isActive
+                                                    ? "bg-primary text-white shadow-glow"
+                                                    : "text-slate-600 hover:bg-white/80 hover:text-primary hover:shadow-sm dark:text-slate-300 dark:hover:bg-slate-800/80"
+                                            )
+                                        }
+                                    >
+                                        <Icon className="h-4 w-4" />
+                                        {t(labelKey)}
+                                    </NavLink>
+                                ))}
+                                {profile?.user.is_admin && adminNavList.length > 0 ? (
+                                    <div className="mt-4 flex flex-col gap-2 border-t border-white/60 pt-4 dark:border-slate-800/60">
+                                        <span className="px-3 text-xs font-medium uppercase tracking-[0.3em] text-slate-400">
+                                            {t("nav.adminSection")}
+                                        </span>
+                                        {adminNavList.map(({ labelKey, icon: Icon, to }) => (
+                                            <NavLink
+                                                key={to}
+                                                to={to}
+                                                onClick={closeMobileNav}
+                                                className={({ isActive }) =>
+                                                    cn(
+                                                        "flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium transition",
+                                                        isActive
+                                                            ? "bg-primary text-white shadow-glow"
+                                                            : "text-slate-600 hover:bg-white/80 hover:text-primary hover:shadow-sm dark:text-slate-300 dark:hover:bg-slate-800/80"
+                                                    )
+                                                }
+                                            >
+                                                <Icon className="h-4 w-4" />
+                                                {t(labelKey)}
+                                            </NavLink>
+                                        ))}
+                                    </div>
+                                ) : null}
+                            </nav>
+                            {!localMode ? (
+                                <Button
+                                    variant="ghost"
+                                    className="mt-6 flex items-center justify-start gap-2 text-sm text-slate-500 dark:text-slate-300"
+                                    onClick={() => {
+                                        closeMobileNav();
+                                        void handleLogout();
+                                    }}
+                                >
+                                    <LogOut className="h-4 w-4" /> {t("appShell.logout")}
+                                </Button>
                             ) : null}
-                        </nav>
-                        {!localMode ? (
-                            <Button
-                                variant="ghost"
-                                className="mt-6 flex items-center justify-start gap-2 text-sm text-slate-500 dark:text-slate-300"
-                                onClick={() => {
-                                    closeMobileNav();
-                                    void handleLogout();
-                                }}
-                            >
-                                <LogOut className="h-4 w-4" /> {t("appShell.logout")}
-                            </Button>
-                        ) : null}
-                    </div>
-                </div>
-            ) : null}
+                        </motion.div>
+                    </motion.div>
+                ) : null}
+            </AnimatePresence>
             <div className="flex flex-1 overflow-hidden">
                 <motion.aside
                     initial={false}

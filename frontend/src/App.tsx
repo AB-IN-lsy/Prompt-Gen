@@ -6,7 +6,7 @@
  */
 import { Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { AppShell } from "./components/layout/AppShell";
 import DashboardPage from "./pages/Dashboard";
@@ -27,6 +27,17 @@ import AdminPublicPromptsPage from "./pages/AdminPublicPrompts";
 import { useAuth, useIsAuthenticated } from "./hooks/useAuth";
 import { isLocalMode } from "./lib/runtimeMode";
 import { EntryTransition } from "./components/visuals/EntryTransition";
+import { CloseBehaviorDialog } from "./components/desktop/CloseBehaviorDialog";
+
+type DesktopCloseBehavior = "tray" | "quit";
+interface DesktopClosePromptPayload {
+    defaultBehavior: DesktopCloseBehavior;
+}
+interface DesktopCloseDecisionPayload {
+    behavior: DesktopCloseBehavior | "ask";
+    remember?: boolean;
+    cancelled?: boolean;
+}
 
 // 占位页面组件：在对应功能尚未实现时保持路由完整。
 function Placeholder({ titleKey }: { titleKey: string }) {
@@ -53,6 +64,9 @@ export default function App() {
     const entryShownRef = useRef(false);
     const [entryActive, setEntryActive] = useState(false);
     const [entryVisible, setEntryVisible] = useState(false);
+    const [closeDialogOpen, setCloseDialogOpen] = useState(false);
+    const [closeDialogRemember, setCloseDialogRemember] = useState(false);
+    const [closeDialogDefaultBehavior, setCloseDialogDefaultBehavior] = useState<"tray" | "quit">("tray");
     const animationsEnabled = profile?.settings.enable_animations ?? true;
     useEffect(() => {
         if (
@@ -80,6 +94,55 @@ export default function App() {
     useEffect(() => {
         void initialize();
     }, [initialize]);
+
+    useEffect(() => {
+        if (typeof window === "undefined") {
+            return undefined;
+        }
+        const api = window.desktop;
+        if (!api?.onClosePrompt) {
+            return undefined;
+        }
+        const unsubscribe = api.onClosePrompt((payload: DesktopClosePromptPayload) => {
+            const nextBehavior =
+                payload?.defaultBehavior === "quit" ? "quit" : "tray";
+            setCloseDialogDefaultBehavior(nextBehavior);
+            setCloseDialogRemember(false);
+            setCloseDialogOpen(true);
+        });
+        return unsubscribe;
+    }, []);
+
+    const submitCloseDecision = useCallback((decision: DesktopCloseDecisionPayload) => {
+        window.desktop?.submitCloseDecision?.(decision);
+    }, []);
+
+    const handleCloseDialogTray = useCallback(() => {
+        submitCloseDecision({
+            behavior: "tray",
+            remember: closeDialogRemember,
+            cancelled: false
+        });
+        setCloseDialogOpen(false);
+    }, [closeDialogRemember, submitCloseDecision]);
+
+    const handleCloseDialogQuit = useCallback(() => {
+        submitCloseDecision({
+            behavior: "quit",
+            remember: closeDialogRemember,
+            cancelled: false
+        });
+        setCloseDialogOpen(false);
+    }, [closeDialogRemember, submitCloseDecision]);
+
+    const handleCloseDialogCancel = useCallback(() => {
+        submitCloseDecision({
+            behavior: "ask",
+            remember: false,
+            cancelled: true
+        });
+        setCloseDialogOpen(false);
+    }, [submitCloseDecision]);
 
     // 初始化期间保持加载态，避免在资料未拉取完成前误触发路由重定向。
     if (!isInitialized || initializing) {
@@ -137,6 +200,23 @@ export default function App() {
                 <Route path="*" element={<Navigate to="/prompt-workbench" replace />} />
             </Routes>
         </AppShell>
+        <CloseBehaviorDialog
+            open={closeDialogOpen}
+            title={t("desktopCloseDialog.title")}
+            description={t("desktopCloseDialog.description")}
+            rememberLabel={t("desktopCloseDialog.remember")}
+            trayLabel={t("desktopCloseDialog.actions.tray")}
+            trayHint={t("desktopCloseDialog.hints.tray")}
+            quitLabel={t("desktopCloseDialog.actions.quit")}
+            quitHint={t("desktopCloseDialog.hints.quit")}
+            cancelLabel={t("desktopCloseDialog.actions.cancel")}
+            remember={closeDialogRemember}
+            defaultBehavior={closeDialogDefaultBehavior}
+            onSelectTray={handleCloseDialogTray}
+            onSelectQuit={handleCloseDialogQuit}
+            onRememberChange={(next) => setCloseDialogRemember(next)}
+            onCancel={handleCloseDialogCancel}
+        />
         </>
     );
 }

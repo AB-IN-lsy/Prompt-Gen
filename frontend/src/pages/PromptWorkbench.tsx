@@ -43,10 +43,12 @@ import {
   RotateCcw,
   Sparkles,
   X,
+  ArrowUpRight,
 } from "lucide-react";
 import { nanoid } from "nanoid";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
+import { useNavigate } from "react-router-dom";
 
 import { GlassCard } from "../components/ui/glass-card";
 import { Input } from "../components/ui/input";
@@ -207,6 +209,7 @@ const dedupeKeywords = (keywords: Keyword[]): Keyword[] => {
 
 export default function PromptWorkbenchPage() {
   const { t } = useTranslation();
+  const navigate = useNavigate();
   const {
     topic,
     setTopic,
@@ -237,6 +240,9 @@ export default function PromptWorkbenchPage() {
   } = usePromptWorkbench();
   const profile = useAuth((state) => state.profile);
   const setProfile = useAuth((state) => state.setProfile);
+  const handleOpenModelSettings = useCallback(() => {
+    navigate("/settings?tab=models");
+  }, [navigate]);
 
   const [description, setDescription] = useState("");
   const [activeKeyword, setActiveKeyword] = useState<Keyword | null>(null);
@@ -1703,6 +1709,16 @@ export default function PromptWorkbenchPage() {
                 })}
               </h2>
             </div>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="inline-flex items-center gap-1.5 rounded-full border border-primary/30 bg-primary/5 px-3 py-1.5 text-xs font-medium text-primary transition hover:border-primary/50 hover:bg-primary/10 hover:text-primary-foreground focus-visible:ring-primary/40 dark:border-primary/40 dark:bg-primary/10 dark:text-primary-100 dark:hover:bg-primary/15"
+              onClick={handleOpenModelSettings}
+            >
+              {t("promptWorkbench.modelManageLink", { defaultValue: "配置模型" })}
+              <ArrowUpRight className="h-3.5 w-3.5" aria-hidden="true" />
+            </Button>
           </header>
           <div className="rounded-2xl border border-white/60 bg-white/80 p-4 shadow-sm transition-colors dark:border-slate-800 dark:bg-slate-900/70">
             <p className="text-xs text-slate-500 dark:text-slate-400">
