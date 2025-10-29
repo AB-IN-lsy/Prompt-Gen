@@ -28,6 +28,7 @@ import { SpotlightSearch } from "../components/ui/spotlight-search";
 import { Badge } from "../components/ui/badge";
 import { MagneticButton } from "../components/ui/magnetic-button";
 import { ConfirmDialog } from "../components/ui/confirm-dialog";
+import { PaginationControls } from "../components/ui/pagination-controls";
 import {
   deletePublicPrompt,
   downloadPublicPrompt,
@@ -46,7 +47,8 @@ import {
   type PromptComment,
   type PromptCommentListResponse,
 } from "../lib/api";
-import { cn } from "../lib/utils";
+import { AnimatePresence, motion } from "framer-motion";
+import { cn, resolveAssetUrl } from "../lib/utils";
 import { useAuth } from "../hooks/useAuth";
 import { isLocalMode } from "../lib/runtimeMode";
 import { Button } from "../components/ui/button";
@@ -191,6 +193,10 @@ export default function PublicPromptsPage(): JSX.Element {
   const currentCount =
     listMeta?.current_count ??
     Math.min(items.length, PUBLIC_PROMPT_LIST_PAGE_SIZE);
+  const gridMotionKey = useMemo(
+    () => items.map((item) => item.id).join("-"),
+    [items],
+  );
 
   const detailQuery = useQuery<PublicPromptDetail>({
     queryKey: ["public-prompts", "detail", selectedId],
@@ -392,6 +398,8 @@ export default function PublicPromptsPage(): JSX.Element {
     setCommentStatusFilter(value);
     setCommentPage(1);
   };
+  const handlePrevPage = () => setPage((prev) => Math.max(prev - 1, 1));
+  const handleNextPage = () => setPage((prev) => Math.min(prev + 1, totalPages));
 
   const deleteMutation = useMutation<void, unknown, number>({
     mutationFn: (id: number) => deletePublicPrompt(id),
@@ -521,6 +529,33 @@ export default function PublicPromptsPage(): JSX.Element {
     }
   };
 
+  const renderAvatar = (displayName: string, rawSrc?: string | null, size: "md" | "sm" = "md") => {
+    const resolvedSrc = resolveAssetUrl(rawSrc ?? null);
+    const trimmed = displayName?.trim?.() ?? "";
+    const firstChar = trimmed ? Array.from(trimmed)[0] : null;
+    const fallback = typeof firstChar === "string" && firstChar.length > 0 ? firstChar.toUpperCase() : "U";
+    const containerClass = size === "md" ? "h-10 w-10" : "h-8 w-8";
+    const textClass = size === "md" ? "text-sm" : "text-xs";
+    return (
+      <div
+        className={cn(
+          "flex shrink-0 items-center justify-center overflow-hidden rounded-full border border-white/60 bg-primary/10 text-primary shadow-sm dark:border-slate-800/60 dark:bg-primary/20",
+          containerClass,
+        )}
+      >
+        {resolvedSrc ? (
+          <img
+            src={resolvedSrc}
+            alt={t("comments.avatarAlt", { username: displayName })}
+            className="h-full w-full object-cover"
+          />
+        ) : (
+          <span className={cn("font-semibold uppercase", textClass)}>{fallback}</span>
+        )}
+      </div>
+    );
+  };
+
   const commentStatusBadge = (status: string) => {
     const normalized = status.toLowerCase();
     if (normalized === "pending") {
@@ -609,22 +644,26 @@ export default function PublicPromptsPage(): JSX.Element {
             <Tags className="h-4 w-4" />
             {t("publicPrompts.filters.title")}
           </div>
-        <div className="flex flex-wrap items-center gap-2">
-          {statusOptions.map((item) => (
-            <button
-              key={item}
-              type="button"
-                onClick={() => handleStatusChange(item)}
-                className={cn(
-                  "rounded-full border px-3 py-1 text-xs font-medium transition-colors",
-                  statusFilter === item
-                    ? "border-primary/40 bg-primary/10 text-primary dark:border-primary/30 dark:bg-primary/20"
-                    : "border-slate-200 text-slate-500 hover:border-primary/30 hover:text-primary dark:border-slate-700 dark:text-slate-400 dark:hover:border-primary/30",
-                )}
-              >
-                {t(`publicPrompts.filters.${item}`)}
-              </button>
-            ))}
+          <div className="flex flex-wrap items-center gap-2">
+            {statusOptions.map((item) => {
+              const active = statusFilter === item;
+              return (
+                <button
+                  key={item}
+                  type="button"
+                  onClick={() => handleStatusChange(item)}
+                  aria-pressed={active}
+                  className={cn(
+                    "workbench-pill relative overflow-hidden rounded-full border px-3 py-1 text-xs font-medium uppercase tracking-[0.08em]",
+                    active
+                      ? "border-transparent bg-primary text-white shadow-glow"
+                      : "border-white/60 text-slate-500 transition-colors hover:text-primary dark:border-slate-700 dark:text-slate-400",
+                  )}
+                >
+                  {t(`publicPrompts.filters.${item}`)}
+                </button>
+              );
+            })}
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-3">
@@ -633,61 +672,84 @@ export default function PublicPromptsPage(): JSX.Element {
             {t("publicPrompts.sort.title")}
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            {sortOptions.map((item) => (
-              <button
-                key={item}
-                type="button"
-                onClick={() => handleSortChange(item)}
-                className={cn(
-                  "rounded-full border px-3 py-1 text-xs font-medium transition-colors",
-                  sortBy === item
-                    ? "border-primary/40 bg-primary/10 text-primary dark:border-primary/30 dark:bg-primary/20"
-                    : "border-slate-200 text-slate-500 hover:border-primary/30 hover:text-primary dark:border-slate-700 dark:text-slate-400 dark:hover:border-primary/30",
-                )}
-              >
-                {t(`publicPrompts.sort.${item}`)}
-              </button>
-            ))}
+            {sortOptions.map((item) => {
+              const active = sortBy === item;
+              return (
+                <button
+                  key={item}
+                  type="button"
+                  onClick={() => handleSortChange(item)}
+                  aria-pressed={active}
+                  className={cn(
+                    "workbench-pill relative overflow-hidden rounded-full border px-3 py-1 text-xs font-medium uppercase tracking-[0.08em]",
+                    active
+                      ? "border-transparent bg-primary text-white shadow-glow"
+                      : "border-white/60 text-slate-500 transition-colors hover:text-primary dark:border-slate-700 dark:text-slate-400",
+                  )}
+                >
+                  {t(`publicPrompts.sort.${item}`)}
+                </button>
+              );
+            })}
           </div>
         </div>
-        <p className="text-xs text-slate-400 dark:text-slate-500">
-          {t("publicPrompts.scoreRefreshHint")}
-        </p>
-      </div>
+    </div>
 
-      <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
-        {isLoadingList && items.length === 0
-          ? Array.from({ length: PUBLIC_PROMPT_LIST_PAGE_SIZE }).map((_, index) => (
-              <GlassCard
-                key={`skeleton-${index}`}
-                className="animate-pulse border-dashed border-slate-200 bg-white/60 dark:border-slate-800/60 dark:bg-slate-900/50"
-              >
-                <div className="h-4 w-32 rounded bg-slate-200 dark:bg-slate-700" />
-                <div className="mt-4 h-3 w-full rounded bg-slate-200 dark:bg-slate-700" />
-                <div className="mt-2 h-3 w-3/4 rounded bg-slate-200 dark:bg-slate-700" />
-                <div className="mt-6 flex gap-2">
-                  <div className="h-6 w-16 rounded-full bg-slate-200 dark:bg-slate-700" />
-                  <div className="h-6 w-12 rounded-full bg-slate-200 dark:bg-slate-700" />
-                </div>
-              </GlassCard>
-            ))
-          : null}
+      <PaginationControls
+        page={page}
+        totalPages={totalPages}
+        currentCount={currentCount}
+        onPrev={handlePrevPage}
+        onNext={handleNextPage}
+        prevLabel={t("publicPrompts.prevPage")}
+        nextLabel={t("publicPrompts.nextPage")}
+        pageLabel={t("publicPrompts.paginationInfo", { page, totalPages })}
+        countLabel={t("publicPrompts.paginationCount", { count: currentCount })}
+        className="mb-4 border-none bg-transparent px-0 py-0 shadow-none dark:bg-transparent"
+      />
 
-        {!isLoadingList && items.length === 0 ? (
+      {isLoadingList && items.length === 0 ? (
+        <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
+          {Array.from({ length: PUBLIC_PROMPT_LIST_PAGE_SIZE }).map((_, index) => (
+            <GlassCard
+              key={`skeleton-${index}`}
+              className="animate-pulse border-dashed border-slate-200 bg-white/60 dark:border-slate-800/60 dark:bg-slate-900/50"
+            >
+              <div className="h-4 w-32 rounded bg-slate-200 dark:bg-slate-700" />
+              <div className="mt-4 h-3 w-full rounded bg-slate-200 dark:bg-slate-700" />
+              <div className="mt-2 h-3 w-3/4 rounded bg-slate-200 dark:bg-slate-700" />
+              <div className="mt-6 flex gap-2">
+                <div className="h-6 w-16 rounded-full bg-slate-200 dark:bg-slate-700" />
+                <div className="h-6 w-12 rounded-full bg-slate-200 dark:bg-slate-700" />
+              </div>
+            </GlassCard>
+          ))}
+        </div>
+      ) : !isLoadingList && items.length === 0 ? (
+        <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
           <GlassCard className="md:col-span-2 xl:col-span-3 border-dashed border-slate-200 bg-white/70 text-center dark:border-slate-800/60 dark:bg-slate-900/60">
             <Sparkles className="mx-auto h-8 w-8 text-primary" />
             <p className="mt-3 text-sm text-slate-500 dark:text-slate-400">
               {t("publicPrompts.empty")}
             </p>
           </GlassCard>
-        ) : null}
-
+        </div>
+      ) : (
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={`${gridMotionKey}-${page}-${sortBy}-${statusFilter}-${debouncedSearch}`}
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            transition={{ duration: 0.4, ease: [0.33, 1, 0.68, 1] }}
+            className="grid gap-5 md:grid-cols-2 xl:grid-cols-3"
+          >
         {items.map((item) => {
-          const detailActive = selectedId === item.id;
-          const { label, className } = statusBadge(item.status);
-          const likePending = likeMutation.isPending && likeMutation.variables?.id === item.id;
-          const liked = Boolean(item.is_liked);
-          const scoreDisplay = Number.isFinite(item.quality_score)
+            const detailActive = selectedId === item.id;
+            const { label, className } = statusBadge(item.status);
+            const likePending = likeMutation.isPending && likeMutation.variables?.id === item.id;
+            const liked = Boolean(item.is_liked);
+            const scoreDisplay = Number.isFinite(item.quality_score)
             ? item.quality_score.toFixed(1)
             : "0.0";
           return (
@@ -811,41 +873,24 @@ export default function PublicPromptsPage(): JSX.Element {
             </GlassCard>
           );
         })}
-      </div>
+          </motion.div>
+        </AnimatePresence>
+      )}
 
-      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-        <div className="flex flex-col gap-1 text-xs text-slate-400 dark:text-slate-500 md:flex-row md:items-center md:gap-4">
-          <span>
-            {t("publicPrompts.paginationInfo", {
-              page,
-              totalPages,
-            })}
-          </span>
-          <span>
-            {t("publicPrompts.paginationCount", {
-              count: currentCount,
-            })}
-          </span>
-        </div>
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            className="rounded-full border border-slate-200 px-3 py-1 text-xs text-slate-500 transition hover:border-primary/30 hover:text-primary disabled:cursor-not-allowed disabled:opacity-40 dark:border-slate-700 dark:text-slate-400 dark:hover:border-primary/30"
-            onClick={() => setPage((prev) => Math.max(prev - 1, 1))}
-            disabled={page <= 1}
-          >
-            {t("publicPrompts.prevPage")}
-          </button>
-          <button
-            type="button"
-            className="rounded-full border border-slate-200 px-3 py-1 text-xs text-slate-500 transition hover:border-primary/30 hover:text-primary disabled:cursor-not-allowed disabled:opacity-40 dark:border-slate-700 dark:text-slate-400 dark:hover:border-primary/30"
-            onClick={() => setPage((prev) => Math.min(prev + 1, totalPages))}
-            disabled={page >= totalPages}
-          >
-            {t("publicPrompts.nextPage")}
-          </button>
-        </div>
-      </div>
+      <PaginationControls
+        page={page}
+        totalPages={totalPages}
+        currentCount={currentCount}
+        onPrev={handlePrevPage}
+        onNext={handleNextPage}
+        prevLabel={t("publicPrompts.prevPage")}
+        nextLabel={t("publicPrompts.nextPage")}
+        pageLabel={t("publicPrompts.paginationInfo", { page, totalPages })}
+        countLabel={t("publicPrompts.paginationCount", { count: currentCount })}
+      />
+      <p className="text-center text-xs text-slate-400 dark:text-slate-500 md:text-right">
+        {t("publicPrompts.scoreRefreshHint")}
+      </p>
 
       {selectedId && selectedDetail ? (
         (() => {
@@ -948,7 +993,7 @@ export default function PublicPromptsPage(): JSX.Element {
                       </div>
                       <MagneticButton
                         type="button"
-                        className="h-10 whitespace-nowrap rounded-full bg-primary/90 px-4 text-white hover:bg-primary focus-visible:ring-primary/60 dark:bg-primary/80"
+                        className="px-6 py-3 text-sm"
                         disabled={isDownloadingSelected || isDeletingSelected}
                         onClick={() => handleDownload(selectedDetail.id)}
                       >
@@ -1162,20 +1207,27 @@ export default function PublicPromptsPage(): JSX.Element {
                 {commentItems.map((item) => {
                   const statusMeta = commentStatusBadge(item.status);
                   const replyDraftValue = replyDrafts[item.id] ?? "";
-                  const isReplyDraftEmpty = replyDraftValue.trim().length === 0;
+                  const commentDisplayName =
+                    item.author?.username && item.author.username.trim().length > 0
+                      ? item.author.username
+                      : t("comments.anonymous");
+                  const commentCreatedAt = formatDateTime(item.created_at, i18n.language);
                   return (
                     <div
                       key={`comment-${item.id}`}
                       className="flex flex-col gap-4 rounded-2xl border border-slate-200/60 bg-white/60 p-4 dark:border-slate-800/60 dark:bg-slate-900/40"
                     >
                       <div className="flex items-start justify-between gap-3">
-                        <div className="flex flex-col gap-1">
-                          <span className="text-sm font-semibold text-slate-700 dark:text-slate-200">
-                            {item.author?.username ?? t("comments.anonymous")}
-                          </span>
-                          <span className="text-xs text-slate-400 dark:text-slate-500">
-                            {formatDateTime(item.created_at, i18n.language).date} · {formatDateTime(item.created_at, i18n.language).time}
-                          </span>
+                        <div className="flex flex-1 items-start gap-3">
+                          {renderAvatar(commentDisplayName, item.author?.avatar_url ?? null, "md")}
+                          <div className="flex flex-1 flex-col gap-1">
+                            <span className="text-sm font-semibold text-slate-700 dark:text-slate-200">
+                              {commentDisplayName}
+                            </span>
+                            <span className="text-xs text-slate-400 dark:text-slate-500">
+                              {commentCreatedAt.date} · {commentCreatedAt.time}
+                            </span>
+                          </div>
                         </div>
                         <div className="flex items-center gap-2">
                           {item.status !== "approved" ? (
@@ -1257,19 +1309,27 @@ export default function PublicPromptsPage(): JSX.Element {
                         <div className="flex flex-col gap-3 border-l border-slate-200/60 pl-4 dark:border-slate-800/60">
                           {item.replies.map((reply) => {
                             const replyMeta = commentStatusBadge(reply.status);
+                            const replyDisplayName =
+                              reply.author?.username && reply.author.username.trim().length > 0
+                                ? reply.author.username
+                                : t("comments.anonymous");
+                            const replyCreatedAt = formatDateTime(reply.created_at, i18n.language);
                             return (
                               <div
                                 key={`reply-${item.id}-${reply.id}`}
                                 className="flex flex-col gap-2 rounded-2xl border border-slate-200/60 bg-white/60 p-3 dark:border-slate-800/60 dark:bg-slate-900/40"
                               >
                                 <div className="flex items-start justify-between gap-3">
-                                  <div className="flex flex-col gap-1">
-                                    <span className="text-sm font-medium text-slate-700 dark:text-slate-200">
-                                      {reply.author?.username ?? t("comments.anonymous")}
-                                    </span>
-                                    <span className="text-xs text-slate-400 dark:text-slate-500">
-                                      {formatDateTime(reply.created_at, i18n.language).date} · {formatDateTime(reply.created_at, i18n.language).time}
-                                    </span>
+                                  <div className="flex flex-1 items-start gap-3">
+                                    {renderAvatar(replyDisplayName, reply.author?.avatar_url ?? null, "sm")}
+                                    <div className="flex flex-1 flex-col gap-1">
+                                      <span className="text-sm font-medium text-slate-700 dark:text-slate-200">
+                                        {replyDisplayName}
+                                      </span>
+                                      <span className="text-xs text-slate-400 dark:text-slate-500">
+                                        {replyCreatedAt.date} · {replyCreatedAt.time}
+                                      </span>
+                                    </div>
                                   </div>
                                   <div className="flex items-center gap-2">
                                     {reply.status !== "approved" ? (

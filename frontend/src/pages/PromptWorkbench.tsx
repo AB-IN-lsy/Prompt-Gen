@@ -38,6 +38,7 @@ import {
   GripVertical,
   LoaderCircle,
   Minus,
+  MousePointerClick,
   Plus,
   RotateCcw,
   Sparkles,
@@ -54,6 +55,7 @@ import { Badge } from "../components/ui/badge";
 import { Textarea } from "../components/ui/textarea";
 import { cn, clampTextWithOverflow, formatOverflowLabel } from "../lib/utils";
 import { MarkdownEditor } from "../components/MarkdownEditor";
+import { MagneticButton } from "../components/ui/magnetic-button";
 import {
   PROMPT_KEYWORD_LIMIT,
   PROMPT_KEYWORD_MAX_LENGTH,
@@ -1619,6 +1621,29 @@ export default function PromptWorkbenchPage() {
   const canGenerate =
     hasPositive && trimmedTopic.length > 0 && trimmedInstructions.length > 0 && !isGenerating;
 
+  const renderGenerateButton = (options?: { className?: string }) => {
+    const { className } = options ?? {};
+    return (
+      <MagneticButton
+        type="button"
+        className={cn(
+          "px-8 py-3 text-base font-semibold tracking-wide",
+          !canGenerate ? "opacity-60" : "",
+          className,
+        )}
+        onClick={handleGenerate}
+        disabled={!canGenerate}
+      >
+        {isGenerating ? (
+          <LoaderCircle className="h-4 w-4 animate-spin" />
+        ) : (
+          <Sparkles className="h-4 w-4" />
+        )}
+        <span>{t("promptWorkbench.generate", { defaultValue: "AI 生成" })}</span>
+      </MagneticButton>
+    );
+  };
+
   return (
     <div className="flex flex-col gap-6 text-slate-700 transition-colors dark:text-slate-200">
       <PageHeader
@@ -1632,328 +1657,328 @@ export default function PromptWorkbenchPage() {
           defaultValue: "从解析需求到发布 Prompt 的一站式工作区。",
         })}
         actions={
-          <>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="gap-1.5 rounded-full border border-primary/50 bg-primary/5 px-4 text-primary shadow-[0_18px_40px_-24px_rgba(59,130,246,0.6)] transition hover:bg-primary/10 hover:text-primary/90 focus-visible:ring-primary/50 dark:border-primary/40 dark:bg-primary/10 dark:text-primary-100 dark:hover:bg-primary/20"
-              onClick={handleCancel}
-              disabled={isGenerating || interpretMutation.isPending}
-            >
-              <RotateCcw className="h-3.5 w-3.5" />
-              {t("promptWorkbench.cancel", { defaultValue: "重置" })}
-            </Button>
-            <Button
-              type="button"
-              variant="secondary"
-              size="sm"
-              className="shadow-sm"
-              onClick={handleGenerate}
-              disabled={!canGenerate}
-            >
-              {isGenerating ? (
-                <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
-              ) : (
-                <Sparkles className="mr-2 h-4 w-4" />
-              )}
-              {t("promptWorkbench.generate", { defaultValue: "AI 生成" })}
-            </Button>
-          </>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="gap-1.5 rounded-full border border-primary/50 bg-primary/5 px-4 text-primary shadow-[0_18px_40px_-24px_rgba(59,130,246,0.6)] transition hover:bg-primary/10 hover:text-primary/90 focus-visible:ring-primary/50 dark:border-primary/40 dark:bg-primary/10 dark:text-primary-100 dark:hover:bg-primary/20"
+            onClick={handleCancel}
+            disabled={isGenerating || interpretMutation.isPending}
+          >
+            <RotateCcw className="h-3.5 w-3.5" />
+            {t("promptWorkbench.cancel", { defaultValue: "重置" })}
+          </Button>
         }
       />
-      <div className="grid grid-cols-1 gap-6 xl:grid-cols-[360px_minmax(320px,360px)_minmax(0,1fr)] xl:items-start">
-      <GlassCard className="flex flex-col gap-6">
-        <header className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 rounded-2xl border border-dashed border-primary/60 bg-primary/5 p-4 text-primary shadow-sm md:flex-row md:items-center md:justify-between dark:border-primary/40 dark:bg-primary/10 dark:text-primary-100">
+        <div className="flex items-start gap-3 md:items-center">
+          <MousePointerClick aria-hidden="true" className="h-10 w-10 rounded-full bg-primary/10 p-2 text-primary shadow-inner dark:bg-primary/20" />
           <div>
-            <p className="text-xs uppercase tracking-[0.28em] text-slate-400 dark:text-slate-500">
-              {t("promptWorkbench.modelEyebrow", { defaultValue: "模型设置" })}
-            </p>
-            <h2 className="mt-1 text-xl font-semibold text-slate-800 dark:text-slate-100">
-              {t("promptWorkbench.modelTitle", {
-                defaultValue: "选择生成模型",
+            <p className="text-sm font-semibold">
+              {t("promptWorkbench.generateCallout.title", {
+                defaultValue: "一键生成 Prompt",
               })}
-            </h2>
+            </p>
+            <p className="mt-1 text-xs text-primary/80 dark:text-primary-100/80 md:text-primary/70">
+              {t("promptWorkbench.generateCallout.subtitle", {
+                defaultValue: "填写主题和要求后，点击按钮即可调用 AI 生成草稿。",
+              })}
+            </p>
           </div>
-        </header>
-        <div className="rounded-2xl border border-white/60 bg-white/80 p-4 shadow-sm transition-colors dark:border-slate-800 dark:bg-slate-900/70">
+        </div>
+        {renderGenerateButton({
+          className: "min-w-[180px] md:w-auto",
+        })}
+      </div>
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] lg:gap-7 xl:grid-cols-[360px_minmax(320px,360px)_minmax(0,1fr)] xl:gap-8 xl:items-start">
+        <GlassCard className="flex flex-col gap-6 lg:col-span-1">
+          <header className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-xs uppercase tracking-[0.28em] text-slate-400 dark:text-slate-500">
+                {t("promptWorkbench.modelEyebrow", { defaultValue: "模型设置" })}
+              </p>
+              <h2 className="mt-1 text-xl font-semibold text-slate-800 dark:text-slate-100">
+                {t("promptWorkbench.modelTitle", {
+                  defaultValue: "选择生成模型",
+                })}
+              </h2>
+            </div>
+          </header>
+          <div className="rounded-2xl border border-white/60 bg-white/80 p-4 shadow-sm transition-colors dark:border-slate-800 dark:bg-slate-900/70">
+            <p className="text-xs text-slate-500 dark:text-slate-400">
+              {t("promptWorkbench.modelHint", {
+                defaultValue: "解析需求、补词与生成都会使用该模型。",
+              })}
+            </p>
+            <div className="mt-3 flex flex-wrap gap-2 text-xs">
+              {modelOptions.map((option) => {
+                const selected = model === option.key;
+                return (
+                  <Badge
+                    key={option.key}
+                    className={cn(
+                      "workbench-pill group relative cursor-pointer overflow-hidden px-3 py-1 transition-colors",
+                      option.disabled && "cursor-not-allowed opacity-60",
+                      selected && "border-transparent bg-primary text-white",
+                    )}
+                    variant={selected ? "default" : "outline"}
+                    onClick={() =>
+                      !option.disabled && handleModelSelect(option.key)
+                    }
+                    aria-disabled={option.disabled}
+                  >
+                    <span className="relative z-10">{option.label}</span>
+                  </Badge>
+                );
+              })}
+              {modelOptions.length === 0 ? (
+                <span className="text-xs text-slate-400 dark:text-slate-500">
+                  {t("promptWorkbench.modelEmptyHint", {
+                    defaultValue: "暂无可用模型，请先在设置页配置。",
+                  })}
+                </span>
+              ) : null}
+            </div>
+          </div>
+
+          <header className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="space-y-1">
+              <p className="text-xs uppercase tracking-[0.28em] text-slate-400 dark:text-slate-500">
+                {t("promptWorkbench.descriptionEyebrow", {
+                  defaultValue: "需求解析",
+                })}
+              </p>
+              <h2 className="mt-1 text-xl font-semibold text-slate-800 dark:text-slate-100">
+                {t("promptWorkbench.descriptionTitle", {
+                  defaultValue: "自然语言描述",
+                })}
+              </h2>
+              <p className="text-xs text-slate-400 dark:text-slate-500">
+                {t("promptWorkbench.descriptionDetailHint", {
+                  defaultValue: "请尽可能详细描述需求，帮助 AI 理解你的目标。",
+                })}
+              </p>
+            </div>
+          </header>
           <p className="text-xs text-slate-500 dark:text-slate-400">
-            {t("promptWorkbench.modelHint", {
-              defaultValue: "解析需求、补词与生成都会使用该模型。",
+            {t("promptWorkbench.descriptionHelper", {
+              defaultValue:
+                "解析后会自动填写主题并补充首批关键词，可随时手动调整。",
             })}
           </p>
-          <div className="mt-3 flex flex-wrap gap-2 text-xs">
-            {modelOptions.map((option) => {
-              const selected = model === option.key;
-              return (
-                <Badge
-                  key={option.key}
-                  className={cn(
-                    "workbench-pill group relative cursor-pointer overflow-hidden px-3 py-1 transition-colors",
-                    option.disabled && "cursor-not-allowed opacity-60",
-                    selected && "border-transparent bg-primary text-white",
-                  )}
-                  variant={selected ? "default" : "outline"}
-                  onClick={() =>
-                    !option.disabled && handleModelSelect(option.key)
-                  }
-                  aria-disabled={option.disabled}
-                >
-                  <span className="relative z-10">
-                    {option.label}
-                  </span>
-                </Badge>
-              );
-            })}
-            {modelOptions.length === 0 ? (
-              <span className="text-xs text-slate-400 dark:text-slate-500">
-                {t("promptWorkbench.modelEmptyHint", {
-                  defaultValue: "暂无可用模型，请先在设置页配置。",
-                })}
-              </span>
-            ) : null}
-          </div>
-        </div>
-
-        <header className="flex items-center justify-between">
-          <div className="space-y-1">
-            <p className="text-xs uppercase tracking-[0.28em] text-slate-400 dark:text-slate-500">
-              {t("promptWorkbench.descriptionEyebrow", {
-                defaultValue: "需求解析",
+          <div className="rounded-2xl border border-white/60 bg-white/70 p-4 shadow-sm transition-colors dark:border-slate-800 dark:bg-slate-900/70">
+            <Textarea
+              value={description}
+              onChange={(event: ChangeEvent<HTMLTextAreaElement>) =>
+                setDescription(event.target.value)
+              }
+              placeholder={t("promptWorkbench.descriptionPlaceholder", {
+                defaultValue: "例如：生成一份针对 React Hooks 的技术面试问答",
               })}
+              className="min-h-[160px]"
+            />
+            <div className="mt-3 flex flex-col gap-3 text-xs text-slate-400 dark:text-slate-500 sm:flex-row sm:items-center sm:justify-between">
+              {confidence !== null ? (
+                <span>
+                  {t("promptWorkbench.confidence", {
+                    defaultValue: "置信度：{{value}}",
+                    value: Math.round(confidence * 100) / 100,
+                  })}
+                </span>
+              ) : (
+                <span>
+                  {t("promptWorkbench.confidenceHint", {
+                    defaultValue: "点击下方按钮让 AI 解析需求",
+                  })}
+                </span>
+              )}
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={handleInterpret}
+                disabled={interpretMutation.isPending || !description.trim()}
+              >
+                {interpretMutation.isPending ? (
+                  <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <Sparkles className="mr-2 h-4 w-4" />
+                )}
+                {t("promptWorkbench.interpret", { defaultValue: "解析描述" })}
+              </Button>
+            </div>
+          </div>
+
+          <header>
+            <p className="text-xs uppercase tracking-[0.28em] text-slate-400 dark:text-slate-500">
+              {t("promptWorkbench.keywordsTitle", { defaultValue: "关键词" })}
             </p>
             <h2 className="mt-1 text-xl font-semibold text-slate-800 dark:text-slate-100">
-              {t("promptWorkbench.descriptionTitle", {
-                defaultValue: "自然语言描述",
+              {t("promptWorkbench.keywordsSubtitle", {
+                defaultValue: "关键词治理",
               })}
             </h2>
-            <p className="text-xs text-slate-400 dark:text-slate-500">
-              {t("promptWorkbench.descriptionDetailHint", {
-                defaultValue: "请尽可能详细描述需求，帮助 AI 理解你的目标。",
+          </header>
+
+          <div className="rounded-2xl border border-white/60 bg-white/80 p-4 shadow-sm transition-colors dark:border-slate-800 dark:bg-slate-900/70">
+            <p className="text-sm font-medium text-slate-600 dark:text-slate-300">
+              {t("promptWorkbench.addKeyword", {
+                defaultValue: "手动添加关键词",
               })}
             </p>
-          </div>
-        </header>
-        <p className="text-xs text-slate-500 dark:text-slate-400">
-          {t("promptWorkbench.descriptionHelper", {
-            defaultValue:
-              "解析后会自动填写主题并补充首批关键词，可随时手动调整。",
-          })}
-        </p>
-        <div className="rounded-2xl border border-white/60 bg-white/70 p-4 shadow-sm transition-colors dark:border-slate-800 dark:bg-slate-900/70">
-          <Textarea
-            value={description}
-            onChange={(event: ChangeEvent<HTMLTextAreaElement>) =>
-              setDescription(event.target.value)
-            }
-            placeholder={t("promptWorkbench.descriptionPlaceholder", {
-              defaultValue: "例如：生成一份针对 React Hooks 的技术面试问答",
-            })}
-            className="min-h-[160px]"
-          />
-          <div className="mt-3 flex items-center justify-between gap-3 text-xs text-slate-400 dark:text-slate-500">
-            {confidence !== null ? (
-              <span>
-                {t("promptWorkbench.confidence", {
-                  defaultValue: "置信度：{{value}}",
-                  value: Math.round(confidence * 100) / 100,
+            <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
+              <Input
+                value={newKeyword}
+                onChange={(event: ChangeEvent<HTMLInputElement>) =>
+                  setNewKeyword(event.target.value)
+                }
+                placeholder={t("promptWorkbench.inputPlaceholder", {
+                  defaultValue: "输入关键词",
                 })}
-              </span>
-            ) : (
-              <span>
-                {t("promptWorkbench.confidenceHint", {
-                  defaultValue: "点击下方按钮让 AI 解析需求",
+                maxLength={keywordMaxLength * 2}
+              />
+              <Button
+                variant="secondary"
+                size="sm"
+                className="sm:w-auto sm:min-w-[132px] sm:justify-center sm:px-5"
+                onClick={handleAddKeyword}
+                disabled={manualKeywordMutation.isPending}
+              >
+                {manualKeywordMutation.isPending ? (
+                  <LoaderCircle className="mr-1.5 h-4 w-4 animate-spin" />
+                ) : (
+                  <Plus className="mr-1.5 h-4 w-4" />
+                )}
+                {t("promptWorkbench.addKeyword", { defaultValue: "添加" })}
+              </Button>
+            </div>
+            <p className="mt-2 text-xs text-slate-400 dark:text-slate-500">
+              {t("promptWorkbench.keywordLimitNote", {
+                limit: keywordLimit,
+                defaultValue: "提示：正向与负向各最多 {{limit}} 个关键词",
+              })}
+            </p>
+            <p className="text-xs text-slate-400 dark:text-slate-500">
+              {t("promptWorkbench.keywordLengthHint", {
+                limit: keywordMaxLength,
+                defaultValue:
+                  "Each keyword can contain at most {{limit}} characters",
+              })}
+            </p>
+            <div className="mt-3 flex gap-2 text-xs">
+              <Badge
+                className={cn(
+                  "workbench-pill group relative cursor-pointer overflow-hidden px-3 py-1 transition-colors",
+                  polarity === "positive" &&
+                    "border-transparent bg-primary text-white",
+                )}
+                variant={polarity === "positive" ? "default" : "outline"}
+                onClick={() => setPolarity("positive")}
+              >
+                <span className="relative z-10">
+                  {t("promptWorkbench.positive", { defaultValue: "正向" })}
+                </span>
+              </Badge>
+              <Badge
+                className={cn(
+                  "workbench-pill group relative cursor-pointer overflow-hidden px-3 py-1 transition-colors",
+                  polarity === "negative" &&
+                    "border-transparent bg-secondary text-white",
+                )}
+                variant={polarity === "negative" ? "default" : "outline"}
+                onClick={() => setPolarity("negative")}
+              >
+                <span className="relative z-10">
+                  {t("promptWorkbench.negative", { defaultValue: "负向" })}
+                </span>
+              </Badge>
+            </div>
+            <div className="mt-4 flex flex-wrap items-center gap-3 text-sm text-slate-500 dark:text-slate-300">
+              <span>{t("promptWorkbench.augmentSuggestion")}</span>
+              <Button
+                variant="secondary"
+                size="sm"
+                className="shadow-sm"
+                onClick={handleAugment}
+                disabled={isAugmenting || !topic}
+              >
+                {isAugmenting ? (
+                  <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <Sparkles className="mr-2 h-4 w-4" />
+                )}
+                {t("promptWorkbench.augmentKeywords", {
+                  defaultValue: "AI 补充关键词",
                 })}
-              </span>
-            )}
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={handleInterpret}
-              disabled={interpretMutation.isPending || !description.trim()}
-            >
-              {interpretMutation.isPending ? (
-                <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
-              ) : (
-                <Sparkles className="mr-2 h-4 w-4" />
-              )}
-              {t("promptWorkbench.interpret", { defaultValue: "解析描述" })}
-            </Button>
+              </Button>
+            </div>
           </div>
-        </div>
+        </GlassCard>
 
-        <header>
-          <p className="text-xs uppercase tracking-[0.28em] text-slate-400 dark:text-slate-500">
-            {t("promptWorkbench.keywordsTitle", { defaultValue: "关键词" })}
-          </p>
-          <h2 className="mt-1 text-xl font-semibold text-slate-800 dark:text-slate-100">
-            {t("promptWorkbench.keywordsSubtitle", {
-              defaultValue: "关键词治理",
-            })}
-          </h2>
-        </header>
-
-        <div className="rounded-2xl border border-white/60 bg-white/80 p-4 shadow-sm transition-colors dark:border-slate-800 dark:bg-slate-900/70">
-          <p className="text-sm font-medium text-slate-600 dark:text-slate-300">
-            {t("promptWorkbench.addKeyword", {
-              defaultValue: "手动添加关键词",
-            })}
-          </p>
-          <div className="mt-3 flex gap-2">
-            <Input
-              value={newKeyword}
-              onChange={(event: ChangeEvent<HTMLInputElement>) =>
-                setNewKeyword(event.target.value)
+        <GlassCard className="flex flex-col gap-5 lg:col-span-1">
+          <DndContext
+            sensors={sensors}
+            modifiers={[snapOverlayToCursor]}
+            onDragStart={handleDragStart}
+            onDragOver={handleDragOver}
+            onDragEnd={handleDragEnd}
+            onDragCancel={handleDragCancel}
+          >
+            <KeywordSection
+              title={t("promptWorkbench.positiveSectionTitle", {
+                defaultValue: "正向关键词",
+              })}
+              hint={t("promptWorkbench.keywordPositiveHint", {
+                count: positiveKeywords.length,
+                limit: keywordLimit,
+                defaultValue:
+                  "已选 {{count}} / {{limit}} 个，点击标签可移除，至少保留 1 个关键词",
+              })}
+              keywords={positiveKeywords}
+              polarity="positive"
+              droppableId={POSITIVE_CONTAINER_ID}
+              onSort={() => sortByWeight("positive")}
+              dropIndicatorIndex={
+                dropIndicator?.polarity === "positive"
+                  ? dropIndicator.index
+                  : null
               }
-              placeholder={t("promptWorkbench.inputPlaceholder", {
-                defaultValue: "输入关键词",
-              })}
-              maxLength={keywordMaxLength * 2}
+              onWeightChange={handleWeightChange}
+              onRemove={handleRemoveKeyword}
             />
-            <Button
-              variant="secondary"
-              size="default"
-              className="min-w-[132px] justify-center px-5"
-              onClick={handleAddKeyword}
-              disabled={manualKeywordMutation.isPending}
-            >
-              {manualKeywordMutation.isPending ? (
-                <LoaderCircle className="mr-1.5 h-4 w-4 animate-spin" />
-              ) : (
-                <Plus className="mr-1.5 h-4 w-4" />
-              )}
-              {t("promptWorkbench.addKeyword", { defaultValue: "添加" })}
-            </Button>
-          </div>
-          <p className="mt-2 text-xs text-slate-400 dark:text-slate-500">
-            {t("promptWorkbench.keywordLimitNote", {
-              limit: keywordLimit,
-              defaultValue: "提示：正向与负向各最多 {{limit}} 个关键词",
-            })}
-          </p>
-          <p className="text-xs text-slate-400 dark:text-slate-500">
-            {t("promptWorkbench.keywordLengthHint", {
-              limit: keywordMaxLength,
-              defaultValue:
-                "Each keyword can contain at most {{limit}} characters",
-            })}
-          </p>
-          <div className="mt-3 flex gap-2 text-xs">
-            <Badge
-              className={cn(
-                "workbench-pill group relative cursor-pointer overflow-hidden px-3 py-1 transition-colors",
-                polarity === "positive" &&
-                  "border-transparent bg-primary text-white",
-              )}
-              variant={polarity === "positive" ? "default" : "outline"}
-              onClick={() => setPolarity("positive")}
-            >
-              <span className="relative z-10">
-                {t("promptWorkbench.positive", { defaultValue: "正向" })}
-              </span>
-            </Badge>
-            <Badge
-              className={cn(
-                "workbench-pill group relative cursor-pointer overflow-hidden px-3 py-1 transition-colors",
-                polarity === "negative" &&
-                  "border-transparent bg-secondary text-white",
-              )}
-              variant={polarity === "negative" ? "default" : "outline"}
-              onClick={() => setPolarity("negative")}
-            >
-              <span className="relative z-10">
-                {t("promptWorkbench.negative", { defaultValue: "负向" })}
-              </span>
-            </Badge>
-          </div>
-          <div className="mt-4 flex flex-wrap items-center gap-3 text-sm text-slate-500 dark:text-slate-300">
-            <span>{t("promptWorkbench.augmentSuggestion")}</span>
-            <Button
-              variant="secondary"
-              size="sm"
-              className="shadow-sm"
-              onClick={handleAugment}
-              disabled={isAugmenting || !topic}
-            >
-              {isAugmenting ? (
-                <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
-              ) : (
-                <Sparkles className="mr-2 h-4 w-4" />
-              )}
-              {t("promptWorkbench.augmentKeywords", {
-                defaultValue: "AI 补充关键词",
+            <KeywordSection
+              title={t("promptWorkbench.negativeSectionTitle", {
+                defaultValue: "负向关键词",
               })}
-            </Button>
-          </div>
-        </div>
+              hint={t("promptWorkbench.keywordNegativeHint", {
+                count: negativeKeywords.length,
+                limit: keywordLimit,
+                defaultValue: "已选 {{count}} / {{limit}} 个，点击标签可移除",
+              })}
+              keywords={negativeKeywords}
+              polarity="negative"
+              droppableId={NEGATIVE_CONTAINER_ID}
+              onSort={() => sortByWeight("negative")}
+              dropIndicatorIndex={
+                dropIndicator?.polarity === "negative"
+                  ? dropIndicator.index
+                  : null
+              }
+              onWeightChange={handleWeightChange}
+              onRemove={handleRemoveKeyword}
+            />
+            <DragOverlay dropAnimation={null}>
+              {activeKeyword ? (
+                <KeywordDragPreview keyword={activeKeyword} />
+              ) : null}
+            </DragOverlay>
+          </DndContext>
+        </GlassCard>
 
-      </GlassCard>
-
-      <GlassCard className="flex flex-col gap-5">
-        <DndContext
-          sensors={sensors}
-          modifiers={[snapOverlayToCursor]}
-          onDragStart={handleDragStart}
-          onDragOver={handleDragOver}
-          onDragEnd={handleDragEnd}
-          onDragCancel={handleDragCancel}
+        <GlassCard
+          className="flex h-full flex-col gap-6 lg:col-span-2 xl:col-span-1"
+          style={{ minHeight: promptCardMinHeight }}
         >
-          <KeywordSection
-            title={t("promptWorkbench.positiveSectionTitle", {
-              defaultValue: "正向关键词",
-            })}
-            hint={t("promptWorkbench.keywordPositiveHint", {
-              count: positiveKeywords.length,
-              limit: keywordLimit,
-              defaultValue:
-                "已选 {{count}} / {{limit}} 个，点击标签可移除，至少保留 1 个关键词",
-            })}
-            keywords={positiveKeywords}
-            polarity="positive"
-            droppableId={POSITIVE_CONTAINER_ID}
-            onSort={() => sortByWeight("positive")}
-            dropIndicatorIndex={
-              dropIndicator?.polarity === "positive"
-                ? dropIndicator.index
-                : null
-            }
-            onWeightChange={handleWeightChange}
-            onRemove={handleRemoveKeyword}
-          />
-          <KeywordSection
-            title={t("promptWorkbench.negativeSectionTitle", {
-              defaultValue: "负向关键词",
-            })}
-            hint={t("promptWorkbench.keywordNegativeHint", {
-              count: negativeKeywords.length,
-              limit: keywordLimit,
-              defaultValue: "已选 {{count}} / {{limit}} 个，点击标签可移除",
-            })}
-            keywords={negativeKeywords}
-            polarity="negative"
-            droppableId={NEGATIVE_CONTAINER_ID}
-            onSort={() => sortByWeight("negative")}
-            dropIndicatorIndex={
-              dropIndicator?.polarity === "negative"
-                ? dropIndicator.index
-                : null
-            }
-            onWeightChange={handleWeightChange}
-            onRemove={handleRemoveKeyword}
-          />
-          <DragOverlay dropAnimation={null}>
-            {activeKeyword ? (
-              <KeywordDragPreview keyword={activeKeyword} />
-            ) : null}
-          </DragOverlay>
-        </DndContext>
-      </GlassCard>
-
-      <GlassCard
-        className="flex h-full flex-col gap-6"
-        style={{ minHeight: promptCardMinHeight }}
-      >
-        <header className="flex items-center justify-between">
+        <header className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <p className="text-xs uppercase tracking-[0.28em] text-slate-400 dark:text-slate-500">
               {t("promptWorkbench.workbenchEyebrow", {
@@ -2004,7 +2029,7 @@ export default function PromptWorkbenchPage() {
               />
             </div>
             <div className="flex flex-col">
-              <div className="flex items-center justify-between gap-2">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                 <label className="text-sm font-medium text-slate-600 dark:text-slate-300">
                   {t("promptWorkbench.tagsLabel", { defaultValue: "标签" })}
                 </label>
@@ -2114,7 +2139,7 @@ export default function PromptWorkbenchPage() {
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center justify-end gap-3">
+        <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
           <Button
             variant="outline"
             onClick={handleSaveDraft}
@@ -2139,10 +2164,10 @@ export default function PromptWorkbenchPage() {
             {t("promptWorkbench.publish", { defaultValue: "发布" })}
           </Button>
         </div>
-      </GlassCard>
+        </GlassCard>
+      </div>
     </div>
-  </div>
-);
+  );
 }
 
 interface KeywordSectionProps {
@@ -2174,7 +2199,7 @@ function KeywordSection({
 
   return (
     <div className="space-y-3">
-      <div className="flex flex-wrap items-center justify-between gap-2 text-sm text-slate-500 dark:text-slate-400">
+      <div className="flex flex-col gap-2 text-sm text-slate-500 dark:text-slate-400 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
         <span className="flex-1 min-w-[140px]">{title}</span>
         {onSort ? (
           <Button

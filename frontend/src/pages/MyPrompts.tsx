@@ -1,4 +1,5 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { AnimatePresence, motion } from "framer-motion";
 import { useTranslation } from "react-i18next";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
@@ -7,8 +8,7 @@ import {
   LoaderCircle,
   Edit3,
   Trash2,
-  ChevronLeft,
-  ChevronRight,
+  Save,
   RefreshCcw,
   Sparkles,
   Settings,
@@ -17,6 +17,7 @@ import {
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
 import { SpotlightSearch } from "../components/ui/spotlight-search";
+import { PaginationControls } from "../components/ui/pagination-controls";
 import { ConfirmDialog } from "../components/ui/confirm-dialog";
 import {
   PROMPT_KEYWORD_MAX_LENGTH,
@@ -309,6 +310,10 @@ export default function MyPromptsPage(): JSX.Element {
 
   const meta: PromptListMeta | undefined = listQuery.data?.meta;
   const items: PromptListItem[] = listQuery.data?.items ?? [];
+  const motionKey = useMemo(
+    () => items.map((item) => item.id).join("-"),
+    [items],
+  );
   const totalPages = meta?.total_pages ?? 1;
   const currentCount =
     meta?.current_count ?? Math.min(items.length, MY_PROMPTS_PAGE_SIZE);
@@ -502,6 +507,20 @@ export default function MyPromptsPage(): JSX.Element {
             </span>
           ) : null}
         </div>
+        <div className="px-4 pt-4">
+          <PaginationControls
+            page={page}
+            totalPages={totalPages}
+            currentCount={currentCount}
+            onPrev={() => handlePageChange(page - 1)}
+            onNext={() => handlePageChange(page + 1)}
+            prevLabel={t("publicPrompts.prevPage")}
+            nextLabel={t("publicPrompts.nextPage")}
+            pageLabel={t("myPrompts.pagination.page", { page, total: totalPages })}
+            countLabel={t("myPrompts.pagination.count", { count: currentCount })}
+            className="border-none bg-transparent px-0 py-0 shadow-none dark:bg-transparent"
+          />
+        </div>
 
         {isLoading ? (
           <div className="flex flex-col gap-4 px-6 py-10">
@@ -537,8 +556,17 @@ export default function MyPromptsPage(): JSX.Element {
             </Button>
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-white/60 text-sm dark:divide-slate-800">
+          <AnimatePresence mode="wait">
+            {items.length > 0 ? (
+              <motion.div
+                key={`${motionKey}-${status}-${page}-${favoritedOnly}-${committedSearch}`}
+                initial={{ opacity: 0, y: 16 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -16 }}
+                transition={{ duration: 0.35, ease: [0.33, 1, 0.68, 1] }}
+                className="overflow-x-auto"
+              >
+                <table className="min-w-full divide-y divide-white/60 text-sm dark:divide-slate-800">
               <thead className="bg-white/80 text-left text-xs font-semibold uppercase tracking-[0.24em] text-slate-400 dark:bg-slate-900/60">
                 <tr>
                   <th className="px-6 py-3">{t("myPrompts.table.topic")}</th>
@@ -588,44 +616,24 @@ export default function MyPromptsPage(): JSX.Element {
                 />
                 ))}
               </tbody>
-            </table>
-          </div>
+                </table>
+              </motion.div>
+            ) : null}
+          </AnimatePresence>
         )}
       </section>
 
-      <footer className="flex items-center justify-between rounded-3xl border border-white/60 bg-white/75 px-4 py-3 text-sm text-slate-500 shadow-sm transition-colors dark:border-slate-800 dark:bg-slate-900/60 dark:text-slate-400">
-        <div className="flex flex-col gap-1 text-xs sm:flex-row sm:items-center sm:gap-4 sm:text-sm">
-          <span>
-            {t("myPrompts.pagination.page", {
-              page,
-              total: totalPages,
-            })}
-          </span>
-          <span>
-            {t("myPrompts.pagination.count", {
-              count: currentCount,
-            })}
-          </span>
-        </div>
-        <div className="flex items-center gap-2">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => handlePageChange(page - 1)}
-            disabled={page <= 1}
-          >
-            <ChevronLeft className="h-4 w-4" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => handlePageChange(page + 1)}
-            disabled={page >= totalPages}
-          >
-            <ChevronRight className="h-4 w-4" />
-          </Button>
-        </div>
-      </footer>
+      <PaginationControls
+        page={page}
+        totalPages={totalPages}
+        currentCount={currentCount}
+        onPrev={() => handlePageChange(page - 1)}
+        onNext={() => handlePageChange(page + 1)}
+        prevLabel={t("publicPrompts.prevPage")}
+        nextLabel={t("publicPrompts.nextPage")}
+        pageLabel={t("myPrompts.pagination.page", { page, total: totalPages })}
+        countLabel={t("myPrompts.pagination.count", { count: currentCount })}
+      />
       <ConfirmDialog
         open={confirmDeleteId != null}
         title={t("myPrompts.deleteDialogTitle")}
@@ -801,56 +809,51 @@ function PromptRow({
         </div>
       </td>
       <td className="px-4 py-4 align-top">
-        <div className="flex flex-col items-end gap-2">
+        <div className="flex flex-wrap items-center justify-end gap-2">
           <Button
             size="sm"
-            className="min-w-[100px] whitespace-nowrap bg-primary/85 text-white shadow-sm hover:bg-primary focus-visible:ring-primary/60 dark:bg-primary/80"
+            className="h-9 w-9 min-w-[2.25rem] rounded-xl bg-primary/85 p-0 text-white shadow-sm hover:bg-primary focus-visible:ring-primary/60 dark:bg-primary/80"
             onClick={onPublish}
             disabled={isPublishing || isEditing || isDeleting}
+            title={t("myPrompts.actions.publish")}
+            aria-label={t("myPrompts.actions.publish")}
           >
             {isPublishing ? (
               <LoaderCircle className="h-4 w-4 animate-spin" />
             ) : (
-              <Sparkles className="h-4 w-4" />
+              <Save className="h-4 w-4" />
             )}
-            <span className="ml-2 whitespace-nowrap">
-              {t("myPrompts.actions.publish")}
-            </span>
           </Button>
-          <div className="flex w-full justify-end gap-2 sm:w-auto">
-            <Button
-              size="sm"
-              variant="outline"
-              className="whitespace-nowrap"
-              onClick={onEdit}
-              disabled={isEditing || isDeleting}
-            >
-              {isEditing ? (
-                <LoaderCircle className="h-4 w-4 animate-spin" />
-              ) : (
-                <Edit3 className="h-4 w-4" />
-              )}
-              <span className="ml-2 whitespace-nowrap">
-                {t("myPrompts.actions.edit")}
-              </span>
-            </Button>
-            <Button
-              size="sm"
-              variant="ghost"
-              className="whitespace-nowrap text-rose-500 hover:bg-rose-50 hover:text-rose-600 dark:text-rose-400 dark:hover:bg-rose-500/10"
-              onClick={onDelete}
-              disabled={isDeleting || isEditing}
-            >
-              {isDeleting ? (
-                <LoaderCircle className="h-4 w-4 animate-spin" />
-              ) : (
-                <Trash2 className="h-4 w-4" />
-              )}
-              <span className="ml-2 whitespace-nowrap">
-                {t("myPrompts.actions.delete")}
-              </span>
-            </Button>
-          </div>
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-9 w-9 min-w-[2.25rem] rounded-xl p-0"
+            onClick={onEdit}
+            disabled={isEditing || isDeleting}
+            title={t("myPrompts.actions.edit")}
+            aria-label={t("myPrompts.actions.edit")}
+          >
+            {isEditing ? (
+              <LoaderCircle className="h-4 w-4 animate-spin" />
+            ) : (
+              <Edit3 className="h-4 w-4" />
+            )}
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-9 w-9 min-w-[2.25rem] rounded-xl border-rose-200 p-0 text-rose-500 hover:bg-rose-50 hover:text-rose-600 dark:border-rose-500/40 dark:text-rose-300 dark:hover:bg-rose-500/10"
+            onClick={onDelete}
+            disabled={isDeleting || isEditing}
+            title={t("myPrompts.actions.delete")}
+            aria-label={t("myPrompts.actions.delete")}
+          >
+            {isDeleting ? (
+              <LoaderCircle className="h-4 w-4 animate-spin" />
+            ) : (
+              <Trash2 className="h-4 w-4" />
+            )}
+          </Button>
         </div>
       </td>
     </tr>

@@ -37,6 +37,7 @@ import {
 } from "../lib/api";
 import { cn } from "../lib/utils";
 import { MagneticButton } from "../components/ui/magnetic-button";
+import { ReactBitsParticles } from "../components/ui/react-bits-particles";
 
 const SEARCH_HISTORY_STORAGE_KEY = "promptgen/dashboard/search-history";
 const SEARCH_HISTORY_LIMIT = 5;
@@ -153,6 +154,7 @@ function SpotlightHero({
                 <div className="absolute -top-24 left-1/4 h-72 w-72 rounded-full bg-gradient-to-br from-indigo-400/40 via-sky-300/30 to-purple-400/30 blur-3xl" />
                 <div className="absolute -bottom-32 right-1/4 h-80 w-80 rounded-full bg-gradient-to-br from-emerald-300/35 via-cyan-300/25 to-blue-300/25 blur-[120px]" />
                 <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.65),transparent_60%)] dark:bg-[radial-gradient(circle_at_top_left,rgba(148,163,255,0.12),transparent_70%)]" />
+                <ReactBitsParticles className="absolute inset-0 mix-blend-screen" />
                 <div className="absolute inset-0 opacity-[0.08] bg-noise" />
             </div>
 

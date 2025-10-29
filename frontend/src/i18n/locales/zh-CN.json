@@ -238,6 +238,7 @@
     "total": "共有 {{count}} 条评论",
     "replyCount": "共有 {{count}} 条回复",
     "anonymous": "匿名用户",
+    "avatarAlt": "{{username}} 的头像",
     "notePlaceholder": "可选填写审核备注",
     "emptyBody": "评论内容不能为空。",
     "offlineDisabled": "离线模式暂不支持发表评论。",
@@ -366,6 +367,14 @@
       "placeholder": "全局搜索优质 Prompt…",
       "ariaLabel": "输入关键词后按回车跳转优质 Prompt"
     },
+    "mobileMenu": {
+      "open": "打开导航菜单",
+      "close": "关闭导航菜单"
+    },
+    "sidebar": {
+      "collapse": "收起侧边栏",
+      "expand": "展开侧边栏"
+    },
     "logout": "退出登录",
     "logoutSuccess": "已安全退出登录",
     "backToTop": "回到顶部"
@@ -431,6 +440,11 @@
     "interpretLoading": "正在解析描述...",
     "augmentLoading": "正在补充关键词...",
     "generateLoading": "正在生成 Prompt… AI 生成可能需要更长时间，请稍候",
+    "generateHint": "准备好后点这里生成 Prompt",
+    "generateCallout": {
+      "title": "一键生成 Prompt",
+      "subtitle": "先选择模型并解析需求，然后点击按钮即可生成草稿。"
+    },
     "contentRejected": "内容审核未通过：{{reason}}",
     "contentRejectedFallbackReason": "内容包含敏感信息，请修改后再试",
     "keywordDropPlaceholder": "将关键词拖到这里",
@@ -579,7 +593,7 @@
       "favorite": "收藏",
       "unfavorite": "取消收藏"
     },
-    "publishSuccess": "已发布，状态已更新为“已发布”。",
+    "publishSuccess": "已保存，状态已更新为“已发布”。",
     "publishFailed": "发布失败，请稍后再试。",
     "favorite": {
       "success": "已收藏该 Prompt。",

@@ -238,6 +238,7 @@
     "total": "{{count}} comments in total",
     "replyCount": "{{count}} replies",
     "anonymous": "Anonymous",
+    "avatarAlt": "Avatar of {{username}}",
     "notePlaceholder": "Optional review note",
     "emptyBody": "Comment cannot be empty.",
     "offlineDisabled": "Comments are unavailable in offline mode.",
@@ -366,6 +367,14 @@
       "placeholder": "Search premium prompts…",
       "ariaLabel": "Enter keywords and press Enter to open premium prompts"
     },
+    "mobileMenu": {
+      "open": "Open navigation menu",
+      "close": "Close navigation menu"
+    },
+    "sidebar": {
+      "collapse": "Collapse sidebar",
+      "expand": "Expand sidebar"
+    },
     "logout": "Sign out",
     "logoutSuccess": "Signed out successfully",
     "backToTop": "Back to top"
@@ -431,6 +440,11 @@
     "interpretLoading": "Interpreting description...",
     "augmentLoading": "Augmenting keywords...",
     "generateLoading": "Generating prompt… AI generation can take a bit longer, please wait",
+    "generateHint": "Ready? Click here to build your prompt.",
+    "generateCallout": {
+      "title": "Generate in one click",
+      "subtitle": "Pick a model, interpret your brief, then hit the button to draft with AI."
+    },
     "contentRejected": "Content review failed: {{reason}}",
     "contentRejectedFallbackReason": "The text contains restricted content. Please revise and try again.",
     "keywordDropPlaceholder": "Drop keywords here",

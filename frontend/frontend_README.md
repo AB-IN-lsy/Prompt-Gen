@@ -27,6 +27,14 @@
 - **数据备份（JSON）**：`Settings.tsx` 的“应用设置”标签页提供“数据备份与导入”卡片，支持 JSON 导出/导入（合并/覆盖两种模式），会调用 `POST /api/prompts/export` 与 `POST /api/prompts/import`，并记录最近一次导出/导入的路径、数量与错误详情，操作完成后自动刷新 `MyPrompts` 列表。
 - **点赞数据预埋**：后端已提供 `POST/DELETE /api/prompts/:id/like` 以及 `like_count` 字段，前端暂不在个人列表展示按钮，待公共库或协作视图启用后即可直接复用。
 - **动效升级**：全局外壳引入基于 Reactbits 灵感的 `AuroraBackdrop` 背景（轻量级渐变+噪点），并在认证完成或离线直接进入时显示一次性的 `EntryTransition` 过场动画，营造更柔和的视觉层次。
+- **Dashboard 粒子背景**：Spotlight Hero 区域新增 React Bits 风格的粒子场背景，默认开启轻量级渐变粒子，参数可通过以下前端环境变量调节（`.env.example` 已提供默认值）：
+  - `VITE_DASHBOARD_PARTICLE_COUNT`：粒子数量与排布密度，建议保持在 8~18 之间保证性能。
+  - `VITE_DASHBOARD_PARTICLE_RADIUS`：粒子绕中心旋转的半径（px），影响覆盖范围。
+  - `VITE_DASHBOARD_PARTICLE_DURATION`：完成一圈旋转的时长（秒），数值越大动画越舒缓。
+  - `VITE_DASHBOARD_PARTICLE_SIZE_BASE` / `VITE_DASHBOARD_PARTICLE_SIZE_VARIANCE`：控制粒子基础尺寸与波动幅度，范围（px）。
+  - `VITE_DASHBOARD_PARTICLE_DELAY_STEP`：相邻粒子在时间轴上的错位间隔（秒），避免同时重叠。
+  - `VITE_DASHBOARD_PARTICLE_WAVE_FREQ` / `VITE_DASHBOARD_PARTICLE_WAVE_AMPLITUDE`：调节粒子尺寸振幅的频率与强度，打造轻微呼吸感。
+  - `VITE_DASHBOARD_PARTICLE_ROTATION_DEGREES`：单次旋转角度，默认 360°，可用于反向或半圈效果。
 - **动效开关**：设置页“应用设置”新增「界面动效」开关，可随时开启/关闭欢迎过场与背景光效，偏好会同步保存到用户设置。
 - **Dashboard Spotlight Hero**：仪表盘顶区改为 Spotlight Hero 模式，融合欢迎语、快捷按钮与核心指标卡片，叠加柔光/噪点背景。
 - **Dashboard Metrics**：指标卡新增“优质 Prompt”统计，同时保留三项原有卡片。
