@@ -4,7 +4,16 @@
  * @FilePath: \electron-go-app\main.js
  * @LastEditTime: 2025-10-16 22:47:42
  */
-const { app, BrowserWindow, Menu, ipcMain, globalShortcut } = require("electron");
+const {
+    app,
+    BrowserWindow,
+    Menu,
+    ipcMain,
+    globalShortcut,
+    Tray,
+    nativeImage,
+    dialog
+} = require("electron");
 const path = require("path");
 const fs = require("fs");
 const { spawn } = require("child_process");
@@ -28,6 +37,316 @@ loadEnvFiles();
 app.commandLine.appendSwitch("allow-file-access-from-files");
 
 let backendProcess;
+let mainWindow;
+let tray;
+let isClosePromptVisible = false;
+let hasShownTrayBalloon = false;
+
+const CLOSE_BEHAVIOR = {
+    ASK: "ask",
+    TRAY: "tray",
+    QUIT: "quit"
+};
+
+const CLOSE_BEHAVIOR_LABEL = {
+    [CLOSE_BEHAVIOR.ASK]: "关闭行为：每次询问",
+    [CLOSE_BEHAVIOR.TRAY]: "关闭行为：最小化到托盘",
+    [CLOSE_BEHAVIOR.QUIT]: "关闭行为：直接退出"
+};
+
+const preferencesFilePath = (() => {
+    try {
+        return path.join(app.getPath("userData"), "promptgen-preferences.json");
+    } catch (error) {
+        console.warn("[preferences] resolve path failed:", error);
+        return null;
+    }
+})();
+
+const loadPreferencesFromDisk = () => {
+    if (!preferencesFilePath) {
+        return {};
+    }
+    try {
+        if (!fs.existsSync(preferencesFilePath)) {
+            return {};
+        }
+        const raw = fs.readFileSync(preferencesFilePath, "utf-8");
+        return raw ? JSON.parse(raw) : {};
+    } catch (error) {
+        console.warn("[preferences] load failed:", error);
+        return {};
+    }
+};
+
+const persistPreferencesToDisk = (next) => {
+    if (!preferencesFilePath) {
+        return;
+    }
+    try {
+        fs.mkdirSync(path.dirname(preferencesFilePath), { recursive: true });
+        fs.writeFileSync(preferencesFilePath, JSON.stringify(next, null, 2), "utf-8");
+    } catch (error) {
+        console.warn("[preferences] save failed:", error);
+    }
+};
+
+const preferenceCache = loadPreferencesFromDisk();
+
+const readCloseBehaviorPreference = () => {
+    const stored = preferenceCache.closeBehavior;
+    if (stored === CLOSE_BEHAVIOR.TRAY || stored === CLOSE_BEHAVIOR.QUIT) {
+        return stored;
+    }
+    return CLOSE_BEHAVIOR.ASK;
+};
+
+let closeBehaviorPreference = readCloseBehaviorPreference();
+
+function setCloseBehaviorPreference(nextBehavior) {
+    if (
+        nextBehavior !== CLOSE_BEHAVIOR.ASK &&
+        nextBehavior !== CLOSE_BEHAVIOR.TRAY &&
+        nextBehavior !== CLOSE_BEHAVIOR.QUIT
+    ) {
+        return;
+    }
+    closeBehaviorPreference = nextBehavior;
+    preferenceCache.closeBehavior = nextBehavior;
+    persistPreferencesToDisk(preferenceCache);
+    refreshTrayMenu();
+}
+
+const resolveTrayIcon = () => {
+    const candidates = [];
+    if (process.platform === "win32") {
+        candidates.push(
+            app.isPackaged
+                ? path.join(process.resourcesPath, "build", "favicon-256x256.ico")
+                : path.join(__dirname, "build", "favicon-256x256.ico")
+        );
+    }
+    candidates.push(
+        app.isPackaged
+            ? path.join(process.resourcesPath, "app", "frontend", "dist", "favicon.ico")
+            : path.join(__dirname, "frontend", "public", "favicon.ico")
+    );
+
+    for (const candidate of candidates) {
+        if (candidate && fs.existsSync(candidate)) {
+            const image = nativeImage.createFromPath(candidate);
+            if (!image.isEmpty()) {
+                return image;
+            }
+        }
+    }
+    return null;
+};
+
+const showMainWindow = () => {
+    if (!mainWindow || mainWindow.isDestroyed()) {
+        mainWindow = createMainWindow();
+    }
+    if (mainWindow.isMinimized()) {
+        mainWindow.restore();
+    }
+    if (!mainWindow.isVisible()) {
+        mainWindow.show();
+    }
+    mainWindow.focus();
+};
+
+function refreshTrayMenu() {
+    if (!tray) {
+        return;
+    }
+    const versionLabel = `版本 ${app.getVersion()}`;
+    const closeBehaviorLabel =
+        CLOSE_BEHAVIOR_LABEL[closeBehaviorPreference] ?? CLOSE_BEHAVIOR_LABEL[CLOSE_BEHAVIOR.ASK];
+
+    const menuTemplate = [
+        { label: versionLabel, enabled: false },
+        { type: "separator" },
+        {
+            label: closeBehaviorLabel,
+            enabled: false
+        },
+        {
+            label: "选择关闭行为",
+            submenu: [
+                {
+                    label: "每次询问",
+                    type: "radio",
+                    checked: closeBehaviorPreference === CLOSE_BEHAVIOR.ASK,
+                    click: () => {
+                        setCloseBehaviorPreference(CLOSE_BEHAVIOR.ASK);
+                    }
+                },
+                {
+                    label: "最小化到托盘",
+                    type: "radio",
+                    checked: closeBehaviorPreference === CLOSE_BEHAVIOR.TRAY,
+                    click: () => {
+                        setCloseBehaviorPreference(CLOSE_BEHAVIOR.TRAY);
+                    }
+                },
+                {
+                    label: "直接退出",
+                    type: "radio",
+                    checked: closeBehaviorPreference === CLOSE_BEHAVIOR.QUIT,
+                    click: () => {
+                        setCloseBehaviorPreference(CLOSE_BEHAVIOR.QUIT);
+                    }
+                }
+            ]
+        },
+        {
+            label: "显示主窗口",
+            click: () => {
+                showMainWindow();
+            }
+        },
+        { type: "separator" },
+        {
+            label: "退出 Prompt Gen",
+            click: () => {
+                app.isQuiting = true;
+                if (backendProcess) {
+                    backendProcess.kill();
+                }
+                app.quit();
+            }
+        }
+    ];
+
+    const contextMenu = Menu.buildFromTemplate(menuTemplate);
+    tray.setContextMenu(contextMenu);
+}
+
+const ensureTray = () => {
+    if (tray && !tray.isDestroyed?.()) {
+        return tray;
+    }
+    const icon = resolveTrayIcon();
+    try {
+        tray = new Tray(icon || nativeImage.createEmpty());
+    } catch (error) {
+        console.warn("[tray] init failed:", error);
+        return null;
+    }
+    tray.setToolTip("Prompt Gen");
+    tray.on("double-click", () => {
+        showMainWindow();
+    });
+    tray.on("click", () => {
+        showMainWindow();
+    });
+    refreshTrayMenu();
+    return tray;
+};
+
+const hideWindowToTray = (win) => {
+    ensureTray();
+    if (!win) {
+        return;
+    }
+    win.hide();
+    if (
+        process.platform === "win32" &&
+        typeof tray?.displayBalloon === "function" &&
+        !hasShownTrayBalloon
+    ) {
+        tray.displayBalloon({
+            title: "Prompt Gen",
+            content: "应用已最小化到系统托盘。",
+            iconType: "info"
+        });
+        hasShownTrayBalloon = true;
+    }
+};
+
+const promptCloseBehavior = async (win) => {
+    const { response, checkboxChecked } = await dialog.showMessageBox(win ?? null, {
+        type: "question",
+        buttons: ["最小化到托盘", "直接退出", "取消"],
+        defaultId: 0,
+        cancelId: 2,
+        title: "关闭窗口",
+        message: "关闭后要如何处理 Prompt Gen？",
+        detail: "您可以选择保留后台运行（最小化到托盘）或完全退出应用。",
+        checkboxLabel: "记住我的选择",
+        checkboxChecked: false,
+        noLink: true
+    });
+
+    if (response === 0) {
+        return {
+            behavior: CLOSE_BEHAVIOR.TRAY,
+            remember: checkboxChecked,
+            cancelled: false
+        };
+    }
+    if (response === 1) {
+        return {
+            behavior: CLOSE_BEHAVIOR.QUIT,
+            remember: checkboxChecked,
+            cancelled: false
+        };
+    }
+    return {
+        behavior: CLOSE_BEHAVIOR.ASK,
+        remember: false,
+        cancelled: true
+    };
+};
+
+const handleMainWindowClose = (event, win) => {
+    if (!win || win.isDestroyed()) {
+        return;
+    }
+    if (app.isQuiting) {
+        return;
+    }
+
+    const behavior = closeBehaviorPreference;
+    if (behavior === CLOSE_BEHAVIOR.TRAY) {
+        event.preventDefault();
+        hideWindowToTray(win);
+        return;
+    }
+    if (behavior === CLOSE_BEHAVIOR.QUIT) {
+        app.isQuiting = true;
+        return;
+    }
+
+    if (isClosePromptVisible) {
+        event.preventDefault();
+        return;
+    }
+
+    event.preventDefault();
+    isClosePromptVisible = true;
+    promptCloseBehavior(win)
+        .then((result) => {
+            if (!result || result.cancelled) {
+                return;
+            }
+            if (result.remember) {
+                setCloseBehaviorPreference(result.behavior);
+            }
+            if (result.behavior === CLOSE_BEHAVIOR.TRAY) {
+                hideWindowToTray(win);
+                return;
+            }
+            if (result.behavior === CLOSE_BEHAVIOR.QUIT) {
+                app.isQuiting = true;
+                win.close();
+            }
+        })
+        .finally(() => {
+            isClosePromptVisible = false;
+        });
+};
 
 const DEVTOOLS_SHORTCUT = "CommandOrControl+Shift+I";
 const enableDevTools =
@@ -201,7 +520,11 @@ ipcMain.handle("window:execute-edit-command", (event, command) => {
 });
 
 function createMainWindow() {
-    const mainWindow = new BrowserWindow({
+    if (mainWindow && !mainWindow.isDestroyed()) {
+        return mainWindow;
+    }
+
+    mainWindow = new BrowserWindow({
         width: DEFAULT_WINDOW.width,
         height: DEFAULT_WINDOW.height,
         show: false,
@@ -261,6 +584,12 @@ function createMainWindow() {
     mainWindow.on("focus", () => emitWindowState(mainWindow));
 
     mainWindow.setMenuBarVisibility(false);
+    mainWindow.on("close", (event) => {
+        handleMainWindowClose(event, mainWindow);
+    });
+    mainWindow.on("closed", () => {
+        mainWindow = null;
+    });
 
     return mainWindow;
 }
@@ -269,6 +598,7 @@ app.whenReady().then(() => {
     startBackend();
     Menu.setApplicationMenu(null);
     createMainWindow();
+    ensureTray();
 
     if (enableDevTools) {
         const registered = globalShortcut.register(DEVTOOLS_SHORTCUT, () => {
