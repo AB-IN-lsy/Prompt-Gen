@@ -48,6 +48,7 @@ import {
   type PromptCommentListResponse,
 } from "../lib/api";
 import { AnimatePresence, motion } from "framer-motion";
+import { buildCardMotion } from "../lib/animationConfig";
 import { cn, resolveAssetUrl } from "../lib/utils";
 import { useAuth } from "../hooks/useAuth";
 import { isLocalMode } from "../lib/runtimeMode";
@@ -738,11 +739,8 @@ export default function PublicPromptsPage(): JSX.Element {
         <AnimatePresence mode="wait">
           <motion.div
             key={`${gridMotionKey}-${page}-${sortBy}-${statusFilter}-${debouncedSearch}`}
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -20 }}
-            transition={{ duration: 0.4, ease: [0.33, 1, 0.68, 1] }}
             className="grid gap-5 md:grid-cols-2 xl:grid-cols-3"
+            {...buildCardMotion({ offset: 20 })}
           >
         {items.map((item) => {
             const detailActive = selectedId === item.id;

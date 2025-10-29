@@ -1,5 +1,6 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
+import { buildCardMotion } from "../lib/animationConfig";
 import { useTranslation } from "react-i18next";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
@@ -560,11 +561,8 @@ export default function MyPromptsPage(): JSX.Element {
             {items.length > 0 ? (
               <motion.div
                 key={`${motionKey}-${status}-${page}-${favoritedOnly}-${committedSearch}`}
-                initial={{ opacity: 0, y: 16 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -16 }}
-                transition={{ duration: 0.35, ease: [0.33, 1, 0.68, 1] }}
                 className="overflow-x-auto"
+                {...buildCardMotion({ offset: 16 })}
               >
                 <table className="min-w-full divide-y divide-white/60 text-sm dark:divide-slate-800">
               <thead className="bg-white/80 text-left text-xs font-semibold uppercase tracking-[0.24em] text-slate-400 dark:bg-slate-900/60">
