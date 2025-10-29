@@ -5,11 +5,13 @@
  */
 import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
+import { AnimatePresence, motion } from "framer-motion";
 import { useQuery } from "@tanstack/react-query";
 import { Badge } from "../components/ui/badge";
 import { GlassCard } from "../components/ui/glass-card";
 import { fetchChangelogEntries, type ChangelogEntry } from "../lib/api";
 import { PageHeader } from "../components/layout/PageHeader";
+import { buildCardMotion } from "../lib/animationConfig";
 
 export default function LogsPage() {
   const { t, i18n } = useTranslation();
@@ -34,7 +36,7 @@ export default function LogsPage() {
         title={t("logsPage.title")}
         description={t("logsPage.subtitle")}
       />
-      <div className="space-y-6">
+      <div className="flex flex-col gap-6">
         {isLoading && entries.length === 0
           ? Array.from({ length: 3 }).map((_, index) => (
               <GlassCard
@@ -56,10 +58,10 @@ export default function LogsPage() {
             ))
           : null}
 
-        {entries.length > 0
-          ? entries.map((entry: ChangelogEntry) => (
+        <AnimatePresence mode="popLayout">
+          {entries.map((entry: ChangelogEntry, index) => (
+            <motion.div key={entry.id} layout {...buildCardMotion({ index })}>
               <GlassCard
-                key={entry.id}
                 className="relative overflow-hidden border-white/60 bg-white/85 p-6 shadow-xl backdrop-blur-xl transition-all dark:border-slate-800/60 dark:bg-slate-900/70"
               >
                 <div className="pointer-events-none absolute inset-0">
@@ -96,8 +98,9 @@ export default function LogsPage() {
                   </ul>
                 </div>
               </GlassCard>
-            ))
-          : null}
+            </motion.div>
+          ))}
+        </AnimatePresence>
 
         {!isLoading && entries.length === 0 ? (
           <GlassCard className="border-dashed border-slate-200 bg-white/70 text-sm text-slate-500 dark:border-slate-800/60 dark:bg-slate-900/60 dark:text-slate-400">

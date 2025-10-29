@@ -35,6 +35,8 @@
   - `VITE_DASHBOARD_PARTICLE_DELAY_STEP`：相邻粒子在时间轴上的错位间隔（秒），避免同时重叠。
   - `VITE_DASHBOARD_PARTICLE_WAVE_FREQ` / `VITE_DASHBOARD_PARTICLE_WAVE_AMPLITUDE`：调节粒子尺寸振幅的频率与强度，打造轻微呼吸感。
   - `VITE_DASHBOARD_PARTICLE_ROTATION_DEGREES`：单次旋转角度，默认 360°，可用于反向或半圈效果。
+  - `VITE_CARD_ANIMATION_DURATION` / `VITE_CARD_ANIMATION_OFFSET`：控制日志、帮助中心等卡片淡入动效的时长（秒）与初始位移（px），手机与桌面端统一体验。
+  - `VITE_CARD_ANIMATION_STAGGER` / `VITE_CARD_ANIMATION_EASE`：用于调节卡片出场的错位间隔与贝塞尔曲线（格式为 `x1,y1,x2,y2`），可按需放大节奏或替换动效曲线。
 - **动效开关**：设置页“应用设置”新增「界面动效」开关，可随时开启/关闭欢迎过场与背景光效，偏好会同步保存到用户设置。
 - **Dashboard Spotlight Hero**：仪表盘顶区改为 Spotlight Hero 模式，融合欢迎语、快捷按钮与核心指标卡片，叠加柔光/噪点背景。
 - **Dashboard Metrics**：指标卡新增“优质 Prompt”统计，同时保留三项原有卡片。
