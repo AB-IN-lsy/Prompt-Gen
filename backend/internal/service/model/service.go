@@ -38,16 +38,21 @@ var supportedProviders = map[string]struct{}{
 
 // Credential 表示对外返回的模型凭据（脱敏）。
 type Credential struct {
-	ID             uint           `json:"id"`
-	Provider       string         `json:"provider"`
-	ModelKey       string         `json:"model_key"`
-	DisplayName    string         `json:"display_name"`
-	BaseURL        string         `json:"base_url"`
-	ExtraConfig    map[string]any `json:"extra_config"`
-	Status         string         `json:"status"`
-	LastVerifiedAt *time.Time     `json:"last_verified_at"`
-	CreatedAt      time.Time      `json:"created_at"`
-	UpdatedAt      time.Time      `json:"updated_at"`
+	ID                uint           `json:"id"`                            // 数据库主键
+	Provider          string         `json:"provider"`                      // 模型提供方标识，如 deepseek
+	ModelKey          string         `json:"model_key"`                     // 前端引用的模型键
+	DisplayName       string         `json:"display_name"`                  // 展示用名称
+	BaseURL           string         `json:"base_url"`                      // 自定义 BaseURL（可选）
+	ExtraConfig       map[string]any `json:"extra_config"`                  // 额外 JSON 配置
+	Status            string         `json:"status"`                        // 启用/禁用状态
+	LastVerifiedAt    *time.Time     `json:"last_verified_at"`              // 最近一次连通性校验时间
+	CreatedAt         time.Time      `json:"created_at"`                    // 创建时间
+	UpdatedAt         time.Time      `json:"updated_at"`                    // 更新时间
+	IsBuiltin         bool           `json:"is_builtin,omitempty"`          // 是否平台内置（只读）模型
+	DailyQuota        *int           `json:"daily_quota,omitempty"`         // 免费模型的每日额度
+	ActualModel       string         `json:"actual_model,omitempty"`        // 实际调用的底层模型键
+	RemainingQuota    *int           `json:"remaining_quota,omitempty"`     // 当前剩余额度
+	ResetAfterSeconds *int64         `json:"reset_after_seconds,omitempty"` // 距离额度重置的秒数
 }
 
 // CreateInput 描述新增模型凭据所需的字段。

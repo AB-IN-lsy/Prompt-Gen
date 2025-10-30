@@ -435,12 +435,17 @@ export interface UserModelCredential {
   provider: string;
   model_key: string;
   display_name: string;
+  actual_model?: string;
   base_url?: string;
   extra_config: Record<string, unknown>;
   status: ModelStatus;
   last_verified_at?: string | null;
   created_at: string;
   updated_at: string;
+  is_builtin?: boolean;
+  daily_quota?: number | null;
+  remaining_quota?: number | null;
+  reset_after_seconds?: number | null;
 }
 
 export interface ChatCompletionMessage {

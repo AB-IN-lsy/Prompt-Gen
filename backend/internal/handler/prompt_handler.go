@@ -630,6 +630,18 @@ func (h *PromptHandler) Interpret(c *gin.Context) {
 			response.Fail(c, http.StatusBadRequest, response.ErrContentRejected, reason, gin.H{"reason": reason})
 			return
 		}
+		var quotaErr *promptsvc.FreeTierQuotaExceededError
+		if errors.As(err, &quotaErr) {
+			retry := int(quotaErr.RetryAfter.Seconds())
+			if retry < 0 {
+				retry = 0
+			}
+			response.Fail(c, http.StatusTooManyRequests, response.ErrTooManyRequests, "今日免费额度已用尽，请配置模型凭据或等待额度重置。", gin.H{
+				"retry_after_seconds": retry,
+				"remaining":           quotaErr.Remaining,
+			})
+			return
+		}
 		log.Errorw("interpret failed", "error", err, "user_id", userID)
 		if errors.Is(err, promptsvc.ErrModelInvocationFailed) {
 			response.Fail(c, http.StatusServiceUnavailable, response.ErrInternal, "调用模型失败，请检查网络连接或模型凭据。", nil)
@@ -688,6 +700,18 @@ func (h *PromptHandler) AugmentKeywords(c *gin.Context) {
 		ExistingNegative:  toServiceKeywords(req.ExistingNegative),
 	})
 	if err != nil {
+		var quotaErr *promptsvc.FreeTierQuotaExceededError
+		if errors.As(err, &quotaErr) {
+			retry := int(quotaErr.RetryAfter.Seconds())
+			if retry < 0 {
+				retry = 0
+			}
+			response.Fail(c, http.StatusTooManyRequests, response.ErrTooManyRequests, "今日免费额度已用尽，请配置模型凭据或等待额度重置。", gin.H{
+				"retry_after_seconds": retry,
+				"remaining":           quotaErr.Remaining,
+			})
+			return
+		}
 		log.Errorw("augment keywords failed", "error", err, "user_id", userID)
 		if errors.Is(err, promptsvc.ErrModelInvocationFailed) {
 			response.Fail(c, http.StatusServiceUnavailable, response.ErrInternal, "调用模型失败，请检查网络连接或模型凭据。", nil)
@@ -863,6 +887,18 @@ func (h *PromptHandler) GeneratePrompt(c *gin.Context) {
 		}
 		if errors.Is(err, promptsvc.ErrNegativeKeywordLimit) {
 			h.keywordLimitError(c, promptdomain.KeywordPolarityNegative, len(req.NegativeKeywords))
+			return
+		}
+		var quotaErr *promptsvc.FreeTierQuotaExceededError
+		if errors.As(err, &quotaErr) {
+			retry := int(quotaErr.RetryAfter.Seconds())
+			if retry < 0 {
+				retry = 0
+			}
+			response.Fail(c, http.StatusTooManyRequests, response.ErrTooManyRequests, "今日免费额度已用尽，请配置模型凭据或等待额度重置。", gin.H{
+				"retry_after_seconds": retry,
+				"remaining":           quotaErr.Remaining,
+			})
 			return
 		}
 		log.Errorw("generate prompt failed", "error", err, "user_id", userID)

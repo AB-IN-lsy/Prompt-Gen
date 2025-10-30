@@ -63,7 +63,7 @@ func newTestService(t *testing.T, stub *handlerModelStub) (*promptsvc.Service, *
 		VersionRetention:    promptsvc.DefaultVersionRetentionLimit,
 	}
 
-	service, err := promptsvc.NewServiceWithConfig(promptRepo, keywordRepo, stub, nil, nil, nil, cfg)
+	service, err := promptsvc.NewServiceWithConfig(promptRepo, keywordRepo, stub, nil, nil, nil, nil, cfg)
 	if err != nil {
 		t.Fatalf("init prompt service: %v", err)
 	}

@@ -22,6 +22,7 @@
 - 邮箱验证与图形验证码接口返回剩余尝试次数（`remaining_attempts`），被限流时附带冷却秒数（`retry_after_seconds`），便于前端展示剩余机会与等待时间。
 - 邮件发送新增阿里云 DirectMail 发信器，优先使用 DirectMail，未配置时自动回退到 SMTP。
 - 新增 Prompt 导出能力，调用 `POST /api/prompts/export` 会生成包含全部 Prompt 的 JSON 文件，并在响应中返回本地保存路径，目录通过 `PROMPT_EXPORT_DIR` 配置。
+- 在线模式新增 DeepSeek 免费额度：未配置模型凭据的用户会自动使用内置密钥完成解析/生成，每日调用次数默认 10 次，可通过 `PROMPT_FREE_TIER_*` 环境变量调整，超过额度将返回 429 提示用户改用自有模型。
 - Prompt 历史版本接口可用：新增 `GET /api/prompts/:id/versions` 与 `GET /api/prompts/:id/versions/:version`，支持查看历史版本详情，保留数量由 `PROMPT_VERSION_KEEP_LIMIT` 控制。
 - 启动流程拆分为 `internal/app.InitResources`（负责连接/迁移）与 `internal/bootstrap.BuildApplication`（负责装配依赖），提升职责清晰度。
 - 新增 `/api/models` 系列接口，支持模型凭据的创建、查看、更新与删除，API Key 会在入库前加密。
@@ -177,10 +178,29 @@
 | `PROMPT_AUDIT_MODEL_KEY` | 调用审核时使用的模型标识，缺省时回退到 `deepseek-chat` |
 | `PROMPT_AUDIT_API_KEY` | 审核模型所需的 API Key（在线模式必须配置） |
 | `PROMPT_AUDIT_BASE_URL` | 审核模型的自定义接口地址，留空使用默认值 |
+| `PROMPT_FREE_TIER_ENABLED` | 是否启用内置免费体验模型，默认 `1`（仅在线模式有效） |
+| `PROMPT_FREE_TIER_PROVIDER` | 体验模型提供方标识，默认 `deepseek` |
+| `PROMPT_FREE_TIER_MODEL_KEY` | 前端可见的模型键别名，默认 `deepseek` |
+| `PROMPT_FREE_TIER_ACTUAL_MODEL` | 请求实际使用的模型标识，默认 `deepseek-chat` |
+| `PROMPT_FREE_TIER_DISPLAY_NAME` | 前端展示名称，默认 “DeepSeek 免费体验” |
+| `PROMPT_FREE_TIER_API_KEY` | 内置模型的 API Key，留空时回退到 `PROMPT_AUDIT_API_KEY` |
+| `PROMPT_FREE_TIER_BASE_URL` | 内置模型的 Base URL，可选 |
+| `PROMPT_FREE_TIER_DAILY_LIMIT` | 每位用户每日免费额度，默认 `10` 次 |
+| `PROMPT_FREE_TIER_WINDOW` | 免费额度计数窗口，默认 `24h` |
 
 > 在线模式下只要配置了 `PROMPT_AUDIT_API_KEY`，Prompt 服务会自动切换到内置 DeepSeek 审核器；本地模式始终跳过审核，便于开发调试。
 > ❗ **排障提示**：如果日志中出现  
 > `decode interpretation response: json: cannot unmarshal array into Go struct`，说明模型把 `instructions` 字段生成为数组。现有实现已兼容数组与字符串两种格式；若自定义提示词，请确保仍返回 JSON 对象，并将补充要求放在 `instructions` 字段（字符串或字符串数组均可）。
+
+### DeepSeek 免费额度流程
+
+1. **配置加载**：启动时 `loadPromptConfig` 读取 `PROMPT_FREE_TIER_*` 环境变量，并在 `promptsvc.NewServiceWithConfig` 中构建一个内置的 DeepSeek 客户端（`freeTier`）。
+2. **调用链兜底**：Prompt Service 在 Interpret / Augment / Generate 三条链路里优先使用用户自配模型；若凭据缺失或被禁用，则透明回退到 `freeTier.invoke`，同时按照 Redis（在线）或内存限流（离线）扣减每日免费额度。
+3. **额度耗尽反馈**：当免费额度被用完时，Service 会抛出 `FreeTierQuotaExceededError`，Handler 统一返回 `429`，并在 `details.retry_after_seconds` / `details.remaining` 告知前端剩余冷却时间与余量。
+4. **前端展示**：后端不会为内置模型写入数据库，而是通过 `builtinModels` 将“DeepSeek 免费体验”作为只读条目拼接到 `/api/models` 响应中，前端设置页据此显示每日免费次数并禁用编辑/删除按钮。
+5. **安全考虑**：内置模型使用的平台级 API Key 仅存在于服务端内存和调用路径中；任何列表或接口都不会回传密钥，前端只能看到基础描述信息。
+
+> ★ 没有新增 API。现有 `/api/models`、`/api/prompts/interpret`、`/api/prompts/generate`、`/api/prompts/keywords/augment` 等接口保持不变，只是在后端增加了上述兜底逻辑与 429 错误码分支。
 
 ### 公共 Prompt 库限流（可选）
 

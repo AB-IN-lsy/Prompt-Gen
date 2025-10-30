@@ -14,6 +14,7 @@ import (
 	promptdomain "electron-go-app/backend/internal/domain/prompt"
 	deepseek "electron-go-app/backend/internal/infra/model/deepseek"
 	"electron-go-app/backend/internal/repository"
+	modelsvc "electron-go-app/backend/internal/service/model"
 	promptsvc "electron-go-app/backend/internal/service/prompt"
 
 	"gorm.io/driver/sqlite"
@@ -122,6 +123,7 @@ func setupPromptServiceWithConfig(t *testing.T, cfg promptsvc.Config) (*promptsv
 		promptRepo,
 		keywordRepo,
 		modelStub,
+		nil,
 		nil,
 		nil,
 		nil,
@@ -713,6 +715,7 @@ func TestPromptServiceManualKeywordDuplicate(t *testing.T) {
 		keywordRepo,
 		modelStub,
 		store,
+		nil,
 		nil,
 		nil,
 		promptsvc.Config{
@@ -1409,5 +1412,100 @@ func TestPromptServiceSaveMixedLanguageTopicSpacing(t *testing.T) {
 	}
 	if found.ID != output.PromptID {
 		t.Fatalf("unexpected prompt id, got %d expected %d", found.ID, output.PromptID)
+	}
+}
+
+func TestGeneratePromptUsesFreeTierWhenCredentialMissing(t *testing.T) {
+	dsn := "file:" + t.Name() + "?mode=memory&cache=shared"
+	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("open sqlite: %v", err)
+	}
+	sqlDB, err := db.DB()
+	if err != nil {
+		t.Fatalf("extract sql db: %v", err)
+	}
+	sqlDB.SetMaxOpenConns(1)
+	sqlDB.SetMaxIdleConns(1)
+	defer sqlDB.Close()
+
+	if err := db.AutoMigrate(&promptdomain.Prompt{}, &promptdomain.Keyword{}, &promptdomain.PromptKeyword{}, &promptdomain.PromptLike{}, &promptdomain.PromptVersion{}); err != nil {
+		t.Fatalf("auto migrate: %v", err)
+	}
+
+	promptRepo := repository.NewPromptRepository(db)
+	keywordRepo := repository.NewKeywordRepository(db)
+
+	primaryInvoker := &fakeModelInvoker{err: modelsvc.ErrCredentialNotFound}
+	fallbackInvoker := &fakeModelInvoker{responses: []deepseek.ChatCompletionResponse{
+		{
+			Model: "deepseek-chat",
+			Choices: []deepseek.ChatCompletionChoice{
+				{Message: deepseek.ChatMessage{Role: "assistant", Content: "测试 Prompt 正文"}},
+			},
+		},
+	}}
+	auditPayload := map[string]any{
+		"allowed": true,
+		"reason":  "",
+	}
+	auditRaw, _ := json.Marshal(auditPayload)
+	auditInvoker := &fakeModelInvoker{responses: []deepseek.ChatCompletionResponse{
+		{
+			Model: "audit-model",
+			Choices: []deepseek.ChatCompletionChoice{
+				{Message: deepseek.ChatMessage{Role: "assistant", Content: string(auditRaw)}},
+			},
+		},
+	}}
+
+	cfg := promptsvc.Config{
+		KeywordLimit:        promptsvc.DefaultKeywordLimit,
+		KeywordMaxLength:    promptsvc.DefaultKeywordMaxLength,
+		TagLimit:            promptsvc.DefaultTagLimit,
+		TagMaxLength:        promptsvc.DefaultTagMaxLength,
+		DefaultListPageSize: promptsvc.DefaultPromptListPageSize,
+		MaxListPageSize:     promptsvc.DefaultPromptListMaxPageSize,
+		FreeTier: promptsvc.FreeTierConfig{
+			Enabled:     true,
+			Alias:       "",
+			ActualModel: "deepseek-chat",
+			DisplayName: "测试免费模型",
+			DailyQuota:  10,
+			Window:      time.Hour,
+			Invoker:     fallbackInvoker,
+		},
+		Audit: promptsvc.AuditConfig{
+			Enabled:  true,
+			ModelKey: "audit-model",
+			Invoker:  auditInvoker,
+		},
+	}
+
+	service, err := promptsvc.NewServiceWithConfig(promptRepo, keywordRepo, primaryInvoker, nil, nil, nil, nil, cfg)
+	if err != nil {
+		t.Fatalf("init prompt service: %v", err)
+	}
+
+	result, err := service.GeneratePrompt(context.Background(), promptsvc.GenerateInput{
+		UserID:           1,
+		Topic:            "测试主题",
+		ModelKey:         "",
+		PositiveKeywords: []promptsvc.KeywordItem{{Word: "React", Polarity: promptdomain.KeywordPolarityPositive, Weight: 5}},
+	})
+	if err != nil {
+		t.Fatalf("generate prompt failed: %v", err)
+	}
+	if result.Prompt != "测试 Prompt 正文" {
+		t.Fatalf("unexpected prompt: %s", result.Prompt)
+	}
+	if len(primaryInvoker.requests) != 1 {
+		t.Fatalf("expected primary invoker to be called once, got %d", len(primaryInvoker.requests))
+	}
+	if len(fallbackInvoker.requests) != 1 {
+		t.Fatalf("expected fallback invoker to be called once, got %d", len(fallbackInvoker.requests))
+	}
+	if fallbackInvoker.requests[0].Model != "deepseek-chat" {
+		t.Fatalf("expected fallback request model deepseek-chat, got %s", fallbackInvoker.requests[0].Model)
 	}
 }

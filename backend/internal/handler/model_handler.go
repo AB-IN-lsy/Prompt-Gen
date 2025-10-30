@@ -7,32 +7,40 @@
 package handler
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	response "electron-go-app/backend/internal/infra/common"
 	appLogger "electron-go-app/backend/internal/infra/logger"
 	deepseek "electron-go-app/backend/internal/infra/model/deepseek"
 	modelsvc "electron-go-app/backend/internal/service/model"
+	promptsvc "electron-go-app/backend/internal/service/prompt"
 
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
 )
 
+// FreeTierUsageFunc 定义获取免费额度剩余情况的方法签名。
+type FreeTierUsageFunc func(ctx context.Context, userID uint) (*promptsvc.FreeTierUsageSnapshot, error)
+
 // ModelHandler 负责模型凭据相关接口。
 type ModelHandler struct {
-	service *modelsvc.Service
-	logger  *zap.SugaredLogger
+	service       *modelsvc.Service
+	logger        *zap.SugaredLogger
+	builtins      []modelsvc.Credential
+	freeTierUsage FreeTierUsageFunc
 }
 
 // NewModelHandler 构造模型凭据相关的 Handler。
-func NewModelHandler(service *modelsvc.Service) *ModelHandler {
+func NewModelHandler(service *modelsvc.Service, builtins []modelsvc.Credential, usageFn FreeTierUsageFunc) *ModelHandler {
 	base := appLogger.S().With("component", "model.handler")
-	return &ModelHandler{service: service, logger: base}
+	return &ModelHandler{service: service, logger: base, builtins: builtins, freeTierUsage: usageFn}
 }
 
 /**
@@ -68,7 +76,52 @@ func (h *ModelHandler) List(c *gin.Context) {
 		response.Fail(c, http.StatusInternalServerError, response.ErrInternal, err.Error(), nil)
 		return
 	}
-	response.Success(c, http.StatusOK, creds, nil)
+	result := make([]modelsvc.Credential, 0, len(creds)+len(h.builtins))
+	result = append(result, creds...)
+
+	var usage *promptsvc.FreeTierUsageSnapshot
+	if h.freeTierUsage != nil {
+		if snapshot, err := h.freeTierUsage(c.Request.Context(), userID); err != nil {
+			log.Warnw("fetch free tier usage failed", "error", err, "user_id", userID)
+		} else {
+			usage = snapshot
+		}
+	}
+
+	if len(h.builtins) > 0 {
+		existing := make(map[string]struct{}, len(creds))
+		for _, item := range creds {
+			key := strings.ToLower(strings.TrimSpace(item.ModelKey))
+			if key != "" {
+				existing[key] = struct{}{}
+			}
+		}
+		for _, builtin := range h.builtins {
+			key := strings.ToLower(strings.TrimSpace(builtin.ModelKey))
+			if key != "" {
+				if _, ok := existing[key]; ok {
+					continue
+				}
+			}
+			clone := builtin
+			if usage != nil {
+				if usage.Limit > 0 {
+					limit := usage.Limit
+					clone.DailyQuota = &limit
+				}
+				if usage.Remaining >= 0 {
+					remaining := usage.Remaining
+					clone.RemainingQuota = &remaining
+				}
+				if usage.ResetAfter > 0 {
+					reset := int64((usage.ResetAfter + time.Second - 1) / time.Second)
+					clone.ResetAfterSeconds = &reset
+				}
+			}
+			result = append(result, clone)
+		}
+	}
+	response.Success(c, http.StatusOK, result, nil)
 }
 
 // CreateRequest 表示创建模型凭据的请求体。

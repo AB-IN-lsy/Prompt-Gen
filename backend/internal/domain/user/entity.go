@@ -28,15 +28,15 @@ type User struct {
 
 // EmailVerificationToken 记录邮箱验证所需的一次性令牌。
 type EmailVerificationToken struct {
-	ID         uint       `gorm:"primaryKey"`                 // 主键
-	UserID     uint       `gorm:"uniqueIndex:user_id"`        // 关联的用户 ID（唯一），确保每次只有一条生效记录
-	Token      string     `gorm:"size:128;uniqueIndex:token"` // 发往邮箱的一次性验证令牌
+	ID         uint       `gorm:"primaryKey"`                 // 主键 ID
+	UserID     uint       `gorm:"uniqueIndex:user_id"`        // 用户 ID（保证唯一，避免重复 token）
+	Token      string     `gorm:"size:128;uniqueIndex:token"` // 邮箱验证码
 	ExpiresAt  time.Time  `gorm:"index"`                      // 过期时间
-	ConsumedAt *time.Time // 实际使用时间（已验证时记录）
+	ConsumedAt *time.Time // 使用时间（验证成功后写入）
 	CreatedAt  time.Time  // 创建时间
 	UpdatedAt  time.Time  // 更新时间
 
-	User User `gorm:"constraint:OnDelete:CASCADE"`
+	User User `gorm:"constraint:OnDelete:CASCADE"` // 关联用户（删除用户时级联清理）
 }
 
 // UserModelCredential 保存用户为特定模型配置的访问凭据。
@@ -62,8 +62,8 @@ func (UserModelCredential) TableName() string {
 
 // Settings 描述用户可自定义的配置项，会以 JSON 字符串形式持久化在 User.Settings 字段中。
 type Settings struct {
-	PreferredModel   string `json:"preferred_model"`
-	EnableAnimations bool   `json:"enable_animations"`
+	PreferredModel   string `json:"preferred_model"`   // 默认模型 key
+	EnableAnimations bool   `json:"enable_animations"` // 是否启用界面动效
 }
 
 // DefaultSettings 返回默认的用户设置。

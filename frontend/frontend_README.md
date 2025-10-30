@@ -26,6 +26,7 @@
     建、后端还没分配 ID 的关键词，就带 keywordId: undefined，让后端按现有逻辑生成。
 - **数据备份（JSON）**：`Settings.tsx` 的“应用设置”标签页提供“数据备份与导入”卡片，支持 JSON 导出/导入（合并/覆盖两种模式），会调用 `POST /api/prompts/export` 与 `POST /api/prompts/import`，并记录最近一次导出/导入的路径、数量与错误详情，操作完成后自动刷新 `MyPrompts` 列表。
 - **点赞数据预埋**：后端已提供 `POST/DELETE /api/prompts/:id/like` 以及 `like_count` 字段，前端暂不在个人列表展示按钮，待公共库或协作视图启用后即可直接复用。
+- **内置模型体验**：设置页会展示“DeepSeek 免费体验”条目，自动标注每日免费额度并默认启用；该条目不可编辑、删除或禁用，引导用户添加自有模型凭据以解锁完整能力。
 - **动效升级**：全局外壳引入基于 Reactbits 灵感的 `AuroraBackdrop` 背景（轻量级渐变+噪点），并在认证完成或离线直接进入时显示一次性的 `EntryTransition` 过场动画，营造更柔和的视觉层次。
 - **Dashboard 粒子背景**：Spotlight Hero 区域新增 React Bits 风格的粒子场背景，默认开启轻量级渐变粒子，参数可通过以下前端环境变量调节（`.env.example` 已提供默认值）：
   - `VITE_DASHBOARD_PARTICLE_COUNT`：粒子数量与排布密度，建议保持在 8~18 之间保证性能。

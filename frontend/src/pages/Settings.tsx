@@ -857,6 +857,15 @@ export default function SettingsPage() {
 
   // 启用/禁用模型开关
   const handleToggleModelStatus = (credential: UserModelCredential) => {
+    if (credential.is_builtin) {
+      toast.info(
+        t(
+          "settings.modelCard.builtinReadonly",
+          "内置体验模型不可修改或删除，请先添加自己的模型。",
+        ),
+      );
+      return;
+    }
     const currentStatus = (credential.status ?? "enabled").toLowerCase();
     const nextStatus = currentStatus === "enabled" ? "disabled" : "enabled";
     updateModelMutation.mutate({
@@ -878,6 +887,15 @@ export default function SettingsPage() {
 
   // 删除模型凭据，附带二次确认
   const handleDeleteModel = (credential: UserModelCredential) => {
+    if (credential.is_builtin) {
+      toast.info(
+        t(
+          "settings.modelCard.builtinReadonly",
+          "内置体验模型不可修改或删除，请先添加自己的模型。",
+        ),
+      );
+      return;
+    }
     if (
       deleteModelMutation.isPending &&
       deleteModelMutation.variables !== undefined &&
@@ -889,10 +907,28 @@ export default function SettingsPage() {
   };
 
   const handleStartEditModel = (credential: UserModelCredential) => {
+    if (credential.is_builtin) {
+      toast.info(
+        t(
+          "settings.modelCard.builtinReadonly",
+          "内置体验模型不可修改或删除，请先添加自己的模型。",
+        ),
+      );
+      return;
+    }
     openModelEditor(credential);
   };
 
   const handleTestModel = (credential: UserModelCredential) => {
+    if (credential.is_builtin) {
+      toast.info(
+        t(
+          "settings.modelCard.builtinReadonly",
+          "内置体验模型不可修改或删除，请先添加自己的模型。",
+        ),
+      );
+      return;
+    }
     const provider = (credential.provider ?? "").toLowerCase();
     if (provider !== "deepseek" && provider !== "volcengine") {
       return;
@@ -937,7 +973,43 @@ export default function SettingsPage() {
   );
 
   const models = modelsQuery.data ?? [];
+  const formatCredentialLabel = useCallback(
+    (credential: UserModelCredential | undefined): string => {
+      if (!credential) {
+        return "";
+      }
+      const modelKeyLabel = t("settings.modelCard.modelKeyLabel", "模型键");
+      const modelKey = credential.actual_model || credential.model_key;
+      const name =
+        credential.display_name || credential.actual_model || credential.model_key;
+      if (credential.is_builtin) {
+        return t("settings.modelCard.builtinDisplay", {
+          name,
+          modelKeyLabel,
+          modelKey,
+        });
+      }
+      if (!modelKey || name.toLowerCase().includes(modelKey.toLowerCase())) {
+        return name;
+      }
+      return `${name} (${modelKeyLabel}: ${modelKey})`;
+    },
+    [t],
+  );
+
   const currentPreferred = profile?.settings?.preferred_model ?? "";
+  const preferredModelDisplay = useMemo(() => {
+    if (!currentPreferred) {
+      return "";
+    }
+    const match = modelsQuery.data?.find(
+      (item) => item.model_key === currentPreferred,
+    );
+    if (!match) {
+      return currentPreferred;
+    }
+    return formatCredentialLabel(match);
+  }, [currentPreferred, modelsQuery.data, formatCredentialLabel]);
 
   return (
     <div className="mx-auto flex w-full max-w-4xl flex-col gap-6 text-slate-700 transition-colors dark:text-slate-200">
@@ -1128,7 +1200,7 @@ export default function SettingsPage() {
               </label>
               <Input
                 id="profile-model"
-                value={profileForm.preferred_model || ""}
+                value={preferredModelDisplay}
                 readOnly
                 disabled
                 placeholder={
@@ -1196,22 +1268,24 @@ export default function SettingsPage() {
             models.map((credential) => {
               const isPreferred =
                 currentPreferred && credential.model_key === currentPreferred;
+              const isBuiltin = credential.is_builtin === true;
               const isDisabled =
                 String(credential.status ?? "").toLowerCase() === "disabled";
               const updateInFlight =
                 updateModelMutation.isPending &&
                 updateModelMutation.variables?.id === credential.id;
-              const toggleDisabled = updateInFlight;
-              const deleteDisabled =
-                deleteModelMutation.isPending &&
-                deleteModelMutation.variables === credential.id;
+              const toggleDisabled = updateInFlight || isBuiltin;
+              const deleteLocked =
+                isBuiltin ||
+                (deleteModelMutation.isPending &&
+                  deleteModelMutation.variables === credential.id);
               const setPreferredDisabled =
                 isDisabled ||
                 isPreferred ||
                 (setPreferredMutation.isPending &&
                   setPreferredMutation.variables === credential.model_key);
               const isEditing = editingModelId === credential.id;
-              const editDisabled = isEditing || updateInFlight;
+              const editDisabled = isEditing || updateInFlight || isBuiltin;
               const providerNormalized =
                 credential.provider?.toLowerCase() ?? "";
               const isTestable =
@@ -1220,11 +1294,15 @@ export default function SettingsPage() {
               const testingDisabled =
                 !isTestable ||
                 (testModelMutation.isPending &&
-                  testModelMutation.variables?.id === credential.id);
+                  testModelMutation.variables?.id === credential.id) ||
+                isBuiltin;
+              const cardKey = credential.is_builtin
+                ? `builtin:${credential.model_key}`
+                : `user:${credential.id}`;
 
               return (
                 <div
-                  key={credential.id}
+                  key={cardKey}
                   className="rounded-xl border border-white/60 bg-white/70 px-4 py-3 shadow-sm transition-colors dark:border-slate-800 dark:bg-slate-900/70"
                 >
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -1233,6 +1311,14 @@ export default function SettingsPage() {
                         <span className="text-sm font-medium text-slate-800 dark:text-slate-100">
                           {credential.display_name || credential.model_key}
                         </span>
+                        {isBuiltin ? (
+                          <Badge className="bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-200">
+                            {t(
+                              "settings.modelCard.builtinBadge",
+                              "内置体验",
+                            )}
+                          </Badge>
+                        ) : null}
                         {isPreferred ? (
                           <Badge className="bg-primary/10 text-primary dark:bg-primary/20">
                             {t("settings.modelCard.preferredBadge")}
@@ -1264,22 +1350,60 @@ export default function SettingsPage() {
                           })}
                         </p>
                       ) : null}
-                      <p className="text-xs text-slate-400 dark:text-slate-500">
-                        {formatVerifiedAt(credential.last_verified_at)}
-                      </p>
+                      {isBuiltin &&
+                      typeof credential.daily_quota === "number" ? (
+                        <p
+                          className={
+                            "text-xs " +
+                            (typeof credential.remaining_quota === "number"
+                              ? "font-semibold text-primary dark:text-primary/80"
+                              : "text-slate-500 dark:text-slate-400")
+                          }
+                        >
+                          {typeof credential.remaining_quota === "number"
+                            ? t("settings.modelCard.freeQuotaHintRemaining", {
+                                count: credential.daily_quota,
+                                remaining: Math.max(
+                                  credential.remaining_quota,
+                                  0,
+                                ),
+                              })
+                            : t("settings.modelCard.freeQuotaHint", {
+                                count: credential.daily_quota,
+                              })}
+                        </p>
+                      ) : null}
+                      {isBuiltin &&
+                      typeof credential.reset_after_seconds === "number" &&
+                      credential.reset_after_seconds > 0 ? (
+                        <p className="text-xs text-slate-400 dark:text-slate-500">
+                          {t("settings.modelCard.freeQuotaReset", {
+                            minutes: Math.ceil(
+                              credential.reset_after_seconds / 60,
+                            ),
+                          })}
+                        </p>
+                      ) : null}
+                      {!isBuiltin ? (
+                        <p className="text-xs text-slate-400 dark:text-slate-500">
+                          {formatVerifiedAt(credential.last_verified_at)}
+                        </p>
+                      ) : null}
                     </div>
                     <div className="flex flex-wrap gap-2 sm:flex-none sm:items-center sm:justify-end">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        disabled={testingDisabled}
-                        onClick={() => handleTestModel(credential)}
-                      >
-                        {testModelMutation.isPending &&
-                        testModelMutation.variables?.id === credential.id
-                          ? t("settings.modelCard.testing")
-                          : t("settings.modelCard.test")}
-                      </Button>
+                      {!isBuiltin ? (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          disabled={testingDisabled}
+                          onClick={() => handleTestModel(credential)}
+                        >
+                          {testModelMutation.isPending &&
+                          testModelMutation.variables?.id === credential.id
+                            ? t("settings.modelCard.testing")
+                            : t("settings.modelCard.test")}
+                        </Button>
+                      ) : null}
                       <Button
                         type="button"
                         variant="outline"
@@ -1290,33 +1414,39 @@ export default function SettingsPage() {
                           ? t("settings.modelCard.preferredCurrent")
                           : t("settings.modelCard.setPreferred")}
                       </Button>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        disabled={toggleDisabled}
-                        onClick={() => handleToggleModelStatus(credential)}
-                      >
-                        {isDisabled
-                          ? t("settings.modelCard.enable")
-                          : t("settings.modelCard.disable")}
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        disabled={editDisabled}
-                        onClick={() => handleStartEditModel(credential)}
-                      >
-                        {t("settings.modelCard.edit")}
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        className="text-red-600 hover:text-red-700 dark:text-red-300 dark:hover:text-red-200"
-                        disabled={deleteDisabled}
-                        onClick={() => handleDeleteModel(credential)}
-                      >
-                        {t("settings.modelCard.delete")}
-                      </Button>
+                      {!isBuiltin ? (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          disabled={toggleDisabled}
+                          onClick={() => handleToggleModelStatus(credential)}
+                        >
+                          {isDisabled
+                            ? t("settings.modelCard.enable")
+                            : t("settings.modelCard.disable")}
+                        </Button>
+                      ) : null}
+                      {!isBuiltin ? (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          disabled={editDisabled}
+                          onClick={() => handleStartEditModel(credential)}
+                        >
+                          {t("settings.modelCard.edit")}
+                        </Button>
+                      ) : null}
+                      {!isBuiltin ? (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          className="text-red-600 hover:text-red-700 dark:text-red-300 dark:hover:text-red-200"
+                          disabled={deleteLocked}
+                          onClick={() => handleDeleteModel(credential)}
+                        >
+                          {t("settings.modelCard.delete")}
+                        </Button>
+                      ) : null}
                     </div>
                   </div>
                   {isEditing ? (

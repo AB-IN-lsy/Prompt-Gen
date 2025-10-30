@@ -8,6 +8,8 @@ package ratelimit
 
 import (
 	"context"
+	"errors"
+	"strconv"
 	"sync"
 	"time"
 
@@ -80,6 +82,30 @@ func (r *RedisLimiter) Allow(ctx context.Context, key string, limit int, window 
 	return AllowResult{Allowed: true, Remaining: remaining}, nil
 }
 
+// Peek 返回指定 key 当前的计数与剩余有效期。
+func (r *RedisLimiter) Peek(ctx context.Context, key string) (int, time.Duration, error) {
+	if r == nil || r.client == nil {
+		return 0, 0, nil
+	}
+	namespaced := r.prefix + ":" + key
+	value, err := r.client.Get(ctx, namespaced).Result()
+	if errors.Is(err, redis.Nil) {
+		return 0, 0, nil
+	}
+	if err != nil {
+		return 0, 0, err
+	}
+	count, err := strconv.Atoi(value)
+	if err != nil {
+		return 0, 0, err
+	}
+	ttl, err := r.client.TTL(ctx, namespaced).Result()
+	if err != nil {
+		return 0, 0, err
+	}
+	return count, ttl, nil
+}
+
 // MemoryLimiter 是 Redis 不可用时的替代方案，仅用于开发环境。
 type MemoryLimiter struct {
 	mu    sync.Mutex
@@ -131,4 +157,23 @@ func (m *MemoryLimiter) Allow(_ context.Context, key string, limit int, window t
 	}
 
 	return AllowResult{Allowed: true, Remaining: remaining}, nil
+}
+
+// Peek 获取内存限流器中指定 key 的计数与剩余有效期。
+func (m *MemoryLimiter) Peek(key string) (int, time.Duration) {
+	if m == nil {
+		return 0, 0
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	ent, ok := m.store[key]
+	if !ok {
+		return 0, 0
+	}
+	remaining := time.Until(ent.expires)
+	if remaining < 0 {
+		delete(m.store, key)
+		return 0, 0
+	}
+	return ent.count, remaining
 }

@@ -31,10 +31,10 @@ const (
 
 // PromptKeywordItem 映射 Prompt 中正负关键词 JSON 数组的元素结构。
 type PromptKeywordItem struct {
-	KeywordID uint   `json:"keyword_id,omitempty"`
-	Word      string `json:"word"`
-	Source    string `json:"source,omitempty"`
-	Weight    int    `json:"weight,omitempty"`
+	KeywordID uint   `json:"keyword_id,omitempty"` // 关键词主键（新建时可为空）
+	Word      string `json:"word"`                 // 关键词文本
+	Source    string `json:"source,omitempty"`     // 来源：manual/model/local
+	Weight    int    `json:"weight,omitempty"`     // 权重（0-5）
 }
 
 // Prompt 表示用户保存的完整 Prompt 记录。

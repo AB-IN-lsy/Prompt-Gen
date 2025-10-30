@@ -130,6 +130,12 @@ func BuildApplication(ctx context.Context, logger *zap.SugaredLogger, resources 
 	} else {
 		publicPromptLimiter = ratelimit.NewMemoryLimiter()
 	}
+	var freeTierLimiter ratelimit.Limiter
+	if resources.Redis != nil {
+		freeTierLimiter = ratelimit.NewRedisLimiter(resources.Redis, "prompt_free")
+	} else {
+		freeTierLimiter = ratelimit.NewMemoryLimiter()
+	}
 	// 本地模式下禁用所有限流器，方便开发与测试。
 	if isLocalMode {
 		logger.Infow("disabling rate limiters in local mode")
@@ -137,6 +143,7 @@ func BuildApplication(ctx context.Context, logger *zap.SugaredLogger, resources 
 		promptLimiter = nil
 		commentLimiter = nil
 		publicPromptLimiter = nil
+		freeTierLimiter = nil
 	}
 
 	// 支持通过环境变量自定义验证邮件的频率限制。
@@ -151,17 +158,43 @@ func BuildApplication(ctx context.Context, logger *zap.SugaredLogger, resources 
 	userService := usersvc.NewService(userRepo, modelRepo)
 	userHandler := handler.NewUserHandler(userService)
 
-	// 模型服务与 Handler 负责模型凭据的管理与测试连接。
-	modelService := modelsvc.NewService(modelRepo, userRepo)
-	modelHandler := handler.NewModelHandler(modelService)
-
 	// Prompt 服务与 Handler 较为复杂，涉及关键词管理、工作空间、持久化队列等。
 	promptCfg := loadPromptConfig(logger, isLocalMode)
+	// 模型服务与 Handler 负责模型凭据的管理与测试连接。
+	modelService := modelsvc.NewService(modelRepo, userRepo)
 	// 构建 Prompt 工作台服务，并注入关键词上限、限流配置等依赖。
-	promptService, err := promptsvc.NewServiceWithConfig(promptRepo, keywordRepo, modelService, workspaceStore, persistenceQueue, logger, promptCfg)
+	promptService, err := promptsvc.NewServiceWithConfig(promptRepo, keywordRepo, modelService, workspaceStore, persistenceQueue, logger, freeTierLimiter, promptCfg)
 	if err != nil {
 		return nil, fmt.Errorf("init prompt service: %w", err)
 	}
+	var builtinModels []modelsvc.Credential
+	if info := promptService.FreeTierInfo(); info != nil && strings.TrimSpace(info.Alias) != "" {
+		daily := info.DailyQuota
+		displayName := strings.TrimSpace(info.DisplayName)
+		if displayName == "" {
+			displayName = strings.TrimSpace(info.Alias)
+		}
+		actualModel := strings.TrimSpace(info.ActualModel)
+		if actualModel == "" {
+			actualModel = strings.TrimSpace(info.Alias)
+		}
+		builtinModels = append(builtinModels, modelsvc.Credential{
+			Provider:    info.Provider,
+			ModelKey:    info.Alias,
+			DisplayName: displayName,
+			ActualModel: actualModel,
+			Status:      "enabled",
+			IsBuiltin:   true,
+			DailyQuota:  &daily,
+			CreatedAt:   time.Time{},
+			UpdatedAt:   time.Time{},
+		})
+	}
+	var freeTierUsage handler.FreeTierUsageFunc
+	if promptService != nil {
+		freeTierUsage = promptService.FreeTierUsage
+	}
+	modelHandler := handler.NewModelHandler(modelService, builtinModels, freeTierUsage)
 	promptRateLimit := loadPromptRateLimit(logger)
 	promptHandler := handler.NewPromptHandler(promptService, promptLimiter, promptRateLimit)
 	// 构建 Prompt 评论服务与 Handler，注入评论审核配置与限流器。
@@ -465,6 +498,21 @@ func loadPromptConfig(logger *zap.SugaredLogger, isLocal bool) promptsvc.Config 
 		logger.Warnw("audit enabled but API key missing, disabling", "provider", auditProvider)
 		auditEnabled = false
 	}
+	freeTierEnabled := parseBoolEnv("PROMPT_FREE_TIER_ENABLED", !isLocal)
+	if isLocal {
+		freeTierEnabled = false
+	}
+	freeTierProvider := strings.TrimSpace(os.Getenv("PROMPT_FREE_TIER_PROVIDER"))
+	freeTierAlias := strings.TrimSpace(os.Getenv("PROMPT_FREE_TIER_MODEL_KEY"))
+	freeTierActual := strings.TrimSpace(os.Getenv("PROMPT_FREE_TIER_ACTUAL_MODEL"))
+	freeTierDisplay := strings.TrimSpace(os.Getenv("PROMPT_FREE_TIER_DISPLAY_NAME"))
+	freeTierAPIKey := strings.TrimSpace(os.Getenv("PROMPT_FREE_TIER_API_KEY"))
+	if freeTierAPIKey == "" {
+		freeTierAPIKey = auditAPIKey
+	}
+	freeTierBaseURL := strings.TrimSpace(os.Getenv("PROMPT_FREE_TIER_BASE_URL"))
+	freeTierLimit := parseIntEnv("PROMPT_FREE_TIER_DAILY_LIMIT", promptsvc.DefaultFreeTierDailyLimit, logger)
+	freeTierWindow := parseDurationEnv("PROMPT_FREE_TIER_WINDOW", promptsvc.DefaultFreeTierWindow, logger)
 	return promptsvc.Config{
 		KeywordLimit:        parseIntEnv("PROMPT_KEYWORD_LIMIT", promptsvc.DefaultKeywordLimit, logger),
 		KeywordMaxLength:    parseIntEnv("PROMPT_KEYWORD_MAX_LENGTH", promptsvc.DefaultKeywordMaxLength, logger),
@@ -482,6 +530,17 @@ func loadPromptConfig(logger *zap.SugaredLogger, isLocal bool) promptsvc.Config 
 			ModelKey: auditModelKey,
 			APIKey:   auditAPIKey,
 			BaseURL:  auditBaseURL,
+		},
+		FreeTier: promptsvc.FreeTierConfig{
+			Enabled:     freeTierEnabled,
+			Provider:    freeTierProvider,
+			Alias:       freeTierAlias,
+			ActualModel: freeTierActual,
+			DisplayName: freeTierDisplay,
+			APIKey:      freeTierAPIKey,
+			BaseURL:     freeTierBaseURL,
+			DailyQuota:  freeTierLimit,
+			Window:      freeTierWindow,
 		},
 	}
 }

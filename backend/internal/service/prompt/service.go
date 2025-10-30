@@ -14,7 +14,9 @@ import (
 
 	promptdomain "electron-go-app/backend/internal/domain/prompt"
 	modeldomain "electron-go-app/backend/internal/infra/model/deepseek"
+	"electron-go-app/backend/internal/infra/ratelimit"
 	"electron-go-app/backend/internal/repository"
+	modelsvc "electron-go-app/backend/internal/service/model"
 
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
@@ -70,6 +72,7 @@ type Service struct {
 	exportDir           string
 	versionKeepLimit    int
 	importBatchSize     int
+	freeTier            *freeTier
 }
 
 const (
@@ -170,10 +173,18 @@ type Config struct {
 	VersionRetention    int
 	ImportBatchSize     int
 	Audit               AuditConfig
+	FreeTier            FreeTierConfig
+}
+
+// FreeTierUsageSnapshot 描述免费额度的当前余量与重置时间。
+type FreeTierUsageSnapshot struct {
+	Limit      int
+	Remaining  int
+	ResetAfter time.Duration
 }
 
 // NewServiceWithConfig 构建 Service，并允许自定义分页等配置。
-func NewServiceWithConfig(prompts *repository.PromptRepository, keywords *repository.KeywordRepository, model ModelInvoker, workspace WorkspaceStore, queue PersistenceQueue, logger *zap.SugaredLogger, cfg Config) (*Service, error) {
+func NewServiceWithConfig(prompts *repository.PromptRepository, keywords *repository.KeywordRepository, model ModelInvoker, workspace WorkspaceStore, queue PersistenceQueue, logger *zap.SugaredLogger, freeLimiter ratelimit.Limiter, cfg Config) (*Service, error) {
 	if logger == nil {
 		logger = zap.NewNop().Sugar()
 	}
@@ -223,6 +234,11 @@ func NewServiceWithConfig(prompts *repository.PromptRepository, keywords *reposi
 		return nil, fmt.Errorf("build audit invoker: %w", err)
 	}
 
+	freeTier, err := buildFreeTier(cfg.FreeTier, freeLimiter, logger)
+	if err != nil {
+		return nil, fmt.Errorf("build free tier: %w", err)
+	}
+
 	return &Service{
 		prompts:             prompts,
 		keywords:            keywords,
@@ -242,6 +258,7 @@ func NewServiceWithConfig(prompts *repository.PromptRepository, keywords *reposi
 		exportDir:           normalisedExportDir,
 		versionKeepLimit:    cfg.VersionRetention,
 		importBatchSize:     cfg.ImportBatchSize,
+		freeTier:            freeTier,
 	}, nil
 }
 
@@ -258,6 +275,33 @@ func (s *Service) TagLimit() int {
 // ListPageSizeDefaults 返回列表分页的默认与最大页大小。
 func (s *Service) ListPageSizeDefaults() (int, int) {
 	return s.listDefaultPageSize, s.listMaxPageSize
+}
+
+// FreeTierInfo 返回免费额度模型的基础描述信息，供上层聚合展示。
+func (s *Service) FreeTierInfo() *FreeTierInfo {
+	if s == nil || s.freeTier == nil {
+		return nil
+	}
+	return s.freeTier.info()
+}
+
+// FreeTierUsage 返回指定用户的免费额度剩余情况。
+func (s *Service) FreeTierUsage(ctx context.Context, userID uint) (*FreeTierUsageSnapshot, error) {
+	if s == nil || s.freeTier == nil || !s.freeTier.enabled {
+		return nil, nil
+	}
+	if userID == 0 {
+		return nil, errors.New("user id required")
+	}
+	usage, ttl, err := s.freeTier.snapshot(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	return &FreeTierUsageSnapshot{
+		Limit:      usage.Limit,
+		Remaining:  usage.Remaining,
+		ResetAfter: ttl,
+	}, nil
 }
 
 // ListPrompts 返回当前用户的 Prompt 列表，支持状态筛选与关键字搜索。
@@ -1171,6 +1215,48 @@ func (s *Service) AuditCommentContent(ctx context.Context, userID uint, content 
 	return s.auditContent(ctx, userID, "", content, auditStageCommentBody)
 }
 
+// invokeResult 记录模型调用结果以及免费额度的使用情况。
+type invokeResult struct {
+	Response     modeldomain.ChatCompletionResponse
+	FreeTierUsed bool
+	FreeTierInfo *freeTierUsage
+}
+
+// invokeModelWithFallback 优先使用用户自定义凭据调用模型，若缺失则回退到免费额度。
+//  1. 先调用原来的 model.InvokeChatCompletion（也就是 ModelService.InvokeChatCompletion），这和过去的逻辑完全一样。
+//  2. 如果返回 modelsvc.ErrCredentialNotFound 或 ErrCredentialDisabled，并且我们启用了 free tier，就改走 freeTier.invoke(...)。
+//  3. 其它错误保持原状向上抛，让 Handler 决定应该提示网络错误还是内容审核失败。
+func (s *Service) invokeModelWithFallback(ctx context.Context, userID uint, modelKey string, req modeldomain.ChatCompletionRequest) (invokeResult, error) {
+	if s.model == nil {
+		return invokeResult{}, fmt.Errorf("%w: 模型服务未初始化", ErrModelInvocationFailed)
+	}
+	resp, err := s.model.InvokeChatCompletion(ctx, userID, modelKey, req)
+	if err == nil {
+		return invokeResult{Response: resp}, nil
+	}
+
+	if s.freeTier == nil || !s.freeTier.matches(modelKey) {
+		return invokeResult{}, fmt.Errorf("%w: %w", ErrModelInvocationFailed, err)
+	}
+	if !errors.Is(err, modelsvc.ErrCredentialNotFound) && !errors.Is(err, modelsvc.ErrCredentialDisabled) {
+		return invokeResult{}, fmt.Errorf("%w: %w", ErrModelInvocationFailed, err)
+	}
+
+	resp, usage, fallbackErr := s.freeTier.invoke(ctx, userID, req)
+	if fallbackErr != nil {
+		if quotaErr := (*FreeTierQuotaExceededError)(nil); errors.As(fallbackErr, &quotaErr) {
+			return invokeResult{}, quotaErr
+		}
+		return invokeResult{}, fmt.Errorf("%w: %w", ErrModelInvocationFailed, fallbackErr)
+	}
+
+	return invokeResult{
+		Response:     resp,
+		FreeTierUsed: true,
+		FreeTierInfo: &usage,
+	}, nil
+}
+
 // SaveInput 描述保存草稿或发布 Prompt 的参数。
 type SaveInput struct {
 	UserID                   uint
@@ -1205,7 +1291,11 @@ func (s *Service) Interpret(ctx context.Context, input InterpretInput) (Interpre
 	}
 	modelKey := strings.TrimSpace(input.ModelKey)
 	if modelKey == "" {
-		return InterpretOutput{}, errors.New("model key is empty")
+		if alias := s.freeTier.defaultAlias(); alias != "" {
+			modelKey = alias
+		} else {
+			return InterpretOutput{}, errors.New("model key is empty")
+		}
 	}
 	if err := s.auditContent(ctx, input.UserID, modelKey, description, auditStageInterpretInput); err != nil {
 		return InterpretOutput{}, err
@@ -1215,12 +1305,12 @@ func (s *Service) Interpret(ctx context.Context, input InterpretInput) (Interpre
 	// 防止模型超时
 	modelCtx, cancel := s.modelInvocationContext(ctx)
 	defer cancel()
-	resp, err := s.model.InvokeChatCompletion(modelCtx, input.UserID, modelKey, req)
+	invokeRes, err := s.invokeModelWithFallback(modelCtx, input.UserID, modelKey, req)
 	if err != nil {
-		return InterpretOutput{}, fmt.Errorf("%w: %w", ErrModelInvocationFailed, err)
+		return InterpretOutput{}, err
 	}
 
-	payload, err := parseInterpretationPayload(resp)
+	payload, err := parseInterpretationPayload(invokeRes.Response)
 	if err != nil {
 		return InterpretOutput{}, err
 	}
@@ -1233,13 +1323,13 @@ func (s *Service) Interpret(ctx context.Context, input InterpretInput) (Interpre
 			cleanedTags = tags
 		}
 	}
-	result := InterpretOutput{
+	output := InterpretOutput{
 		Topic:        payload.Topic,
 		Confidence:   payload.Confidence,
 		Instructions: payload.Instructions,
 		Tags:         cleanedTags,
 	}
-	if result.Topic == "" {
+	if output.Topic == "" {
 		return InterpretOutput{}, errors.New("model did not return topic")
 	}
 	normalized := newKeywordSet()
@@ -1252,7 +1342,7 @@ func (s *Service) Interpret(ctx context.Context, input InterpretInput) (Interpre
 		}
 		item.Word = s.clampKeywordWord(item.Word)
 		if normalized.add(item) {
-			result.PositiveKeywords = append(result.PositiveKeywords, item)
+			output.PositiveKeywords = append(output.PositiveKeywords, item)
 		}
 	}
 	for _, entry := range payload.Negative {
@@ -1264,7 +1354,7 @@ func (s *Service) Interpret(ctx context.Context, input InterpretInput) (Interpre
 		}
 		item.Word = s.clampKeywordWord(item.Word)
 		if normalized.add(item) {
-			result.NegativeKeywords = append(result.NegativeKeywords, item)
+			output.NegativeKeywords = append(output.NegativeKeywords, item)
 		}
 	}
 
@@ -1278,16 +1368,16 @@ func (s *Service) Interpret(ctx context.Context, input InterpretInput) (Interpre
 			Language:  input.Language,
 			ModelKey:  modelKey,
 			DraftBody: "",
-			Positive:  toWorkspaceKeywords(result.PositiveKeywords, s.keywordLimit),
-			Negative:  toWorkspaceKeywords(result.NegativeKeywords, s.keywordLimit),
+			Positive:  toWorkspaceKeywords(output.PositiveKeywords, s.keywordLimit),
+			Negative:  toWorkspaceKeywords(output.NegativeKeywords, s.keywordLimit),
 			Version:   1,
 		}
 		attributes := map[string]string{}
-		if strings.TrimSpace(result.Instructions) != "" {
-			attributes[workspaceAttrInstructions] = result.Instructions
+		if strings.TrimSpace(output.Instructions) != "" {
+			attributes[workspaceAttrInstructions] = output.Instructions
 		}
-		if len(result.Tags) > 0 {
-			attributes[workspaceAttrTags] = encodeTagsAttribute(result.Tags)
+		if len(output.Tags) > 0 {
+			attributes[workspaceAttrTags] = encodeTagsAttribute(output.Tags)
 		}
 		if len(attributes) > 0 {
 			workspaceSnapshot.Attributes = attributes
@@ -1295,24 +1385,24 @@ func (s *Service) Interpret(ctx context.Context, input InterpretInput) (Interpre
 		if token, err := s.workspace.CreateOrReplace(storeCtx, input.UserID, workspaceSnapshot); err != nil {
 			s.logger.Warnw("store workspace snapshot failed", "user_id", input.UserID, "topic", payload.Topic, "error", err)
 		} else {
-			result.WorkspaceToken = token
+			output.WorkspaceToken = token
 		}
 	} else {
 		// 无 Redis 时保持旧行为，直接写入 MySQL 字典。
-		s.persistKeywords(ctx, input.UserID, payload.Topic, append(result.PositiveKeywords, result.NegativeKeywords...))
+		s.persistKeywords(ctx, input.UserID, payload.Topic, append(output.PositiveKeywords, output.NegativeKeywords...))
 	}
 
-	if len(result.PositiveKeywords) == 0 {
+	if len(output.PositiveKeywords) == 0 {
 		return InterpretOutput{}, errors.New("model did not return positive keywords")
 	}
-	if len(result.PositiveKeywords) > s.keywordLimit {
-		result.PositiveKeywords = result.PositiveKeywords[:s.keywordLimit]
+	if len(output.PositiveKeywords) > s.keywordLimit {
+		output.PositiveKeywords = output.PositiveKeywords[:s.keywordLimit]
 	}
-	if len(result.NegativeKeywords) > s.keywordLimit {
-		result.NegativeKeywords = result.NegativeKeywords[:s.keywordLimit]
+	if len(output.NegativeKeywords) > s.keywordLimit {
+		output.NegativeKeywords = output.NegativeKeywords[:s.keywordLimit]
 	}
 
-	return result, nil
+	return output, nil
 }
 
 // AugmentKeywords 调用模型补充关键词，并返回真正新增的词条，同时维持去重与上限控制。
@@ -1320,8 +1410,13 @@ func (s *Service) AugmentKeywords(ctx context.Context, input AugmentInput) (Augm
 	if strings.TrimSpace(input.Topic) == "" {
 		return AugmentOutput{}, errors.New("topic is empty")
 	}
-	if strings.TrimSpace(input.ModelKey) == "" {
-		return AugmentOutput{}, errors.New("model key is empty")
+	modelKey := strings.TrimSpace(input.ModelKey)
+	if modelKey == "" {
+		if alias := s.freeTier.defaultAlias(); alias != "" {
+			modelKey = alias
+		} else {
+			return AugmentOutput{}, errors.New("model key is empty")
+		}
 	}
 	positiveCapacity := s.keywordLimit - len(input.ExistingPositive)
 	if positiveCapacity < 0 {
@@ -1336,14 +1431,14 @@ func (s *Service) AugmentKeywords(ctx context.Context, input AugmentInput) (Augm
 	}
 
 	req := buildAugmentRequest(input)
-	req.Model = strings.TrimSpace(input.ModelKey)
+	req.Model = modelKey
 	modelCtx, cancel := s.modelInvocationContext(ctx)
 	defer cancel()
-	resp, err := s.model.InvokeChatCompletion(modelCtx, input.UserID, input.ModelKey, req)
+	invokeRes, err := s.invokeModelWithFallback(modelCtx, input.UserID, modelKey, req)
 	if err != nil {
-		return AugmentOutput{}, fmt.Errorf("%w: %w", ErrModelInvocationFailed, err)
+		return AugmentOutput{}, err
 	}
-	payload, err := parseAugmentPayload(resp)
+	payload, err := parseAugmentPayload(invokeRes.Response)
 	if err != nil {
 		return AugmentOutput{}, err
 	}
@@ -1592,7 +1687,11 @@ func (s *Service) GeneratePrompt(ctx context.Context, input GenerateInput) (Gene
 	}
 	modelKey := strings.TrimSpace(input.ModelKey)
 	if modelKey == "" {
-		return GenerateOutput{}, errors.New("model key is empty")
+		if alias := s.freeTier.defaultAlias(); alias != "" {
+			modelKey = alias
+		} else {
+			return GenerateOutput{}, errors.New("model key is empty")
+		}
 	}
 	if len(input.PositiveKeywords) == 0 {
 		return GenerateOutput{}, errors.New("positive keywords required")
@@ -1605,12 +1704,12 @@ func (s *Service) GeneratePrompt(ctx context.Context, input GenerateInput) (Gene
 	start := time.Now()
 	modelCtx, cancel := s.modelInvocationContext(ctx)
 	defer cancel()
-	resp, err := s.model.InvokeChatCompletion(modelCtx, input.UserID, modelKey, req)
+	invokeRes, err := s.invokeModelWithFallback(modelCtx, input.UserID, modelKey, req)
 	if err != nil {
-		return GenerateOutput{}, fmt.Errorf("%w: %w", ErrModelInvocationFailed, err)
+		return GenerateOutput{}, err
 	}
 	duration := time.Since(start)
-	promptText := extractPromptText(resp)
+	promptText := extractPromptText(invokeRes.Response)
 	if promptText == "" {
 		return GenerateOutput{}, errors.New("model returned empty prompt")
 	}
@@ -1628,10 +1727,10 @@ func (s *Service) GeneratePrompt(ctx context.Context, input GenerateInput) (Gene
 		}
 	}
 	return GenerateOutput{
-		Model:        resp.Model,
+		Model:        invokeRes.Response.Model,
 		Prompt:       promptText,
 		Duration:     duration,
-		Usage:        resp.Usage,
+		Usage:        invokeRes.Response.Usage,
 		PositiveUsed: input.PositiveKeywords,
 		NegativeUsed: input.NegativeKeywords,
 	}, nil
