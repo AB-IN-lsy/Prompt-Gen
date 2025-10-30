@@ -1,4 +1,4 @@
-# Prompt Gen Desktop
+# [![Typing SVG](https://readme-typing-svg.demolab.com?font=Fira+Code&weight=500&size=30&pause=1000&vCenter=true&width=435&lines=Prompt+Gen+Desktop)](https://git.io/typing-svg)
 
 ![GitHub Stars](https://img.shields.io/github/stars/AB-IN-lsy/Prompt-Gen?style=social)
 ![GitHub Forks](https://img.shields.io/github/forks/AB-IN-lsy/Prompt-Gen?style=social)
@@ -16,22 +16,6 @@ Prompt Gen Desktop 是一款专为内容创作者打造的桌面提示词管家�
 - **离线也能信任**：本地 SQLite 存储与 JSON 备份让数据牢牢掌握在自己手里，导入导出只需一键。
 - **公共 Prompt 透明**：公共 Prompt 的发布与审核记录都会同步展示，结合操作日志与导入导出明细，团队协作更放心。
 - **开箱体验额度**：在线模式内置 DeepSeek 免费体验模型，为未配置凭据的新用户提供每日有限的解析/生成次数，超出后可随时添加自有模型继续创作。
-
-## 演示视频
-
-<video src="https://github.com/AB-IN-lsy/Prompt-Gen/raw/main/docs/assets/demo1.mp4" controls width="70%">
-  你的浏览器不支持内嵌播放，请下载 <a href="https://github.com/AB-IN-lsy/Prompt-Gen/raw/main/docs/assets/demo1.mp4">demo1.mp4</a> 查看。
-</video>
-
-<https://github.com/user-attachments/assets/f01924c4-4fdd-40b5-8ab3-1ec1999fb416>
-
-<video src="https://github.com/AB-IN-lsy/Prompt-Gen/raw/main/docs/assets/demo2.mp4" controls width="70%">
-  你的浏览器不支持内嵌播放，请下载 <a href="https://github.com/AB-IN-lsy/Prompt-Gen/raw/main/docs/assets/demo2.mp4">demo2.mp4</a> 查看。
-</video>
-
-<https://github.com/user-attachments/assets/6ceaa86c-10e8-4e5f-a208-89dee8090876>
-
-> 若在 GitHub 页面无法直接播放，请右键链接选择“在新标签页打开”，或至本地仓库的 `docs/assets/` 目录离线查看。
 
 ### 界面预览
 
