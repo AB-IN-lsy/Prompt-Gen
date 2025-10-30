@@ -202,3 +202,8 @@ go test -tags=e2e ./backend/tests/e2e                   # 命中线上接口时�
 ## 许可证
 
 本项目依据仓库中的 [LICENSE](LICENSE) 发布。使用、分发或再次开发时请遵守相关条款，并在文档、产品页面及二次发行包中保留原始版权声明。
+
+
+## Star History
+
+[![Star History Chart](https://api.star-history.com/svg?repos=AB-IN-lsy/Prompt-Gen&type=date&legend=top-left)](https://www.star-history.com/#AB-IN-lsy/Prompt-Gen&type=date&legend=top-left)
