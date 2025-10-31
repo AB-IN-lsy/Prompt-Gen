@@ -70,6 +70,7 @@ func BuildApplication(ctx context.Context, logger *zap.SugaredLogger, resources 
 	keywordRepo := repository.NewKeywordRepository(resources.DBConn())
 	publicPromptRepo := repository.NewPublicPromptRepository(resources.DBConn())
 	promptCommentRepo := repository.NewPromptCommentRepository(resources.DBConn())
+	promptCommentLikeRepo := repository.NewPromptCommentLikeRepository(resources.DBConn())
 
 	isLocalMode := strings.EqualFold(cfg.Mode, config.ModeLocal)
 
@@ -203,7 +204,7 @@ func BuildApplication(ctx context.Context, logger *zap.SugaredLogger, resources 
 	if promptService != nil {
 		commentAudit = promptService.AuditCommentContent
 	}
-	commentService := promptcommentsvc.NewService(promptCommentRepo, promptRepo, userRepo, commentAudit, logger, commentCfg)
+	commentService := promptcommentsvc.NewService(promptCommentRepo, promptCommentLikeRepo, promptRepo, userRepo, commentAudit, logger, commentCfg)
 	commentRateLimit := loadPromptCommentRateLimit(logger)
 	commentHandler := handler.NewPromptCommentHandler(commentService, commentLimiter, commentRateLimit)
 	// 公开 Prompt 服务与 Handler 仅负责公开库的查询功能。
@@ -466,11 +467,13 @@ func loadPromptCommentConfig(logger *zap.SugaredLogger) promptcommentsvc.Config 
 		maxLength = 1000
 	}
 	requireApproval := parseBoolEnv("PROMPT_COMMENT_REQUIRE_APPROVAL", false)
+	likeStep := parseIntEnv("PROMPT_COMMENT_LIKE_STEP", 1, logger)
 	return promptcommentsvc.Config{
 		DefaultPageSize: defaultPage,
 		MaxPageSize:     maxPage,
 		RequireApproval: requireApproval,
 		MaxBodyLength:   maxLength,
+		LikeDeltaStep:   likeStep,
 	}
 }
 

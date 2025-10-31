@@ -91,6 +91,7 @@ func (h *PromptCommentHandler) List(c *gin.Context) {
 		return
 	}
 	promptID := uint(idNum)
+	viewerID, _ := extractUserID(c)
 	status := promptdomain.PromptCommentStatusApproved
 	if isAdmin(c) {
 		statusParam := strings.TrimSpace(c.DefaultQuery("status", ""))
@@ -113,6 +114,7 @@ func (h *PromptCommentHandler) List(c *gin.Context) {
 		Status:   status,
 		Page:     page,
 		PageSize: pageSize,
+		ViewerID: viewerID,
 	})
 	if err != nil {
 		log.Errorw("list comments failed", "error", err, "prompt_id", promptID)
@@ -256,6 +258,76 @@ func (h *PromptCommentHandler) Delete(c *gin.Context) {
 	}, nil)
 }
 
+// Like 为评论点赞。
+func (h *PromptCommentHandler) Like(c *gin.Context) {
+	userID, ok := extractUserID(c)
+	if !ok {
+		response.Fail(c, http.StatusUnauthorized, response.ErrUnauthorized, "缺少用户信息", nil)
+		return
+	}
+	idVal := strings.TrimSpace(c.Param("id"))
+	idNum, err := strconv.Atoi(idVal)
+	if err != nil || idNum <= 0 {
+		response.Fail(c, http.StatusBadRequest, response.ErrBadRequest, "无效的评论编号", nil)
+		return
+	}
+	result, err := h.service.LikeComment(c.Request.Context(), promptcommentsvc.UpdateCommentLikeInput{
+		CommentID: uint(idNum),
+		UserID:    userID,
+	})
+	if err != nil {
+		switch {
+		case errors.Is(err, promptcommentsvc.ErrCommentNotFound):
+			response.Fail(c, http.StatusNotFound, response.ErrNotFound, "评论不存在或已删除", nil)
+		case errors.Is(err, promptcommentsvc.ErrCommentNotApproved):
+			response.Fail(c, http.StatusBadRequest, response.ErrBadRequest, err.Error(), nil)
+		default:
+			h.scope("like").Errorw("like comment failed", "error", err, "comment_id", idNum, "user_id", userID)
+			response.Fail(c, http.StatusInternalServerError, response.ErrInternal, "点赞评论失败", nil)
+		}
+		return
+	}
+	response.Success(c, http.StatusOK, gin.H{
+		"like_count": result.LikeCount,
+		"liked":      result.Liked,
+	}, nil)
+}
+
+// Unlike 取消对评论的点赞。
+func (h *PromptCommentHandler) Unlike(c *gin.Context) {
+	userID, ok := extractUserID(c)
+	if !ok {
+		response.Fail(c, http.StatusUnauthorized, response.ErrUnauthorized, "缺少用户信息", nil)
+		return
+	}
+	idVal := strings.TrimSpace(c.Param("id"))
+	idNum, err := strconv.Atoi(idVal)
+	if err != nil || idNum <= 0 {
+		response.Fail(c, http.StatusBadRequest, response.ErrBadRequest, "无效的评论编号", nil)
+		return
+	}
+	result, err := h.service.UnlikeComment(c.Request.Context(), promptcommentsvc.UpdateCommentLikeInput{
+		CommentID: uint(idNum),
+		UserID:    userID,
+	})
+	if err != nil {
+		switch {
+		case errors.Is(err, promptcommentsvc.ErrCommentNotFound):
+			response.Fail(c, http.StatusNotFound, response.ErrNotFound, "评论不存在或已删除", nil)
+		case errors.Is(err, promptcommentsvc.ErrCommentNotApproved):
+			response.Fail(c, http.StatusBadRequest, response.ErrBadRequest, err.Error(), nil)
+		default:
+			h.scope("unlike").Errorw("unlike comment failed", "error", err, "comment_id", idNum, "user_id", userID)
+			response.Fail(c, http.StatusInternalServerError, response.ErrInternal, "取消点赞失败", nil)
+		}
+		return
+	}
+	response.Success(c, http.StatusOK, gin.H{
+		"like_count": result.LikeCount,
+		"liked":      result.Liked,
+	}, nil)
+}
+
 // buildThreadResponse 将评论线程展开为前端可消费的 JSON 结构。
 func (h *PromptCommentHandler) buildThreadResponse(thread promptcommentsvc.CommentThread, includeReview bool) gin.H {
 	replies := make([]gin.H, 0, len(thread.Replies))
@@ -288,6 +360,8 @@ func (h *PromptCommentHandler) buildCommentResponse(comment promptdomain.PromptC
 		"root_id":     comment.RootID,
 		"body":        comment.Body,
 		"status":      comment.Status,
+		"like_count":  comment.LikeCount,
+		"is_liked":    comment.IsLiked,
 		"reply_count": comment.ReplyCount,
 		"author":      author,
 		"created_at":  comment.CreatedAt,

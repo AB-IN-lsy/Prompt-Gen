@@ -209,3 +209,21 @@ func (r *PromptCommentRepository) UpdateStatus(ctx context.Context, id uint, sta
 	}
 	return nil
 }
+
+// IncrementLikeCount 用于按增量更新评论的点赞数量，防止出现负值。
+func (r *PromptCommentRepository) IncrementLikeCount(ctx context.Context, commentID uint, delta int) error {
+	if delta == 0 {
+		return nil
+	}
+	result := r.db.WithContext(ctx).
+		Model(&promptdomain.PromptComment{}).
+		Where("id = ?", commentID).
+		UpdateColumn("like_count", gorm.Expr("CASE WHEN like_count + ? < 0 THEN 0 ELSE like_count + ? END", delta, delta))
+	if result.Error != nil {
+		return fmt.Errorf("update prompt comment like_count: %w", result.Error)
+	}
+	if result.RowsAffected == 0 {
+		return gorm.ErrRecordNotFound
+	}
+	return nil
+}

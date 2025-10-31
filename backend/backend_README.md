@@ -9,6 +9,11 @@
 - 新增 `POST /api/prompts/import`，可上传导出的 JSON 文件并选择“合并/覆盖”模式批量回灌 Prompt，导入批大小由 `PROMPT_IMPORT_BATCH_SIZE` 控制。
 - 本地离线模式下会自动关闭邮箱验证、Prompt 生成与公共库的限流器，避免开发或演示环境频繁操作触发限流提示。
 - `/api/users/me` 响应新增 `runtime_mode` 字段，标记后端当前运行在本地（`local`）还是在线（`online`）模式，供前端自动切换离线特性。
+- 评论互动增强：
+  - 新增 `POST /api/prompts/comments/:id/like` 与 `DELETE /api/prompts/comments/:id/like`，用于点赞 / 取消点赞单条评论，接口响应包含最新的 `like_count` 与 `liked` 状态。
+  - `GET /api/prompts/:id/comments` 增补 `like_count`、`is_liked` 字段，支持在同一结构中返回评论树及点赞态。
+  - 新增表 `prompt_comment_likes` 存储点赞关系，点赞计数写入 `prompt_comments.like_count`，步长可通过 `PROMPT_COMMENT_LIKE_STEP` 调整（默认 1）。
+  - 需要在 `.env(.local)` 中新增 `PROMPT_COMMENT_LIKE_STEP=<整数>` 控制单次点赞对计数的增量。
 - 新增用户头像字段 `avatar_url`，支持上传后通过 `PUT /api/users/me` 保存。
 - 新增 `POST /api/uploads/avatar` 接口，可接收 multipart 头像并返回可访问的静态地址（支持匿名访问，便于注册阶段上传头像）。
 - 默认开放 `/static/**` 路由映射到 `backend/public` 目录，供头像等资源直接访问。
@@ -347,8 +352,10 @@ go run ./backend/cmd/sendmail -to you@example.com -name "测试账号"
 | `POST` | `/api/prompts/generate` | 调模型生成 Prompt 正文 | JSON：`topic`、`model_key`、`positive_keywords[]`、`negative_keywords[]`、`workspace_token`（可选） |
 | `POST` | `/api/prompts` | 保存草稿或发布 Prompt | JSON：`prompt_id`、`topic`、`body`、`status`、`publish`、`positive_keywords[]`、`negative_keywords[]`、`workspace_token`（可选） |
 | `DELETE` | `/api/prompts/:id` | 删除指定 Prompt 及其历史版本/关键词关联 | 无 |
-| `GET` | `/api/prompts/:id/comments` | 查询 Prompt 评论（含楼中楼） | Query：`page`、`page_size`、`status`（管理员可选 `all/pending/rejected`），需登录 |
+| `GET` | `/api/prompts/:id/comments` | 查询 Prompt 评论（含楼中楼） | Query：`page`、`page_size`、`status`（管理员可选 `all/pending/rejected`），需登录；响应项含 `like_count`、`is_liked` |
 | `POST` | `/api/prompts/:id/comments` | 新增评论或回复 | JSON：`body`、`parent_id`（可选），需登录；写库前会执行内容审核 |
+| `POST` | `/api/prompts/comments/:id/like` | 点赞指定评论 | 无额外参数，需登录；仅允许对已审核通过的评论点赞 |
+| `DELETE` | `/api/prompts/comments/:id/like` | 取消点赞指定评论 | 无额外参数，需登录 |
 | `POST` | `/api/prompts/comments/:id/review` | 审核评论（管理员） | JSON：`status`（`approved/rejected/pending`）、`note`（可选），需管理员权限 |
 | `DELETE` | `/api/prompts/comments/:id` | 删除评论（管理员） | 级联移除评论及其子回复，需管理员权限 |
 | `GET` | `/api/changelog` | 获取更新日志列表 | Query：`locale`（可选，默认 `en`） |
@@ -997,9 +1004,11 @@ ALTER TABLE prompts
           "id": 12,
           "prompt_id": 8,
           "user_id": 3,
-          "body": "这条 Prompt 很好用！",
-          "status": "approved",
-          "reply_count": 1,
+      "body": "这条 Prompt 很好用！",
+      "status": "approved",
+      "like_count": 5,
+      "is_liked": true,
+      "reply_count": 1,
           "author": { "id": 3, "username": "alice", "avatar_url": "https://..." },
           "created_at": "2025-10-25T08:30:00Z",
           "updated_at": "2025-10-25T08:30:00Z",
@@ -1009,6 +1018,8 @@ ALTER TABLE prompts
               "parent_id": 12,
               "body": "感谢反馈～",
               "status": "approved",
+              "like_count": 2,
+              "is_liked": false,
               "author": { "id": 1, "username": "admin" },
               "created_at": "2025-10-25T09:05:00Z",
               "updated_at": "2025-10-25T09:05:00Z"
@@ -1025,9 +1036,12 @@ ALTER TABLE prompts
       "current_count": 1
     }
   }
+
   ```
 
-- **说明**：`reply_count` 代表该楼层下已通过的回复数；管理员额外能读取 `review_note` 与 `reviewer_user_id` 字段。
+- **说明**：
+  - `like_count` 表示评论累计点赞数量，`is_liked` 反映当前登录用户是否已点赞（未登录默认 `false`）。
+  - `reply_count` 代表该楼层下已通过的回复数；管理员额外能读取 `review_note` 与 `reviewer_user_id` 字段。
 
 #### POST /api/prompts/:id/comments
 
@@ -1044,6 +1058,41 @@ ALTER TABLE prompts
 - **成功响应**：`201`，返回新建评论对象。
 - **内容审核**：若环境变量开启 `PROMPT_AUDIT_ENABLED=1` 且配置了可用的审核模型，后端会在写库前调用模型审查。违规时返回 `400`，错误码为 `CONTENT_REJECTED`，并在 `error.details.reason` 中附带模型判定的中文描述。
 - **常见错误**：评论内容为空或超长 → `400`；父级评论不存在或尚未通过审核 → `400`；目标 Prompt 不存在 → `404`。
+
+#### POST /api/prompts/comments/:id/like
+
+- **用途**：为指定评论点赞（包括楼主与子回复）。
+- **前置条件**：评论状态需为 `approved`；请求必须携带登录态。
+- **成功响应**：`200`
+
+  ```json
+  {
+    "success": true,
+    "data": {
+      "like_count": 6,
+      "liked": true
+    }
+  }
+  ```
+
+- **常见错误**：评论不存在 → `404`；评论尚未通过审核 → `400`，错误码为 `COMMENT_NOT_APPROVED`。
+
+#### DELETE /api/prompts/comments/:id/like
+
+- **用途**：取消对评论的点赞关系。
+- **成功响应**：`200`
+
+  ```json
+  {
+    "success": true,
+    "data": {
+      "like_count": 5,
+      "liked": false
+    }
+  }
+  ```
+
+- **常见错误**：评论不存在 → `404`；重复取消不会报错，`like_count` 维持当前值。
 
 #### POST /api/prompts/comments/:id/review
 

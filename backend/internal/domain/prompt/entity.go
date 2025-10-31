@@ -104,8 +104,10 @@ type PromptComment struct {
 	Status         string     `gorm:"size:16;not null;default:'pending';index"`  // 审核状态：pending/approved/rejected。
 	ReviewNote     string     `gorm:"type:text"`                                 // 审核备注，可选。
 	ReviewerUserID *uint      `gorm:"index:idx_prompt_comments_reviewer"`        // 审核人编号。
+	LikeCount      uint       `gorm:"not null;default:0"`                        // 点赞数量。
 	ReplyCount     int        `gorm:"-"`                                         // 当前评论的可见子回复数量。
 	Author         *UserBrief `gorm:"-"`                                         // 评论用户信息。
+	IsLiked        bool       `gorm:"-"`                                         // 当前用户是否点赞。
 	CreatedAt      time.Time  `gorm:"autoCreateTime"`                            // 创建时间。
 	UpdatedAt      time.Time  `gorm:"autoUpdateTime"`                            // 最近更新时间。
 }
@@ -113,6 +115,18 @@ type PromptComment struct {
 // TableName 返回评论表名称。
 func (PromptComment) TableName() string {
 	return "prompt_comments"
+}
+
+// PromptCommentLike 记录用户对评论的点赞关系。
+type PromptCommentLike struct {
+	CommentID uint      `gorm:"primaryKey;column:comment_id"` // 评论主键。
+	UserID    uint      `gorm:"primaryKey;column:user_id"`    // 点赞用户主键。
+	CreatedAt time.Time `gorm:"column:created_at;autoCreateTime"`
+}
+
+// TableName 返回评论点赞表名称。
+func (PromptCommentLike) TableName() string {
+	return "prompt_comment_likes"
 }
 
 // PromptVersion 记录历史版本，便于用户回滚。

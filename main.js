@@ -33,6 +33,18 @@ function loadEnvFiles() {
 
 loadEnvFiles();
 
+const APP_START_TIME = process.hrtime.bigint();
+
+function logStartupMetric(label) {
+    try {
+        const now = process.hrtime.bigint();
+        const durationMs = Number(now - APP_START_TIME) / 1e6;
+        console.info(`[startup] ${label} +${durationMs.toFixed(1)}ms`);
+    } catch (error) {
+        console.warn("[startup] failed to log metric", label, error);
+    }
+}
+
 app.commandLine.appendSwitch("allow-file-access-from-files");
 
 let backendProcess;
@@ -41,6 +53,141 @@ let tray;
 let isClosePromptVisible = false;
 let hasShownTrayBalloon = false;
 let pendingCloseResolver = null;
+let splashWindow;
+let splashVisibleAt = 0;
+
+const SPLASH_MIN_VISIBLE_MS = 450;
+
+const splashMarkup = `
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <title>PromptGen 正在启动…</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+      }
+      body {
+        margin: 0;
+        height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-family: "Inter", "PingFang SC", "Microsoft YaHei", sans-serif;
+        background: radial-gradient(circle at top, rgba(59,130,246,0.35), transparent 55%), rgba(15,23,42,0.92);
+        color: #f8fafc;
+      }
+      .card {
+        backdrop-filter: blur(18px);
+        background: rgba(15,23,42,0.72);
+        border: 1px solid rgba(148,163,184,0.28);
+        border-radius: 20px;
+        padding: 36px 42px;
+        box-shadow: 0 20px 65px -30px rgba(59,130,246,0.65);
+        text-align: center;
+        min-width: 320px;
+      }
+      h1 {
+        margin: 0;
+        font-weight: 600;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        font-size: 16px;
+        color: rgba(148,163,184,0.88);
+      }
+      p {
+        margin: 18px 0 0;
+        font-size: 14px;
+        color: rgba(226,232,240,0.9);
+      }
+      .spinner {
+        margin: 28px auto 0;
+        width: 44px;
+        height: 44px;
+        border-radius: 50%;
+        border: 3px solid rgba(148,163,184,0.25);
+        border-top-color: rgba(96,165,250,0.9);
+        animation: spin 1s linear infinite;
+      }
+      @keyframes spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <h1>PromptGen Desktop</h1>
+      <div class="spinner"></div>
+      <p>正在加载工作台，请稍候…</p>
+    </div>
+  </body>
+</html>
+`;
+
+function destroySplashWindow() {
+    if (!splashWindow || splashWindow.isDestroyed()) {
+        splashWindow = null;
+        return;
+    }
+    const reference = splashWindow;
+    splashWindow = null;
+    reference.close();
+}
+
+function scheduleSplashClose() {
+    if (!splashWindow) {
+        return;
+    }
+    const elapsed = Date.now() - splashVisibleAt;
+    const remaining = Math.max(SPLASH_MIN_VISIBLE_MS - elapsed, 0);
+    if (remaining <= 0) {
+        destroySplashWindow();
+        return;
+    }
+    setTimeout(() => destroySplashWindow(), remaining);
+}
+
+function createSplashWindow() {
+    if (splashWindow && !splashWindow.isDestroyed()) {
+        return splashWindow;
+    }
+    splashWindow = new BrowserWindow({
+        width: 460,
+        height: 320,
+        frame: false,
+        resizable: false,
+        movable: true,
+        transparent: true,
+        show: false,
+        alwaysOnTop: true,
+        skipTaskbar: true,
+        backgroundColor: "#00000000",
+        webPreferences: {
+            devTools: false
+        }
+    });
+
+    splashWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(splashMarkup)}`).catch((error) => {
+        console.error("[splash] load failed", error);
+    });
+
+    splashWindow.once("ready-to-show", () => {
+        if (!splashWindow) {
+            return;
+        }
+        splashWindow.show();
+        splashVisibleAt = Date.now();
+    });
+
+    splashWindow.on("closed", () => {
+        splashWindow = null;
+    });
+
+    return splashWindow;
+}
 
 const CLOSE_BEHAVIOR = {
     ASK: "ask",
@@ -399,6 +546,7 @@ const startBackend = () => {
     if (app.isPackaged) {
         backendProcess.unref();
     }
+    logStartupMetric("backend process spawned");
 
     backendProcess.on("exit", (code, signal) => {
         backendProcess = null;
@@ -561,6 +709,7 @@ function createMainWindow() {
             contextIsolation: true
         }
     });
+    logStartupMetric("main window instantiated");
 
     if (isDev) {
         mainWindow.loadURL(DEV_SERVER_URL);
@@ -573,6 +722,8 @@ function createMainWindow() {
     }
 
     mainWindow.once("ready-to-show", () => {
+        logStartupMetric("main window ready-to-show");
+        scheduleSplashClose();
         mainWindow.show();
         if (process.platform !== "darwin") {
             mainWindow.setAspectRatio(DEFAULT_WINDOW.width / DEFAULT_WINDOW.height);
@@ -584,6 +735,8 @@ function createMainWindow() {
     });
 
     mainWindow.webContents.once("did-finish-load", () => {
+        logStartupMetric("renderer did-finish-load");
+        scheduleSplashClose();
         mainWindow.webContents
             .executeJavaScript(
                 "console.info('[renderer] root innerHTML', document.getElementById('root')?.innerHTML?.length ?? 0)"
@@ -595,6 +748,7 @@ function createMainWindow() {
 
     mainWindow.webContents.on("did-fail-load", (_event, errorCode, errorDescription, validatedURL) => {
         console.error("[renderer] did-fail-load", { errorCode, errorDescription, validatedURL });
+        destroySplashWindow();
     });
 
     mainWindow.on("maximize", () => emitWindowState(mainWindow));
@@ -615,6 +769,8 @@ function createMainWindow() {
 }
 
 app.whenReady().then(() => {
+    logStartupMetric("app.whenReady resolved");
+    createSplashWindow();
     startBackend();
     Menu.setApplicationMenu(null);
     createMainWindow();
@@ -649,6 +805,7 @@ app.on("window-all-closed", () => {
         if (backendProcess) {
             backendProcess.kill();
         }
+        destroySplashWindow();
         app.quit();
     }
 });

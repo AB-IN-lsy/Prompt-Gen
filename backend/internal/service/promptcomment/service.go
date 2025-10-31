@@ -25,6 +25,8 @@ var (
 	ErrParentCommentInvalid = errors.New("回复目标评论不存在或不可用")
 	// ErrCommentNotFound 表示评论不存在。
 	ErrCommentNotFound = errors.New("评论不存在")
+	// ErrCommentNotApproved 表示评论尚未通过审核，暂不允许互动。
+	ErrCommentNotApproved = errors.New("评论尚未通过审核，暂无法点赞")
 )
 
 // AuditFunc 定义内容审核的函数签名，便于在测试中注入假实现。
@@ -36,11 +38,13 @@ type Config struct {
 	MaxPageSize     int
 	RequireApproval bool
 	MaxBodyLength   int
+	LikeDeltaStep   int
 }
 
 // Service 负责 Prompt 评论的业务逻辑。
 type Service struct {
 	comments        *repository.PromptCommentRepository
+	likes           *repository.PromptCommentLikeRepository
 	prompts         *repository.PromptRepository
 	users           *repository.UserRepository
 	logger          *zap.SugaredLogger
@@ -49,10 +53,11 @@ type Service struct {
 	requireApproval bool
 	maxBodyLength   int
 	auditFn         AuditFunc
+	likeDeltaStep   int
 }
 
 // NewService 创建评论服务实例。
-func NewService(comments *repository.PromptCommentRepository, prompts *repository.PromptRepository, users *repository.UserRepository, audit AuditFunc, logger *zap.SugaredLogger, cfg Config) *Service {
+func NewService(comments *repository.PromptCommentRepository, likes *repository.PromptCommentLikeRepository, prompts *repository.PromptRepository, users *repository.UserRepository, audit AuditFunc, logger *zap.SugaredLogger, cfg Config) *Service {
 	if logger == nil {
 		logger = zap.NewNop().Sugar()
 	}
@@ -65,8 +70,12 @@ func NewService(comments *repository.PromptCommentRepository, prompts *repositor
 	if cfg.DefaultPageSize > cfg.MaxPageSize {
 		cfg.DefaultPageSize = cfg.MaxPageSize
 	}
+	if cfg.LikeDeltaStep <= 0 {
+		cfg.LikeDeltaStep = 1
+	}
 	return &Service{
 		comments:        comments,
+		likes:           likes,
 		prompts:         prompts,
 		users:           users,
 		logger:          logger,
@@ -75,6 +84,7 @@ func NewService(comments *repository.PromptCommentRepository, prompts *repositor
 		requireApproval: cfg.RequireApproval,
 		maxBodyLength:   cfg.MaxBodyLength,
 		auditFn:         audit,
+		likeDeltaStep:   cfg.LikeDeltaStep,
 	}
 }
 
@@ -171,6 +181,7 @@ type ListCommentsInput struct {
 	Status   string
 	Page     int
 	PageSize int
+	ViewerID uint
 }
 
 // ListCommentsResult 封装评论列表的返回结构。
@@ -230,6 +241,9 @@ func (s *Service) List(ctx context.Context, input ListCommentsInput) (*ListComme
 	if err := s.attachAuthors(ctx, commentPtrs); err != nil {
 		s.logger.Warnw("attach comment authors failed", "error", err)
 	}
+	if err := s.attachLikes(ctx, commentPtrs, input.ViewerID); err != nil {
+		s.logger.Warnw("attach comment likes failed", "error", err)
+	}
 	repliesByRoot := make(map[uint][]promptdomain.PromptComment, len(rootIDs))
 	for _, reply := range replies {
 		if reply.RootID == nil {
@@ -265,6 +279,18 @@ func replyCountForRoot(counts map[uint]int64, rootID uint) int64 {
 		return val
 	}
 	return 0
+}
+
+// UpdateCommentLikeInput 描述点赞或取消点赞评论时的输入参数。
+type UpdateCommentLikeInput struct {
+	CommentID uint
+	UserID    uint
+}
+
+// UpdateCommentLikeOutput 返回点赞变更后的评论点赞数据。
+type UpdateCommentLikeOutput struct {
+	LikeCount uint `json:"like_count"`
+	Liked     bool `json:"liked"`
 }
 
 // ReviewInput 描述评论审核所需字段。
@@ -321,6 +347,77 @@ func (s *Service) Delete(ctx context.Context, commentID uint) error {
 	return nil
 }
 
+// LikeComment 处理用户点赞评论的请求。
+func (s *Service) LikeComment(ctx context.Context, input UpdateCommentLikeInput) (UpdateCommentLikeOutput, error) {
+	return s.changeCommentLike(ctx, input, true)
+}
+
+// UnlikeComment 处理用户取消点赞评论的请求。
+func (s *Service) UnlikeComment(ctx context.Context, input UpdateCommentLikeInput) (UpdateCommentLikeOutput, error) {
+	return s.changeCommentLike(ctx, input, false)
+}
+
+// changeCommentLike 根据动作新增或移除评论点赞关系。
+func (s *Service) changeCommentLike(ctx context.Context, input UpdateCommentLikeInput, like bool) (UpdateCommentLikeOutput, error) {
+	if input.CommentID == 0 || input.UserID == 0 {
+		return UpdateCommentLikeOutput{}, errors.New("评论编号和用户编号不能为空")
+	}
+	if s.likes == nil {
+		return UpdateCommentLikeOutput{}, errors.New("评论点赞仓储未初始化")
+	}
+	entity, err := s.comments.FindByID(ctx, input.CommentID)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return UpdateCommentLikeOutput{}, ErrCommentNotFound
+		}
+		return UpdateCommentLikeOutput{}, err
+	}
+	if entity.Status != promptdomain.PromptCommentStatusApproved {
+		return UpdateCommentLikeOutput{}, ErrCommentNotApproved
+	}
+	var delta int
+	step := s.likeDeltaStep
+	if like {
+		created, err := s.likes.AddLike(ctx, input.CommentID, input.UserID)
+		if err != nil {
+			return UpdateCommentLikeOutput{}, fmt.Errorf("add comment like: %w", err)
+		}
+		if created {
+			delta = step
+		}
+	} else {
+		removed, err := s.likes.RemoveLike(ctx, input.CommentID, input.UserID)
+		if err != nil {
+			return UpdateCommentLikeOutput{}, fmt.Errorf("remove comment like: %w", err)
+		}
+		if removed {
+			delta = -step
+		}
+	}
+	if delta != 0 {
+		if err := s.comments.IncrementLikeCount(ctx, input.CommentID, delta); err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return UpdateCommentLikeOutput{}, ErrCommentNotFound
+			}
+			return UpdateCommentLikeOutput{}, fmt.Errorf("update comment like count: %w", err)
+		}
+	}
+	refreshed, err := s.comments.FindByID(ctx, input.CommentID)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return UpdateCommentLikeOutput{}, ErrCommentNotFound
+		}
+		return UpdateCommentLikeOutput{}, err
+	}
+	if err := s.attachLikes(ctx, []*promptdomain.PromptComment{refreshed}, input.UserID); err != nil {
+		s.logger.Warnw("attach like for comment failed", "error", err, "comment_id", input.CommentID, "user_id", input.UserID)
+	}
+	return UpdateCommentLikeOutput{
+		LikeCount: refreshed.LikeCount,
+		Liked:     refreshed.IsLiked,
+	}, nil
+}
+
 // attachAuthors 批量补齐评论作者信息，提升界面展示的完整度。
 func (s *Service) attachAuthors(ctx context.Context, comments []*promptdomain.PromptComment) error {
 	ids := make([]uint, 0, len(comments))
@@ -349,6 +446,43 @@ func (s *Service) attachAuthors(ctx context.Context, comments []*promptdomain.Pr
 				AvatarURL: user.AvatarURL,
 			}
 		}
+	}
+	return nil
+}
+
+// attachLikes 根据用户上下文补齐评论的点赞态。
+func (s *Service) attachLikes(ctx context.Context, comments []*promptdomain.PromptComment, viewerID uint) error {
+	if len(comments) == 0 {
+		return nil
+	}
+	for _, comment := range comments {
+		if comment == nil {
+			continue
+		}
+		comment.IsLiked = false
+	}
+	if viewerID == 0 || s.likes == nil {
+		return nil
+	}
+	ids := make([]uint, 0, len(comments))
+	for _, comment := range comments {
+		if comment == nil || comment.ID == 0 {
+			continue
+		}
+		ids = append(ids, comment.ID)
+	}
+	if len(ids) == 0 {
+		return nil
+	}
+	likedMap, err := s.likes.ListUserLikedCommentIDs(ctx, viewerID, uniqueUint(ids))
+	if err != nil {
+		return err
+	}
+	for _, comment := range comments {
+		if comment == nil {
+			continue
+		}
+		comment.IsLiked = likedMap[comment.ID]
 	}
 	return nil
 }

@@ -25,13 +25,14 @@ func TestPromptCommentHandlerDeleteRequiresAdmin(t *testing.T) {
 	if err != nil {
 		t.Fatalf("open sqlite: %v", err)
 	}
-	if err := db.AutoMigrate(&userdomain.User{}, &promptdomain.Prompt{}, &promptdomain.PromptComment{}); err != nil {
+	if err := db.AutoMigrate(&userdomain.User{}, &promptdomain.Prompt{}, &promptdomain.PromptComment{}, &promptdomain.PromptCommentLike{}); err != nil {
 		t.Fatalf("auto migrate: %v", err)
 	}
 	commentRepo := repository.NewPromptCommentRepository(db)
+	commentLikeRepo := repository.NewPromptCommentLikeRepository(db)
 	promptRepo := repository.NewPromptRepository(db)
 	userRepo := repository.NewUserRepository(db)
-	commentService := promptcommentsvc.NewService(commentRepo, promptRepo, userRepo, nil, nil, promptcommentsvc.Config{DefaultPageSize: 5, MaxPageSize: 10, MaxBodyLength: 500})
+	commentService := promptcommentsvc.NewService(commentRepo, commentLikeRepo, promptRepo, userRepo, nil, nil, promptcommentsvc.Config{DefaultPageSize: 5, MaxPageSize: 10, MaxBodyLength: 500})
 	commentHandler := handler.NewPromptCommentHandler(commentService, nil, handler.PromptCommentRateLimit{})
 
 	w := httptest.NewRecorder()
@@ -50,13 +51,14 @@ func TestPromptCommentHandlerDeleteSuccess(t *testing.T) {
 	if err != nil {
 		t.Fatalf("open sqlite: %v", err)
 	}
-	if err := db.AutoMigrate(&userdomain.User{}, &promptdomain.Prompt{}, &promptdomain.PromptComment{}); err != nil {
+	if err := db.AutoMigrate(&userdomain.User{}, &promptdomain.Prompt{}, &promptdomain.PromptComment{}, &promptdomain.PromptCommentLike{}); err != nil {
 		t.Fatalf("auto migrate: %v", err)
 	}
 	commentRepo := repository.NewPromptCommentRepository(db)
+	commentLikeRepo := repository.NewPromptCommentLikeRepository(db)
 	promptRepo := repository.NewPromptRepository(db)
 	userRepo := repository.NewUserRepository(db)
-	commentService := promptcommentsvc.NewService(commentRepo, promptRepo, userRepo, nil, nil, promptcommentsvc.Config{DefaultPageSize: 5, MaxPageSize: 10, MaxBodyLength: 500})
+	commentService := promptcommentsvc.NewService(commentRepo, commentLikeRepo, promptRepo, userRepo, nil, nil, promptcommentsvc.Config{DefaultPageSize: 5, MaxPageSize: 10, MaxBodyLength: 500})
 	commentHandler := handler.NewPromptCommentHandler(commentService, nil, handler.PromptCommentRateLimit{})
 
 	ctx := context.Background()

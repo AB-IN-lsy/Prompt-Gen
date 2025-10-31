@@ -22,14 +22,15 @@ func setupPromptCommentService(t *testing.T, cfg promptcommentsvc.Config, audit 
 	if err != nil {
 		t.Fatalf("open sqlite: %v", err)
 	}
-	if err := db.AutoMigrate(&userdomain.User{}, &promptdomain.Prompt{}, &promptdomain.PromptComment{}); err != nil {
+	if err := db.AutoMigrate(&userdomain.User{}, &promptdomain.Prompt{}, &promptdomain.PromptComment{}, &promptdomain.PromptCommentLike{}); err != nil {
 		t.Fatalf("auto migrate: %v", err)
 	}
 	commentRepo := repository.NewPromptCommentRepository(db)
+	commentLikeRepo := repository.NewPromptCommentLikeRepository(db)
 	promptRepo := repository.NewPromptRepository(db)
 	userRepo := repository.NewUserRepository(db)
 	logger := zap.NewNop().Sugar()
-	service := promptcommentsvc.NewService(commentRepo, promptRepo, userRepo, audit, logger, cfg)
+	service := promptcommentsvc.NewService(commentRepo, commentLikeRepo, promptRepo, userRepo, audit, logger, cfg)
 	return service, db
 }
 

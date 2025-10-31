@@ -155,6 +155,8 @@ func NewRouter(opts RouterOptions) *gin.Engine {
 				prompts.GET("/:id/comments", opts.PromptCommentHandler.List)
 				prompts.POST("/:id/comments", opts.PromptCommentHandler.Create)
 				prompts.POST("/comments/:id/review", opts.PromptCommentHandler.Review)
+				prompts.POST("/comments/:id/like", opts.PromptCommentHandler.Like)
+				prompts.DELETE("/comments/:id/like", opts.PromptCommentHandler.Unlike)
 				prompts.DELETE("/comments/:id", opts.PromptCommentHandler.Delete)
 			}
 		}
