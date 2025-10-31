@@ -4,7 +4,7 @@
  * @FilePath: \electron-go-app\frontend\src\pages\PublicPrompts.tsx
  * @LastEditTime: 2025-10-20 02:12:17
  */
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
@@ -37,6 +37,8 @@ import {
   fetchPromptComments,
   createPromptComment,
   reviewPromptComment,
+  likePromptComment,
+  unlikePromptComment,
   likePublicPrompt,
   unlikePublicPrompt,
   type PublicPromptDownloadResult,
@@ -45,12 +47,13 @@ import {
   type PublicPromptListResponse,
   type PublicPromptListItem,
   type PromptComment,
+  type PromptCommentLikeResult,
   type PromptCommentListResponse,
 } from "../lib/api";
 import { AnimatePresence, motion } from "framer-motion";
 import { buildCardMotion } from "../lib/animationConfig";
 import { cn, resolveAssetUrl } from "../lib/utils";
-import { useAuth } from "../hooks/useAuth";
+import { useAuth, useIsAuthenticated } from "../hooks/useAuth";
 import { isLocalMode } from "../lib/runtimeMode";
 import { Button } from "../components/ui/button";
 import { Textarea } from "../components/ui/textarea";
@@ -91,6 +94,7 @@ export default function PublicPromptsPage(): JSX.Element {
   const queryFromUrl = searchParams.get("q") ?? "";
   const queryClient = useQueryClient();
   const profile = useAuth((state) => state.profile);
+  const isAuthenticated = useIsAuthenticated();
   const isAdmin = Boolean(profile?.user?.is_admin);
   const offlineMode = isLocalMode();
 
@@ -260,6 +264,56 @@ export default function PublicPromptsPage(): JSX.Element {
     setCommentStatusFilter(isAdmin ? "all" : "approved");
   }, [sourcePromptId, isAdmin]);
 
+  const updateCommentLikeState = useCallback(
+    (commentId: number, payload: PromptCommentLikeResult) => {
+      if (sourcePromptId == null) {
+        return;
+      }
+      const key = ["prompt-comments", sourcePromptId, commentPage, commentStatusFilter] as const;
+      queryClient.setQueryData<PromptCommentListResponse>(key, (previous) => {
+        if (!previous) {
+          return previous;
+        }
+        const patch = (comment: PromptComment): PromptComment => {
+          let repliesChanged = false;
+          let nextReplies = comment.replies;
+          if (comment.replies && comment.replies.length > 0) {
+            const mapped = comment.replies.map((reply) => patch(reply));
+            repliesChanged = mapped.some((next, index) => next !== comment.replies![index]);
+            if (repliesChanged) {
+              nextReplies = mapped;
+            }
+          }
+          if (comment.id === commentId) {
+            return {
+              ...comment,
+              like_count: payload.like_count,
+              is_liked: payload.liked,
+              replies: nextReplies,
+            };
+          }
+          if (repliesChanged) {
+            return {
+              ...comment,
+              replies: nextReplies,
+            };
+          }
+          return comment;
+        };
+        const updatedItems = previous.items.map((item) => patch(item));
+        const changed = updatedItems.some((item, index) => item !== previous.items[index]);
+        if (!changed) {
+          return previous;
+        }
+        return {
+          ...previous,
+          items: updatedItems,
+        };
+      });
+    },
+    [commentPage, commentStatusFilter, queryClient, sourcePromptId],
+  );
+
   const commentQuery = useQuery<PromptCommentListResponse>({
     queryKey: ["prompt-comments", sourcePromptId, commentPage, commentStatusFilter],
     enabled: sourcePromptId != null,
@@ -322,6 +376,21 @@ export default function PublicPromptsPage(): JSX.Element {
     },
   });
 
+  const commentLikeMutation = useMutation<PromptCommentLikeResult, unknown, { commentId: number; liked: boolean }>({
+    mutationFn: ({ commentId, liked }) =>
+      liked ? unlikePromptComment(commentId) : likePromptComment(commentId),
+    onSuccess: (result, variables) => {
+      updateCommentLikeState(variables.commentId, result);
+      if (sourcePromptId != null) {
+        void queryClient.invalidateQueries({ queryKey: ["prompt-comments", sourcePromptId] });
+      }
+    },
+    onError: (error: unknown) => {
+      const message = error instanceof Error ? error.message : t("comments.likeError");
+      toast.error(message);
+    },
+  });
+
   const commentReviewMutation = useMutation<PromptComment, unknown, { commentId: number; status: "approved" | "rejected"; note?: string }>({
     mutationFn: ({ commentId, status, note }) => reviewPromptComment(commentId, { status, note }),
     onSuccess: () => {
@@ -351,6 +420,29 @@ export default function PublicPromptsPage(): JSX.Element {
       return;
     }
     commentMutation.mutate({ body: trimmed });
+  };
+
+  const handleToggleCommentLike = (commentId: number, liked: boolean, status: string) => {
+    const normalizedStatus = typeof status === "string" ? status.toLowerCase() : "";
+    if (normalizedStatus !== "approved") {
+      return;
+    }
+    if (sourcePromptId == null) {
+      toast.error(t("comments.loadError"));
+      return;
+    }
+    if (offlineMode) {
+      toast.error(t("comments.offlineDisabled"));
+      return;
+    }
+    if (!isAuthenticated) {
+      toast.error(t("comments.likeLoginRequired"));
+      return;
+    }
+    if (commentLikeMutation.isPending && commentLikeMutation.variables?.commentId === commentId) {
+      return;
+    }
+    commentLikeMutation.mutate({ commentId, liked });
   };
 
   const handleReplyDraftChange = (commentId: number, value: string) => {
@@ -979,7 +1071,9 @@ export default function PublicPromptsPage(): JSX.Element {
                             strokeWidth={detailLiked ? 1.5 : 2}
                           />
                         )}
-                        <span>{t("publicPrompts.likeCountLabel", { count: selectedDetail.like_count })}</span>
+                        <span className="font-semibold text-slate-700 dark:text-slate-200">
+                          {selectedDetail.like_count}
+                        </span>
                       </button>
                       <div
                         className="inline-flex h-10 items-center gap-2 rounded-full border border-slate-200 px-4 text-sm text-slate-500 dark:border-slate-700 dark:text-slate-400"
@@ -987,7 +1081,9 @@ export default function PublicPromptsPage(): JSX.Element {
                         title={t("publicPrompts.visitCountLabel", { count: selectedDetail.visit_count })}
                       >
                         <Eye className="h-4 w-4" />
-                        <span>{t("publicPrompts.visitCountLabel", { count: selectedDetail.visit_count })}</span>
+                        <span className="font-semibold text-slate-700 dark:text-slate-200">
+                          {selectedDetail.visit_count}
+                        </span>
                       </div>
                       <MagneticButton
                         type="button"
@@ -1210,6 +1306,9 @@ export default function PublicPromptsPage(): JSX.Element {
                       ? item.author.username
                       : t("comments.anonymous");
                   const commentCreatedAt = formatDateTime(item.created_at, i18n.language);
+                  const commentLikePending =
+                    commentLikeMutation.isPending && commentLikeMutation.variables?.commentId === item.id;
+                  const commentLiked = Boolean(item.is_liked);
                   return (
                     <div
                       key={`comment-${item.id}`}
@@ -1236,7 +1335,7 @@ export default function PublicPromptsPage(): JSX.Element {
                               <Button
                                 type="button"
                                 variant="outline"
-                                className="h-8 px-3 text-xs"
+                                className="h-8 px-3 text-xs transition hover:bg-primary/10 hover:text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary/50"
                                 disabled={commentReviewMutation.isPending || item.status === "approved"}
                                 onClick={() => handleReviewComment(item.id, "approved")}
                               >
@@ -1262,7 +1361,32 @@ export default function PublicPromptsPage(): JSX.Element {
                       <div className="flex flex-wrap items-center gap-3 text-xs text-slate-400 dark:text-slate-500">
                         <button
                           type="button"
-                          className="inline-flex items-center gap-1 rounded-full border border-slate-200 px-3 py-1 transition hover:border-primary/30 hover:text-primary dark:border-slate-700 dark:text-slate-400 dark:hover:border-primary/30"
+                          className={cn(
+                            "inline-flex items-center gap-1 rounded-full border px-3 py-1 text-xs font-medium transition",
+                            commentLiked
+                              ? "border-transparent bg-primary/10 text-primary dark:bg-primary/20"
+                              : "border-slate-200 text-slate-500 hover:border-primary/30 hover:bg-primary/10 hover:text-primary dark:border-slate-700 dark:text-slate-400 dark:hover:border-primary/30 dark:hover:bg-primary/15",
+                            "focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary/50 focus-visible:-outline-offset-2",
+                            commentLikePending ? "opacity-70" : "",
+                          )}
+                          onClick={() => handleToggleCommentLike(item.id, commentLiked, item.status)}
+                          disabled={commentLikePending}
+                          aria-label={commentLiked ? t("comments.liked") : t("comments.like")}
+                          title={commentLiked ? t("comments.liked") : t("comments.like")}
+                        >
+                          {commentLikePending ? (
+                            <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
+                          ) : (
+                            <Heart
+                              className="h-3.5 w-3.5"
+                              fill={commentLiked ? "currentColor" : "none"}
+                            />
+                          )}
+                          <span>{item.like_count}</span>
+                        </button>
+                        <button
+                          type="button"
+                          className="inline-flex items-center gap-1 rounded-full border border-slate-200 px-3 py-1 text-xs font-medium transition hover:border-primary/30 hover:bg-primary/10 hover:text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary/50 focus-visible:-outline-offset-2 dark:border-slate-700 dark:text-slate-400 dark:hover:border-primary/30 dark:hover:bg-primary/15"
                           onClick={() => handleStartReply(item.id)}
                           disabled={commentMutation.isPending || sourcePromptId == null || item.status !== "approved" || offlineMode}
                         >
@@ -1312,6 +1436,9 @@ export default function PublicPromptsPage(): JSX.Element {
                                 ? reply.author.username
                                 : t("comments.anonymous");
                             const replyCreatedAt = formatDateTime(reply.created_at, i18n.language);
+                            const replyLikePending =
+                              commentLikeMutation.isPending && commentLikeMutation.variables?.commentId === reply.id;
+                            const replyLiked = Boolean(reply.is_liked);
                             return (
                               <div
                                 key={`reply-${item.id}-${reply.id}`}
@@ -1338,7 +1465,7 @@ export default function PublicPromptsPage(): JSX.Element {
                                         <Button
                                           type="button"
                                           variant="ghost"
-                                          className="h-8 px-2 text-xs"
+                                          className="h-8 px-2 text-xs transition hover:bg-primary/10 hover:text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary/50"
                                           disabled={commentReviewMutation.isPending || reply.status === "approved"}
                                           onClick={() => handleReviewComment(reply.id, "approved")}
                                         >
@@ -1347,7 +1474,7 @@ export default function PublicPromptsPage(): JSX.Element {
                                         <Button
                                           type="button"
                                           variant="ghost"
-                                          className="h-8 px-2 text-xs text-rose-500 hover:text-rose-600 dark:text-rose-200 dark:hover:text-rose-100"
+                                          className="h-8 px-2 text-xs text-rose-500 transition hover:bg-rose-50 hover:text-rose-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-rose-400 dark:text-rose-200 dark:hover:bg-rose-500/10 dark:hover:text-rose-100"
                                           disabled={commentReviewMutation.isPending || reply.status === "rejected"}
                                           onClick={() => handleReviewComment(reply.id, "rejected", reply.review_note ?? "")}
                                         >
@@ -1363,6 +1490,32 @@ export default function PublicPromptsPage(): JSX.Element {
                                 {reply.review_note && isAdmin ? (
                                   <p className="text-xs text-slate-500 dark:text-slate-400">{reply.review_note}</p>
                                 ) : null}
+                                <div className="flex items-center gap-2 text-xs text-slate-400 dark:text-slate-500">
+                                  <button
+                                    type="button"
+                                    className={cn(
+                                      "inline-flex items-center gap-1 rounded-full border px-2 py-1 text-[11px] font-medium transition",
+                                      replyLiked
+                                        ? "border-transparent bg-primary/10 text-primary dark:bg-primary/20"
+                                        : "border-slate-200 text-slate-500 hover:border-primary/30 hover:text-primary dark:border-slate-700 dark:text-slate-400 dark:hover:border-primary/30",
+                                      replyLikePending ? "opacity-70" : "",
+                                    )}
+                                    onClick={() => handleToggleCommentLike(reply.id, replyLiked, reply.status)}
+                                    disabled={replyLikePending}
+                                    aria-label={replyLiked ? t("comments.liked") : t("comments.like")}
+                                    title={replyLiked ? t("comments.liked") : t("comments.like")}
+                                  >
+                                    {replyLikePending ? (
+                                      <LoaderCircle className="h-3 w-3 animate-spin" />
+                                    ) : (
+                                      <Heart
+                                        className="h-3 w-3"
+                                        fill={replyLiked ? "currentColor" : "none"}
+                                      />
+                                    )}
+                                    <span>{reply.like_count}</span>
+                                  </button>
+                                </div>
                               </div>
                             );
                           })}

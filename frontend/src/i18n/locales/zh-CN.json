@@ -257,7 +257,11 @@
     "emptyBody": "评论内容不能为空。",
     "offlineDisabled": "离线模式暂不支持发表评论。",
     "rejectConfirmTitle": "确认驳回这条评论吗？",
-    "rejectConfirmDescription": "评论会立即被隐藏，你也可以在上方输入驳回说明。"
+    "rejectConfirmDescription": "评论会立即被隐藏，你也可以在上方输入驳回说明。",
+    "like": "点赞",
+    "liked": "已赞",
+    "likeError": "点赞操作失败，请稍后再试。",
+    "likeLoginRequired": "请先登录后再点赞评论。"
   },
   "publicPromptReview": {
     "eyebrow": "公共库审核",

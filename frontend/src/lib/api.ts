@@ -279,6 +279,8 @@ export interface PromptComment {
   root_id?: number | null;
   body: string;
   status: "pending" | "approved" | "rejected" | string;
+  like_count: number;
+  is_liked?: boolean;
   reply_count: number;
   author?: PromptCommentAuthor | null;
   review_note?: string | null;
@@ -309,6 +311,11 @@ export interface PromptCommentCreatePayload {
 export interface PromptCommentReviewPayload {
   status: "approved" | "rejected" | "pending";
   note?: string;
+}
+
+export interface PromptCommentLikeResult {
+  liked: boolean;
+  like_count: number;
 }
 
 export interface PublicPromptDownloadResult {
@@ -1263,6 +1270,36 @@ export async function unlikePublicPrompt(id: number): Promise<PublicPromptLikeRe
   }
 }
 
+export async function likePromptComment(id: number): Promise<PromptCommentLikeResult> {
+  try {
+    const response: AxiosResponse<{ liked?: boolean; like_count?: number }> = await http.post(`/prompts/comments/${id}/like`);
+    return {
+      liked: Boolean(response.data?.liked),
+      like_count:
+        typeof response.data?.like_count === "number" && Number.isFinite(response.data.like_count)
+          ? response.data.like_count
+          : 0,
+    };
+  } catch (error) {
+    throw normaliseError(error);
+  }
+}
+
+export async function unlikePromptComment(id: number): Promise<PromptCommentLikeResult> {
+  try {
+    const response: AxiosResponse<{ liked?: boolean; like_count?: number }> = await http.delete(`/prompts/comments/${id}/like`);
+    return {
+      liked: Boolean(response.data?.liked),
+      like_count:
+        typeof response.data?.like_count === "number" && Number.isFinite(response.data.like_count)
+          ? response.data.like_count
+          : 0,
+    };
+  } catch (error) {
+    throw normaliseError(error);
+  }
+}
+
 export async function submitPublicPrompt(
   payload: PublicPromptSubmitPayload,
 ): Promise<PublicPromptSubmitResult> {
@@ -1813,6 +1850,16 @@ function parsePromptComment(raw: Record<string, unknown>): PromptComment {
         : Number(raw.root_id),
     body: String(raw.body ?? ""),
     status: String(raw.status ?? "approved"),
+    like_count:
+      typeof raw.like_count === "number" && Number.isFinite(raw.like_count)
+        ? raw.like_count
+        : 0,
+    is_liked:
+      typeof raw.is_liked === "boolean"
+        ? raw.is_liked
+        : raw.is_liked === undefined
+        ? undefined
+        : Boolean(raw.is_liked),
     reply_count:
       typeof raw.reply_count === "number" && Number.isFinite(raw.reply_count)
         ? raw.reply_count

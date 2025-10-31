@@ -29,7 +29,14 @@ import { AvatarUploader } from "../components/account/AvatarUploader";
 import { useAuth } from "../hooks/useAuth";
 import { PageHeader } from "../components/layout/PageHeader";
 import { ConfirmDialog } from "../components/ui/confirm-dialog";
-import { Download, LoaderCircle, Upload } from "lucide-react";
+import {
+  Ban,
+  Download,
+  Edit3,
+  LoaderCircle,
+  Trash2,
+  Upload,
+} from "lucide-react";
 import {
   updateCurrentUser,
   requestEmailVerification,
@@ -1417,34 +1424,66 @@ export default function SettingsPage() {
                       {!isBuiltin ? (
                         <Button
                           type="button"
-                          variant="ghost"
+                          size="sm"
+                          variant="outline"
+                          className="h-9 w-9 min-w-[2.25rem] rounded-xl p-0"
                           disabled={toggleDisabled}
                           onClick={() => handleToggleModelStatus(credential)}
+                          title={
+                            isDisabled
+                              ? t("settings.modelCard.enable")
+                              : t("settings.modelCard.disable")
+                          }
+                          aria-label={
+                            isDisabled
+                              ? t("settings.modelCard.enable")
+                              : t("settings.modelCard.disable")
+                          }
                         >
-                          {isDisabled
-                            ? t("settings.modelCard.enable")
-                            : t("settings.modelCard.disable")}
+                          {updateInFlight ? (
+                            <LoaderCircle className="h-4 w-4 animate-spin" />
+                          ) : isDisabled ? (
+                            <Ban className="h-4 w-4 text-rose-500" />
+                          ) : (
+                            <Ban className="h-4 w-4 rotate-180 text-emerald-500" />
+                          )}
                         </Button>
                       ) : null}
                       {!isBuiltin ? (
                         <Button
                           type="button"
-                          variant="ghost"
+                          size="sm"
+                          variant="outline"
+                          className="h-9 w-9 min-w-[2.25rem] rounded-xl p-0"
                           disabled={editDisabled}
                           onClick={() => handleStartEditModel(credential)}
+                          title={t("settings.modelCard.edit")}
+                          aria-label={t("settings.modelCard.edit")}
                         >
-                          {t("settings.modelCard.edit")}
+                          {updateInFlight && isEditing ? (
+                            <LoaderCircle className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <Edit3 className="h-4 w-4" />
+                          )}
                         </Button>
                       ) : null}
                       {!isBuiltin ? (
                         <Button
                           type="button"
-                          variant="ghost"
-                          className="text-red-600 hover:text-red-700 dark:text-red-300 dark:hover:text-red-200"
+                          size="sm"
+                          variant="outline"
+                          className="h-9 w-9 min-w-[2.25rem] rounded-xl border-rose-200 p-0 text-rose-500 hover:bg-rose-50 hover:text-rose-600 dark:border-rose-500/40 dark:text-rose-300 dark:hover:bg-rose-500/10"
                           disabled={deleteLocked}
                           onClick={() => handleDeleteModel(credential)}
+                          title={t("settings.modelCard.delete")}
+                          aria-label={t("settings.modelCard.delete")}
                         >
-                          {t("settings.modelCard.delete")}
+                          {deleteModelMutation.isPending &&
+                          deleteModelMutation.variables === credential.id ? (
+                            <LoaderCircle className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <Trash2 className="h-4 w-4" />
+                          )}
                         </Button>
                       ) : null}
                     </div>

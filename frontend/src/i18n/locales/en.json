@@ -257,7 +257,11 @@
     "emptyBody": "Comment cannot be empty.",
     "offlineDisabled": "Comments are unavailable in offline mode.",
     "rejectConfirmTitle": "Reject this comment?",
-    "rejectConfirmDescription": "The comment will be hidden immediately. You may include an optional note above."
+    "rejectConfirmDescription": "The comment will be hidden immediately. You may include an optional note above.",
+    "like": "Like",
+    "liked": "Liked",
+    "likeError": "Unable to update comment like. Please try again later.",
+    "likeLoginRequired": "Sign in to like comments."
   },
   "publicPromptReview": {
     "eyebrow": "Public review",
