@@ -21,9 +21,9 @@ Prompt Gen Desktop 是一款专为内容创作者打造的桌面提示词管家�
 
 ![仪表盘概览](docs/assets/dashboard.png)
 
-![优质 Prompt 库](docs/assets/优质prompt.png)
-
 ![我的 Prompt 列表](docs/assets/我的prompt.png)
+
+![优质 Prompt 库](docs/assets/优质prompt.png)
 
 ![Prompt 工作台](docs/assets/prompt工作台.png)
 
@@ -188,7 +188,6 @@ go test -tags=e2e ./backend/tests/e2e                   # 命中线上接口时�
 ## 许可证
 
 本项目依据仓库中的 [LICENSE](LICENSE) 发布。使用、分发或再次开发时请遵守相关条款，并在文档、产品页面及二次发行包中保留原始版权声明。
-
 
 ## Star History
 
