@@ -29,6 +29,8 @@ Prompt Gen Desktop 是一款专为内容创作者打造的桌面提示词管家�
 
 ![帮助中心界面示意](docs/assets/帮助中心.png)
 
+![设置](docs/assets/设置.png)
+
 ## 发布形态
 
 | 形态 | 说明 |
