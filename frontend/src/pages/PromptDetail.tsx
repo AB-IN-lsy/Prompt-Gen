@@ -1035,8 +1035,7 @@ const handleOpenSubmit = () => {
                 <Button
                   type="button"
                   variant="ghost"
-                  size="icon"
-                  className="h-8 w-8 rounded-full text-slate-400 hover:text-slate-600 focus-visible:ring-slate-300 dark:text-slate-500 dark:hover:text-slate-200"
+                  className="flex h-8 w-8 items-center justify-center rounded-full text-slate-400 hover:text-slate-600 focus-visible:ring-slate-300 dark:text-slate-500 dark:hover:text-slate-200"
                   onClick={() => setProfileDialogOpen(false)}
                   aria-label={t("promptDetail.generationProfileCard.close", {
                     defaultValue: "关闭生成配置",
