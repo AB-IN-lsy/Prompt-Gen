@@ -12,13 +12,30 @@ import {
   PROMPT_KEYWORD_MAX_LENGTH,
   PROMPT_TAG_LIMIT,
   PROMPT_TAG_MAX_LENGTH,
+  DEFAULT_KEYWORD_WEIGHT,
+  PROMPT_GENERATE_TEMPERATURE_DEFAULT,
+  PROMPT_GENERATE_TEMPERATURE_MIN,
+  PROMPT_GENERATE_TEMPERATURE_MAX,
+  PROMPT_GENERATE_TOP_P_DEFAULT,
+  PROMPT_GENERATE_TOP_P_MIN,
+  PROMPT_GENERATE_TOP_P_MAX,
+  PROMPT_GENERATE_MAX_OUTPUT_DEFAULT,
+  PROMPT_GENERATE_MAX_OUTPUT_MIN,
+  PROMPT_GENERATE_MAX_OUTPUT_MAX,
+  PROMPT_GENERATE_STEPWISE_DEFAULT,
 } from "../config/prompt";
 import { clampTextWithOverflow } from "../lib/utils";
-import { DEFAULT_KEYWORD_WEIGHT } from "../config/prompt";
 
 interface TagEntry {
   value: string;
   overflow: number;
+}
+
+interface GenerationProfileState {
+  stepwiseReasoning: boolean;
+  temperature: number;
+  topP: number;
+  maxOutputTokens: number;
 }
 
 interface WorkbenchState {
@@ -32,6 +49,7 @@ interface WorkbenchState {
   negativeKeywords: Keyword[];
   tags: TagEntry[];
   isSaving: boolean;
+  generationProfile: GenerationProfileState;
   setTopic: (topic: string) => void;
   setModel: (model: string) => void;
   setPrompt: (prompt: string) => void;
@@ -48,6 +66,8 @@ interface WorkbenchState {
   addTag: (tag: string) => void;
   removeTag: (tag: string) => void;
   setSaving: (saving: boolean) => void;
+  setGenerationProfile: (profile: Partial<GenerationProfileState>) => void;
+  overwriteGenerationProfile: (profile: GenerationProfileState) => void;
   reset: () => void;
 }
 
@@ -69,6 +89,53 @@ const clampWeight = (value?: number): number => {
   }
   return Math.round(value);
 };
+
+const clampTemperature = (value?: number): number => {
+  if (typeof value !== "number" || Number.isNaN(value)) {
+    return PROMPT_GENERATE_TEMPERATURE_DEFAULT;
+  }
+  if (value < PROMPT_GENERATE_TEMPERATURE_MIN) {
+    return PROMPT_GENERATE_TEMPERATURE_MIN;
+  }
+  if (value > PROMPT_GENERATE_TEMPERATURE_MAX) {
+    return PROMPT_GENERATE_TEMPERATURE_MAX;
+  }
+  return Number.parseFloat(value.toFixed(3));
+};
+
+const clampTopP = (value?: number): number => {
+  if (typeof value !== "number" || Number.isNaN(value)) {
+    return PROMPT_GENERATE_TOP_P_DEFAULT;
+  }
+  if (value < PROMPT_GENERATE_TOP_P_MIN) {
+    return PROMPT_GENERATE_TOP_P_MIN;
+  }
+  if (value > PROMPT_GENERATE_TOP_P_MAX) {
+    return PROMPT_GENERATE_TOP_P_MAX;
+  }
+  return Number.parseFloat(value.toFixed(3));
+};
+
+const clampMaxOutputTokens = (value?: number): number => {
+  if (typeof value !== "number" || Number.isNaN(value)) {
+    return PROMPT_GENERATE_MAX_OUTPUT_DEFAULT;
+  }
+  const rounded = Math.trunc(value);
+  if (rounded < PROMPT_GENERATE_MAX_OUTPUT_MIN) {
+    return PROMPT_GENERATE_MAX_OUTPUT_MIN;
+  }
+  if (rounded > PROMPT_GENERATE_MAX_OUTPUT_MAX) {
+    return PROMPT_GENERATE_MAX_OUTPUT_MAX;
+  }
+  return rounded;
+};
+
+const defaultGenerationProfile = (): GenerationProfileState => ({
+  stepwiseReasoning: PROMPT_GENERATE_STEPWISE_DEFAULT,
+  temperature: PROMPT_GENERATE_TEMPERATURE_DEFAULT,
+  topP: PROMPT_GENERATE_TOP_P_DEFAULT,
+  maxOutputTokens: PROMPT_GENERATE_MAX_OUTPUT_DEFAULT,
+});
 
 const dedupeByPolarity = (keywords: Keyword[]) => {
   const seen = new Map<string, Keyword>();
@@ -107,6 +174,7 @@ export const usePromptWorkbench = create<WorkbenchState>((set, get) => ({
   negativeKeywords: [],
   tags: [],
   isSaving: false,
+  generationProfile: defaultGenerationProfile(),
   setTopic: (topic) => set({ topic }),
   setModel: (model) => set({ model }),
   setPrompt: (prompt) => set({ prompt }),
@@ -237,6 +305,29 @@ export const usePromptWorkbench = create<WorkbenchState>((set, get) => ({
       tags: tags.filter((item) => item.value.trim().toLowerCase() !== key),
     }));
   },
+  setGenerationProfile: (profile) =>
+    set(({ generationProfile }) => ({
+      generationProfile: {
+        stepwiseReasoning:
+          profile.stepwiseReasoning ?? generationProfile.stepwiseReasoning,
+        temperature: clampTemperature(
+          profile.temperature ?? generationProfile.temperature,
+        ),
+        topP: clampTopP(profile.topP ?? generationProfile.topP),
+        maxOutputTokens: clampMaxOutputTokens(
+          profile.maxOutputTokens ?? generationProfile.maxOutputTokens,
+        ),
+      },
+    })),
+  overwriteGenerationProfile: (profile) =>
+    set({
+      generationProfile: {
+        stepwiseReasoning: profile.stepwiseReasoning,
+        temperature: clampTemperature(profile.temperature),
+        topP: clampTopP(profile.topP),
+        maxOutputTokens: clampMaxOutputTokens(profile.maxOutputTokens),
+      },
+    }),
   setSaving: (saving) => set({ isSaving: saving }),
   reset: () =>
     set({
@@ -249,6 +340,8 @@ export const usePromptWorkbench = create<WorkbenchState>((set, get) => ({
       positiveKeywords: [],
       negativeKeywords: [],
       tags: [],
+      isSaving: false,
+      generationProfile: defaultGenerationProfile(),
     }),
 }));
 

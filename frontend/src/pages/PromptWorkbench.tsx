@@ -44,6 +44,7 @@ import {
   Sparkles,
   X,
   ArrowUpRight,
+  SlidersHorizontal,
 } from "lucide-react";
 import { nanoid } from "nanoid";
 import { useTranslation } from "react-i18next";
@@ -55,6 +56,7 @@ import { Input } from "../components/ui/input";
 import { Button } from "../components/ui/button";
 import { Badge } from "../components/ui/badge";
 import { Textarea } from "../components/ui/textarea";
+import { ConfirmDialog } from "../components/ui/confirm-dialog";
 import { cn, clampTextWithOverflow, formatOverflowLabel } from "../lib/utils";
 import { MarkdownEditor } from "../components/MarkdownEditor";
 import { MagneticButton } from "../components/ui/magnetic-button";
@@ -66,6 +68,12 @@ import {
   PROMPT_AI_GENERATE_MIN_DURATION_MS,
   PROMPT_AUTOSAVE_DELAY_MS,
   DEFAULT_KEYWORD_WEIGHT,
+  PROMPT_GENERATE_TEMPERATURE_MIN,
+  PROMPT_GENERATE_TEMPERATURE_MAX,
+  PROMPT_GENERATE_TOP_P_MIN,
+  PROMPT_GENERATE_TOP_P_MAX,
+  PROMPT_GENERATE_MAX_OUTPUT_MIN,
+  PROMPT_GENERATE_MAX_OUTPUT_MAX,
 } from "../config/prompt";
 import {
   augmentPromptKeywords,
@@ -236,6 +244,8 @@ export default function PromptWorkbenchPage() {
     setWorkspaceToken,
     isSaving,
     setSaving,
+    generationProfile,
+    overwriteGenerationProfile,
     reset,
   } = usePromptWorkbench();
   const profile = useAuth((state) => state.profile);
@@ -255,6 +265,8 @@ export default function PromptWorkbenchPage() {
     polarity: "positive" | "negative";
     index: number;
   } | null>(null);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [pendingProfile, setPendingProfile] = useState(generationProfile);
   const interpretToastId = useRef<string | number | null>(null);
   const augmentToastId = useRef<string | number | null>(null);
   const generateToastId = useRef<string | number | null>(null);
@@ -267,6 +279,11 @@ export default function PromptWorkbenchPage() {
   const triggerAutoSaveRef = useRef<() => void>(() => {});
   const hasInitialSignatureRef = useRef(false);
   const previousPromptIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!settingsOpen) {
+      setPendingProfile(generationProfile);
+    }
+  }, [generationProfile, settingsOpen]);
   const clearDropIndicator = useCallback(() => {
     setDropIndicator((previous) => (previous ? null : previous));
   }, []);
@@ -1184,6 +1201,16 @@ export default function PromptWorkbenchPage() {
         language: "zh",
         workspace_token: workspaceToken ?? undefined,
         existing_body: existingBody ? existingBody : undefined,
+        temperature: generationProfile.temperature,
+        max_tokens: generationProfile.maxOutputTokens,
+        top_p: generationProfile.topP,
+        stepwise_reasoning: generationProfile.stepwiseReasoning,
+        generation_profile: {
+          stepwise_reasoning: generationProfile.stepwiseReasoning,
+          temperature: generationProfile.temperature,
+          top_p: generationProfile.topP,
+          max_output_tokens: generationProfile.maxOutputTokens,
+        },
       });
     },
     onMutate: () => {
@@ -1344,6 +1371,12 @@ export default function PromptWorkbenchPage() {
         positive_keywords: positiveKeywords.map(keywordToInput),
         negative_keywords: negativeKeywords.map(keywordToInput),
         workspace_token: workspaceToken ?? undefined,
+        generation_profile: {
+          stepwise_reasoning: generationProfile.stepwiseReasoning,
+          temperature: generationProfile.temperature,
+          top_p: generationProfile.topP,
+          max_output_tokens: generationProfile.maxOutputTokens,
+        },
       };
       return savePrompt(payload);
     },
@@ -1651,7 +1684,8 @@ export default function PromptWorkbenchPage() {
   };
 
   return (
-    <div className="flex flex-col gap-6 text-slate-700 transition-colors dark:text-slate-200">
+    <>
+      <div className="flex flex-col gap-6 text-slate-700 transition-colors dark:text-slate-200">
       <PageHeader
         eyebrow={t("promptWorkbench.workbenchEyebrow", {
           defaultValue: "Prompt 工作台",
@@ -1663,17 +1697,35 @@ export default function PromptWorkbenchPage() {
           defaultValue: "从解析需求到发布 Prompt 的一站式工作区。",
         })}
         actions={
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            className="gap-1.5 rounded-full border border-primary/50 bg-primary/5 px-4 text-primary shadow-[0_18px_40px_-24px_rgba(59,130,246,0.6)] transition hover:bg-primary/10 hover:text-primary/90 focus-visible:ring-primary/50 dark:border-primary/40 dark:bg-primary/10 dark:text-primary-100 dark:hover:bg-primary/20"
-            onClick={handleCancel}
-            disabled={isGenerating || interpretMutation.isPending}
-          >
-            <RotateCcw className="h-3.5 w-3.5" />
-            {t("promptWorkbench.cancel", { defaultValue: "重置" })}
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="gap-2 rounded-full border border-primary/70 bg-white px-3 py-1.5 text-xs font-medium text-primary shadow-[0_10px_24px_-18px_rgba(59,130,246,0.6)] transition hover:border-primary/80 hover:bg-primary/5 hover:text-primary-foreground focus-visible:ring-primary/50 dark:border-primary/50 dark:bg-slate-900 dark:text-primary-100 dark:hover:bg-primary/15"
+              onClick={() => setSettingsOpen(true)}
+            >
+              <span className="flex h-7 w-7 items-center justify-center rounded-full border border-primary/60 bg-white shadow-sm text-primary dark:border-primary/40 dark:bg-slate-900 dark:text-primary-100">
+                <SlidersHorizontal className="h-3.5 w-3.5" />
+              </span>
+              {t("promptWorkbench.generationSettingsButton", {
+                defaultValue: "生成配置",
+              })}
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="gap-2 rounded-full border border-primary/70 bg-primary/10 px-4 text-primary shadow-[0_18px_40px_-24px_rgba(59,130,246,0.6)] transition hover:bg-primary/14 hover:text-primary-foreground focus-visible:ring-primary/50 dark:border-primary/50 dark:bg-primary/15 dark:text-primary-100 dark:hover:bg-primary/25"
+              onClick={handleCancel}
+              disabled={isGenerating || interpretMutation.isPending}
+            >
+              <span className="flex h-7 w-7 items-center justify-center rounded-full border border-primary/60 bg-white shadow-sm text-primary dark:border-primary/40 dark:bg-slate-900 dark:text-primary-100">
+                <RotateCcw className="h-3.5 w-3.5" />
+              </span>
+              {t("promptWorkbench.cancel", { defaultValue: "重置" })}
+            </Button>
+          </div>
         }
       />
       <div className="flex flex-col gap-3 rounded-2xl border border-dashed border-primary/60 bg-primary/5 p-4 text-primary shadow-sm md:flex-row md:items-center md:justify-between dark:border-primary/40 dark:bg-primary/10 dark:text-primary-100">
@@ -2182,7 +2234,186 @@ export default function PromptWorkbenchPage() {
         </div>
         </GlassCard>
       </div>
-    </div>
+      </div>
+      <ConfirmDialog
+        open={settingsOpen}
+        title={t("promptWorkbench.settingsDialog.title", {
+          defaultValue: "生成配置",
+        })}
+        description={t("promptWorkbench.settingsDialog.description", {
+          defaultValue: "调节采样参数，以控制输出的稳定性与创意度。",
+        })}
+        confirmLabel={t("promptWorkbench.settingsDialog.confirm", {
+          defaultValue: "应用",
+        })}
+        cancelLabel={t("promptWorkbench.settingsDialog.cancel", {
+          defaultValue: "取消",
+        })}
+        onConfirm={() => {
+          overwriteGenerationProfile(pendingProfile);
+          setSettingsOpen(false);
+          toast.success(
+            t("promptWorkbench.settingsDialog.applySuccess", {
+              defaultValue: "生成配置已更新",
+            }),
+          );
+        }}
+        onCancel={() => {
+          setSettingsOpen(false);
+          setPendingProfile(generationProfile);
+        }}
+      >
+        <div className="space-y-4">
+          <label className="flex items-start justify-between gap-4">
+            <div>
+              <p className="text-sm font-medium text-slate-700 dark:text-slate-200">
+                {t("promptWorkbench.settingsDialog.stepwiseLabel", {
+                  defaultValue: "启用逐步推理",
+                })}
+              </p>
+              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                {t("promptWorkbench.settingsDialog.stepwiseHint", {
+                  defaultValue: "开启后将引导模型先梳理思考步骤，再输出最终 Prompt。",
+                })}
+              </p>
+            </div>
+            <input
+              type="checkbox"
+              className="mt-1 h-4 w-4 accent-primary"
+              checked={pendingProfile.stepwiseReasoning}
+              onChange={(event) =>
+                setPendingProfile((prev) => ({
+                  ...prev,
+                  stepwiseReasoning: event.target.checked,
+                }))
+              }
+            />
+          </label>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div className="space-y-2">
+              <div className="flex items-center justify-between text-sm font-medium text-slate-700 dark:text-slate-200">
+                <span>
+                  {t("promptWorkbench.settingsDialog.temperatureLabel", {
+                    defaultValue: "采样温度",
+                  })}
+                </span>
+                <span className="text-xs text-slate-400 dark:text-slate-500">
+                  {t("promptWorkbench.settingsDialog.temperatureRange", {
+                    min: PROMPT_GENERATE_TEMPERATURE_MIN,
+                    max: PROMPT_GENERATE_TEMPERATURE_MAX,
+                  })}
+                </span>
+              </div>
+              <Input
+                type="number"
+                step={0.1}
+                min={PROMPT_GENERATE_TEMPERATURE_MIN}
+                max={PROMPT_GENERATE_TEMPERATURE_MAX}
+                value={pendingProfile.temperature}
+                onChange={(event) => {
+                  const parsed = Number.parseFloat(event.target.value);
+                  const clamped = Number.isFinite(parsed)
+                    ? Math.min(
+                        PROMPT_GENERATE_TEMPERATURE_MAX,
+                        Math.max(PROMPT_GENERATE_TEMPERATURE_MIN, parsed),
+                      )
+                    : PROMPT_GENERATE_TEMPERATURE_MIN;
+                  setPendingProfile((prev) => ({
+                    ...prev,
+                    temperature: Number.parseFloat(clamped.toFixed(3)),
+                  }));
+                }}
+              />
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                {t("promptWorkbench.settingsDialog.temperatureHint", {
+                  defaultValue: "数值越高越具创造性，越低则更稳定。",
+                })}
+              </p>
+            </div>
+            <div className="space-y-2">
+              <div className="flex items-center justify-between text-sm font-medium text-slate-700 dark:text-slate-200">
+                <span>
+                  {t("promptWorkbench.settingsDialog.topPLabel", {
+                    defaultValue: "Top P",
+                  })}
+                </span>
+                <span className="text-xs text-slate-400 dark:text-slate-500">
+                  {t("promptWorkbench.settingsDialog.topPRange", {
+                    min: PROMPT_GENERATE_TOP_P_MIN,
+                    max: PROMPT_GENERATE_TOP_P_MAX,
+                  })}
+                </span>
+              </div>
+              <Input
+                type="number"
+                step={0.05}
+                min={PROMPT_GENERATE_TOP_P_MIN}
+                max={PROMPT_GENERATE_TOP_P_MAX}
+                value={pendingProfile.topP}
+                onChange={(event) => {
+                  const parsed = Number.parseFloat(event.target.value);
+                  const clamped = Number.isFinite(parsed)
+                    ? Math.min(
+                        PROMPT_GENERATE_TOP_P_MAX,
+                        Math.max(PROMPT_GENERATE_TOP_P_MIN, parsed),
+                      )
+                    : PROMPT_GENERATE_TOP_P_MIN;
+                  setPendingProfile((prev) => ({
+                    ...prev,
+                    topP: Number.parseFloat(clamped.toFixed(3)),
+                  }));
+                }}
+              />
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                {t("promptWorkbench.settingsDialog.topPHint", {
+                  defaultValue: "限制采样概率分布，拉近或放大输出差异。",
+                })}
+              </p>
+            </div>
+          </div>
+          <div className="space-y-2">
+            <div className="flex items-center justify-between text-sm font-medium text-slate-700 dark:text-slate-200">
+              <span>
+                {t("promptWorkbench.settingsDialog.maxOutputLabel", {
+                  defaultValue: "最大输出 Tokens",
+                })}
+              </span>
+              <span className="text-xs text-slate-400 dark:text-slate-500">
+                {t("promptWorkbench.settingsDialog.maxOutputRange", {
+                  min: PROMPT_GENERATE_MAX_OUTPUT_MIN,
+                  max: PROMPT_GENERATE_MAX_OUTPUT_MAX,
+                })}
+              </span>
+            </div>
+            <Input
+              type="number"
+              min={PROMPT_GENERATE_MAX_OUTPUT_MIN}
+              max={PROMPT_GENERATE_MAX_OUTPUT_MAX}
+              step={32}
+              value={pendingProfile.maxOutputTokens}
+              onChange={(event) => {
+                const parsed = Number.parseInt(event.target.value, 10);
+                const clamped = Number.isInteger(parsed)
+                  ? Math.min(
+                      PROMPT_GENERATE_MAX_OUTPUT_MAX,
+                      Math.max(PROMPT_GENERATE_MAX_OUTPUT_MIN, parsed),
+                    )
+                  : PROMPT_GENERATE_MAX_OUTPUT_MIN;
+                setPendingProfile((prev) => ({
+                  ...prev,
+                  maxOutputTokens: clamped,
+                }));
+              }}
+            />
+            <p className="text-xs text-slate-500 dark:text-slate-400">
+              {t("promptWorkbench.settingsDialog.maxOutputHint", {
+                defaultValue: "限制生成长度，避免输出过短或超出模型上限。",
+              })}
+            </p>
+          </div>
+        </div>
+      </ConfirmDialog>
+    </>
   );
 }
 

@@ -138,6 +138,28 @@ const parsePublicPromptKeywords = (value: unknown): PublicPromptKeywordItem[] =>
     .filter((item): item is PublicPromptKeywordItem => Boolean(item));
 };
 
+const normalizeGenerationProfilePayload = (
+  profile?: PromptGenerationProfile,
+): PromptGenerationProfile | undefined => {
+  if (!profile) {
+    return undefined;
+  }
+  const payload: PromptGenerationProfile = {};
+  if (typeof profile.stepwise_reasoning === "boolean") {
+    payload.stepwise_reasoning = profile.stepwise_reasoning;
+  }
+  if (typeof profile.temperature === "number" && Number.isFinite(profile.temperature)) {
+    payload.temperature = profile.temperature;
+  }
+  if (typeof profile.top_p === "number" && Number.isFinite(profile.top_p)) {
+    payload.top_p = profile.top_p;
+  }
+  if (typeof profile.max_output_tokens === "number" && Number.isFinite(profile.max_output_tokens)) {
+    payload.max_output_tokens = Math.trunc(profile.max_output_tokens);
+  }
+  return payload;
+};
+
 /**
  * Keyword entity as returned by the backend. The Prompt Workbench primarily uses the
  * `id`, `word`, `polarity`, `source`, and `weight` fields.
@@ -194,6 +216,13 @@ export interface PromptListKeyword {
   weight?: number;
 }
 
+export interface PromptGenerationProfile {
+  stepwise_reasoning?: boolean;
+  temperature?: number;
+  top_p?: number;
+  max_output_tokens?: number;
+}
+
 export interface PromptListItem {
   id: number;
   topic: string;
@@ -207,6 +236,7 @@ export interface PromptListItem {
   is_favorited?: boolean;
   is_liked?: boolean;
   like_count?: number;
+  generation_profile?: PromptGenerationProfile;
 }
 
 export interface PromptListMeta {
@@ -374,6 +404,7 @@ export interface PromptVersionSummary {
   versionNo: number;
   model: string;
   createdAt: string;
+  generation_profile?: PromptGenerationProfile;
 }
 
 export interface PromptVersionDetail {
@@ -384,6 +415,7 @@ export interface PromptVersionDetail {
   positive_keywords: PromptListKeyword[];
   negative_keywords: PromptListKeyword[];
   created_at: string;
+  generation_profile?: PromptGenerationProfile;
 }
 
 export interface PromptDetailResponse {
@@ -403,6 +435,7 @@ export interface PromptDetailResponse {
   is_favorited?: boolean;
   is_liked?: boolean;
   like_count?: number;
+  generation_profile?: PromptGenerationProfile;
 }
 
 export interface AuthTokens {
@@ -584,8 +617,11 @@ export interface GeneratePromptRequest {
   tone?: string;
   temperature?: number;
   max_tokens?: number;
+  top_p?: number;
+  stepwise_reasoning?: boolean;
   include_keyword_reference?: boolean;
   workspace_token?: string;
+  generation_profile?: PromptGenerationProfile;
 }
 
 export interface GeneratePromptResponse {
@@ -611,6 +647,7 @@ export interface SavePromptRequest {
   positive_keywords: PromptKeywordInput[];
   negative_keywords: PromptKeywordInput[];
   workspace_token?: string;
+  generation_profile?: PromptGenerationProfile;
 }
 
 export interface SavePromptResponse {
@@ -895,6 +932,23 @@ export async function generatePromptPreview(
   payload: GeneratePromptRequest,
 ): Promise<GeneratePromptResponse> {
   try {
+    const generationProfile = normalizeGenerationProfilePayload(
+      payload.generation_profile,
+    );
+    const temperatureValue =
+      typeof payload.temperature === "number"
+        ? payload.temperature
+        : generationProfile?.temperature;
+    const maxTokensValue =
+      typeof payload.max_tokens === "number"
+        ? payload.max_tokens
+        : generationProfile?.max_output_tokens;
+    const topPValue =
+      typeof payload.top_p === "number" ? payload.top_p : generationProfile?.top_p;
+    const stepwiseValue =
+      typeof payload.stepwise_reasoning === "boolean"
+        ? payload.stepwise_reasoning
+        : generationProfile?.stepwise_reasoning;
     const existingBody = payload.existing_body?.trim();
     const response: AxiosResponse<GeneratePromptResponse> = await http.post(
       "/prompts/generate",
@@ -905,8 +959,10 @@ export async function generatePromptPreview(
         instructions: payload.instructions,
         description: payload.description,
         tone: payload.tone,
-        temperature: payload.temperature,
-        max_tokens: payload.max_tokens,
+        temperature: temperatureValue,
+        max_tokens: maxTokensValue,
+        top_p: topPValue,
+        stepwise_reasoning: stepwiseValue,
         prompt_id: payload.prompt_id,
         include_keyword_reference: payload.include_keyword_reference,
         workspace_token: payload.workspace_token ?? undefined,
@@ -917,6 +973,7 @@ export async function generatePromptPreview(
         negative_keywords: payload.negative_keywords.map(
           normalisePromptKeyword,
         ),
+        generation_profile: generationProfile,
       },
     );
     return response.data;
@@ -929,6 +986,9 @@ export async function savePrompt(
   payload: SavePromptRequest,
 ): Promise<SavePromptResponse> {
   try {
+    const generationProfile = normalizeGenerationProfilePayload(
+      payload.generation_profile,
+    );
     const response: AxiosResponse<SavePromptResponse> = await http.post(
       "/prompts",
       {
@@ -947,6 +1007,7 @@ export async function savePrompt(
         negative_keywords: payload.negative_keywords.map(
           normalisePromptKeyword,
         ),
+        generation_profile: generationProfile,
       },
     );
     return response.data;

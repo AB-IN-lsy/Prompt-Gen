@@ -86,8 +86,10 @@ export function ConfirmDialog({
                 <div className="flex items-center justify-end gap-3">
                     <Button
                         type="button"
-                        variant="ghost"
-                        className={cn("text-slate-500 hover:text-slate-700 dark:text-slate-300 dark:hover:text-white")}
+                        variant="outline"
+                        className={cn(
+                            "rounded-full border border-slate-300 px-4 py-1.5 text-sm font-medium text-slate-600 transition hover:border-slate-400 hover:bg-slate-50 hover:text-slate-800 focus-visible:ring-slate-300 dark:border-slate-600 dark:bg-slate-900/60 dark:text-slate-200 dark:hover:border-slate-500 dark:hover:bg-slate-800"
+                        )}
                         onClick={onCancel}
                         disabled={loading}
                     >
@@ -96,7 +98,7 @@ export function ConfirmDialog({
                     <Button
                         type="button"
                         ref={confirmRef}
-                        className="bg-rose-500 hover:bg-rose-600 focus-visible:ring-rose-400 dark:bg-rose-600 dark:hover:bg-rose-500"
+                        className="rounded-full bg-rose-500 px-4 py-1.5 text-sm font-semibold hover:bg-rose-600 focus-visible:ring-rose-400 dark:bg-rose-600 dark:hover:bg-rose-500"
                         onClick={onConfirm}
                         disabled={loading}
                     >

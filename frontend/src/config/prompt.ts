@@ -109,3 +109,100 @@ export const PROMPT_COMMENT_PAGE_SIZE =
   Number.isInteger(rawPromptCommentPageSize) && rawPromptCommentPageSize > 0
     ? rawPromptCommentPageSize
     : 10;
+
+const rawGenerateTemperatureDefault = Number.parseFloat(
+  import.meta.env.VITE_PROMPT_GENERATE_TEMPERATURE_DEFAULT ?? "",
+);
+
+export const PROMPT_GENERATE_TEMPERATURE_DEFAULT = Number.isFinite(
+  rawGenerateTemperatureDefault,
+)
+  ? rawGenerateTemperatureDefault
+  : 0.7;
+
+const rawGenerateTemperatureMin = Number.parseFloat(
+  import.meta.env.VITE_PROMPT_GENERATE_TEMPERATURE_MIN ?? "",
+);
+
+export const PROMPT_GENERATE_TEMPERATURE_MIN = Number.isFinite(
+  rawGenerateTemperatureMin,
+)
+  ? rawGenerateTemperatureMin
+  : 0;
+
+const rawGenerateTemperatureMax = Number.parseFloat(
+  import.meta.env.VITE_PROMPT_GENERATE_TEMPERATURE_MAX ?? "",
+);
+
+export const PROMPT_GENERATE_TEMPERATURE_MAX = Number.isFinite(
+  rawGenerateTemperatureMax,
+)
+  ? rawGenerateTemperatureMax
+  : 2;
+
+const rawGenerateTopPDefault = Number.parseFloat(
+  import.meta.env.VITE_PROMPT_GENERATE_TOP_P_DEFAULT ?? "",
+);
+
+export const PROMPT_GENERATE_TOP_P_DEFAULT = Number.isFinite(
+  rawGenerateTopPDefault,
+)
+  ? rawGenerateTopPDefault
+  : 0.9;
+
+const rawGenerateTopPMin = Number.parseFloat(
+  import.meta.env.VITE_PROMPT_GENERATE_TOP_P_MIN ?? "",
+);
+
+export const PROMPT_GENERATE_TOP_P_MIN = Number.isFinite(rawGenerateTopPMin)
+  ? rawGenerateTopPMin
+  : 0;
+
+const rawGenerateTopPMax = Number.parseFloat(
+  import.meta.env.VITE_PROMPT_GENERATE_TOP_P_MAX ?? "",
+);
+
+export const PROMPT_GENERATE_TOP_P_MAX = Number.isFinite(rawGenerateTopPMax)
+  ? rawGenerateTopPMax
+  : 1;
+
+const rawGenerateMaxOutputDefault = Number.parseInt(
+  import.meta.env.VITE_PROMPT_GENERATE_MAX_OUTPUT_DEFAULT ?? "",
+  10,
+);
+
+export const PROMPT_GENERATE_MAX_OUTPUT_DEFAULT =
+  Number.isInteger(rawGenerateMaxOutputDefault) && rawGenerateMaxOutputDefault > 0
+    ? rawGenerateMaxOutputDefault
+    : 1024;
+
+const rawGenerateMaxOutputMin = Number.parseInt(
+  import.meta.env.VITE_PROMPT_GENERATE_MAX_OUTPUT_MIN ?? "",
+  10,
+);
+
+export const PROMPT_GENERATE_MAX_OUTPUT_MIN =
+  Number.isInteger(rawGenerateMaxOutputMin) && rawGenerateMaxOutputMin > 0
+    ? rawGenerateMaxOutputMin
+    : 32;
+
+const rawGenerateMaxOutputMax = Number.parseInt(
+  import.meta.env.VITE_PROMPT_GENERATE_MAX_OUTPUT_MAX ?? "",
+  10,
+);
+
+export const PROMPT_GENERATE_MAX_OUTPUT_MAX =
+  Number.isInteger(rawGenerateMaxOutputMax) && rawGenerateMaxOutputMax > 0
+    ? rawGenerateMaxOutputMax
+    : 4096;
+
+const rawGenerateStepwiseDefault = (
+  import.meta.env.VITE_PROMPT_GENERATE_STEPWISE_DEFAULT ?? ""
+)
+  .trim()
+  .toLowerCase();
+
+export const PROMPT_GENERATE_STEPWISE_DEFAULT =
+  rawGenerateStepwiseDefault === "1" ||
+  rawGenerateStepwiseDefault === "true" ||
+  rawGenerateStepwiseDefault === "yes";

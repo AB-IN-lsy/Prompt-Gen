@@ -37,26 +37,35 @@ type PromptKeywordItem struct {
 	Weight    int    `json:"weight,omitempty"`     // 权重（0-5）
 }
 
+// GenerationProfile 描述 Prompt 生成时使用的高级参数配置。
+type GenerationProfile struct {
+	StepwiseReasoning bool    `json:"stepwise_reasoning,omitempty"` // 是否启用逐步推理
+	Temperature       float64 `json:"temperature,omitempty"`        // 采样温度
+	TopP              float64 `json:"top_p,omitempty"`              // Top P 累积概率
+	MaxOutputTokens   int     `json:"max_output_tokens,omitempty"`  // 最大输出 token 数
+}
+
 // Prompt 表示用户保存的完整 Prompt 记录。
 type Prompt struct {
-	ID               uint       `gorm:"primaryKey"`                             // 自增主键。
-	UserID           uint       `gorm:"index;not null"`                         // 关联的用户 ID。
-	Topic            string     `gorm:"size:255;not null"`                      // Prompt 主题，如“React 面试”。
-	Body             string     `gorm:"type:text;not null"`                     // Prompt 正文内容。
-	Instructions     string     `gorm:"type:text;not null"`                     // 补充要求，用于指导生成模型的额外说明。
-	PositiveKeywords string     `gorm:"type:text;not null"`                     // 正向关键词 JSON。
-	NegativeKeywords string     `gorm:"type:text;not null"`                     // 负向关键词 JSON。
-	Model            string     `gorm:"size:64;not null"`                       // 使用的大模型标识。
-	Status           string     `gorm:"size:16;not null;default:'draft';index"` // 当前状态：draft/published/archived。
-	Tags             string     `gorm:"type:text;not null"`                     // 自定义标签 JSON。
-	IsFavorited      bool       `gorm:"not null;default:false"`                 // 是否收藏。
-	LikeCount        uint       `gorm:"not null;default:0"`                     // 点赞数量。
-	VisitCount       uint64     `gorm:"not null;default:0"`                     // 访问次数。
-	PublishedAt      *time.Time // 最近发布的时间戳。
-	CreatedAt        time.Time  // 创建时间。
-	UpdatedAt        time.Time  // 最近更新时间。
-	LatestVersionNo  int        `gorm:"not null;default:1"` // 最近发布版本号。
-	IsLiked          bool       `gorm:"-"`                  // 当前用户是否点赞。
+	ID                uint       `gorm:"primaryKey"`                             // 自增主键。
+	UserID            uint       `gorm:"index;not null"`                         // 关联的用户 ID。
+	Topic             string     `gorm:"size:255;not null"`                      // Prompt 主题，如“React 面试”。
+	Body              string     `gorm:"type:text;not null"`                     // Prompt 正文内容。
+	Instructions      string     `gorm:"type:text;not null"`                     // 补充要求，用于指导生成模型的额外说明。
+	PositiveKeywords  string     `gorm:"type:text;not null"`                     // 正向关键词 JSON。
+	NegativeKeywords  string     `gorm:"type:text;not null"`                     // 负向关键词 JSON。
+	Model             string     `gorm:"size:64;not null"`                       // 使用的大模型标识。
+	Status            string     `gorm:"size:16;not null;default:'draft';index"` // 当前状态：draft/published/archived。
+	Tags              string     `gorm:"type:text;not null"`                     // 自定义标签 JSON。
+	IsFavorited       bool       `gorm:"not null;default:false"`                 // 是否收藏。
+	LikeCount         uint       `gorm:"not null;default:0"`                     // 点赞数量。
+	VisitCount        uint64     `gorm:"not null;default:0"`                     // 访问次数。
+	GenerationProfile string     `gorm:"type:text"`                              // 生成配置 JSON。
+	PublishedAt       *time.Time // 最近发布的时间戳。
+	CreatedAt         time.Time  // 创建时间。
+	UpdatedAt         time.Time  // 最近更新时间。
+	LatestVersionNo   int        `gorm:"not null;default:1"` // 最近发布版本号。
+	IsLiked           bool       `gorm:"-"`                  // 当前用户是否点赞。
 }
 
 // Keyword 表示主题下的单个关键词，包含正负向、权重与来源信息。
@@ -131,13 +140,14 @@ func (PromptCommentLike) TableName() string {
 
 // PromptVersion 记录历史版本，便于用户回滚。
 type PromptVersion struct {
-	ID               uint      `gorm:"primaryKey"`                                          // 自增主键。
-	PromptID         uint      `gorm:"not null;index;index:idx_prompt_versions,priority:1"` // 关联 Prompt。
-	VersionNo        int       `gorm:"not null;index:idx_prompt_versions,priority:2"`       // 版本号。
-	Body             string    `gorm:"type:text;not null"`                                  // Prompt 正文快照。
-	Instructions     string    `gorm:"type:text;not null"`                                  // 补充要求快照。
-	PositiveKeywords string    `gorm:"type:text;not null"`                                  // 正向关键词快照。
-	NegativeKeywords string    `gorm:"type:text;not null"`                                  // 负向关键词快照。
-	Model            string    `gorm:"size:64;not null"`                                    // 生成使用的模型。
-	CreatedAt        time.Time // 版本创建时间。
+	ID                uint      `gorm:"primaryKey"`                                          // 自增主键。
+	PromptID          uint      `gorm:"not null;index;index:idx_prompt_versions,priority:1"` // 关联 Prompt。
+	VersionNo         int       `gorm:"not null;index:idx_prompt_versions,priority:2"`       // 版本号。
+	Body              string    `gorm:"type:text;not null"`                                  // Prompt 正文快照。
+	Instructions      string    `gorm:"type:text;not null"`                                  // 补充要求快照。
+	PositiveKeywords  string    `gorm:"type:text;not null"`                                  // 正向关键词快照。
+	NegativeKeywords  string    `gorm:"type:text;not null"`                                  // 负向关键词快照。
+	Model             string    `gorm:"size:64;not null"`                                    // 生成使用的模型。
+	GenerationProfile string    `gorm:"type:text"`                                           // 生成配置快照。
+	CreatedAt         time.Time // 版本创建时间。
 }

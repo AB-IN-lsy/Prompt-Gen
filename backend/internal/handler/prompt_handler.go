@@ -153,45 +153,59 @@ type removeKeywordRequest struct {
 	WorkspaceToken string `json:"workspace_token"`
 }
 
+// syncWorkspaceRequest 用于同步工作区关键词的排序与权重。
 type syncWorkspaceRequest struct {
 	WorkspaceToken   string           `json:"workspace_token" binding:"required"`
 	PositiveKeywords []KeywordPayload `json:"positive_keywords"`
 	NegativeKeywords []KeywordPayload `json:"negative_keywords"`
 }
 
+// generationProfilePayload 描述生成配置文件的结构。
+type generationProfilePayload struct {
+	StepwiseReasoning bool    `json:"stepwise_reasoning"`
+	Temperature       float64 `json:"temperature"`
+	TopP              float64 `json:"top_p"`
+	MaxOutputTokens   int     `json:"max_output_tokens"`
+}
+
 // generateRequest 描述生成 Prompt 的输入。
 type generateRequest struct {
-	Topic             string           `json:"topic" binding:"required"`
-	ModelKey          string           `json:"model_key" binding:"required"`
-	Language          string           `json:"language"`
-	Instructions      string           `json:"instructions"`
-	ExistingBody      string           `json:"existing_body"`
-	Description       string           `json:"description"`
-	Tone              string           `json:"tone"`
-	Temperature       float64          `json:"temperature"`
-	MaxTokens         int              `json:"max_tokens"`
-	PromptID          uint             `json:"prompt_id"`
-	IncludeKeywordRef bool             `json:"include_keyword_reference"`
-	PositiveKeywords  []KeywordPayload `json:"positive_keywords" binding:"required,dive"`
-	NegativeKeywords  []KeywordPayload `json:"negative_keywords"`
-	WorkspaceToken    string           `json:"workspace_token"`
+	Topic             string                    `json:"topic" binding:"required"`
+	ModelKey          string                    `json:"model_key" binding:"required"`
+	Language          string                    `json:"language"`
+	Instructions      string                    `json:"instructions"`
+	ExistingBody      string                    `json:"existing_body"`
+	Description       string                    `json:"description"`
+	Tone              string                    `json:"tone"`
+	Temperature       float64                   `json:"temperature"`
+	MaxTokens         int                       `json:"max_tokens"`
+	TopP              float64                   `json:"top_p"`
+	StepwiseReasoning bool                      `json:"stepwise_reasoning"`
+	GenerationProfile *generationProfilePayload `json:"generation_profile"`
+	PromptID          uint                      `json:"prompt_id"`
+	IncludeKeywordRef bool                      `json:"include_keyword_reference"`
+	PositiveKeywords  []KeywordPayload          `json:"positive_keywords" binding:"required,dive"`
+	NegativeKeywords  []KeywordPayload          `json:"negative_keywords"`
+	WorkspaceToken    string                    `json:"workspace_token"`
 }
 
 // saveRequest 接收保存草稿或发布 Prompt 的参数。
 type saveRequest struct {
-	PromptID         uint             `json:"prompt_id"`
-	Topic            string           `json:"topic"`
-	Body             string           `json:"body"`
-	Instructions     string           `json:"instructions"`
-	Model            string           `json:"model"`
-	Status           string           `json:"status"`
-	Publish          bool             `json:"publish"`
-	Tags             []string         `json:"tags"`
-	PositiveKeywords []KeywordPayload `json:"positive_keywords" binding:"required,dive"`
-	NegativeKeywords []KeywordPayload `json:"negative_keywords"`
-	WorkspaceToken   string           `json:"workspace_token"`
+	PromptID          uint                      `json:"prompt_id"`
+	Topic             string                    `json:"topic"`
+	Body              string                    `json:"body"`
+	Instructions      string                    `json:"instructions"`
+	Model             string                    `json:"model"`
+	Status            string                    `json:"status"`
+	Publish           bool                      `json:"publish"`
+	Tags              []string                  `json:"tags"`
+	PositiveKeywords  []KeywordPayload          `json:"positive_keywords" binding:"required,dive"`
+	NegativeKeywords  []KeywordPayload          `json:"negative_keywords"`
+	WorkspaceToken    string                    `json:"workspace_token"`
+	GenerationProfile *generationProfilePayload `json:"generation_profile"`
 }
 
+// favoriteRequest 用于切换收藏状态的请求体。
 type favoriteRequest struct {
 	Favorited bool `json:"favorited"`
 }
@@ -240,18 +254,19 @@ func (h *PromptHandler) ListPrompts(c *gin.Context) {
 	items := make([]gin.H, 0, len(out.Items))
 	for _, item := range out.Items {
 		items = append(items, gin.H{
-			"id":                item.ID,
-			"topic":             item.Topic,
-			"model":             item.Model,
-			"status":            item.Status,
-			"tags":              item.Tags,
-			"positive_keywords": toKeywordResponse(item.PositiveKeywords),
-			"negative_keywords": toKeywordResponse(item.NegativeKeywords),
-			"is_favorited":      item.IsFavorited,
-			"is_liked":          item.IsLiked,
-			"like_count":        item.LikeCount,
-			"updated_at":        item.UpdatedAt,
-			"published_at":      item.PublishedAt,
+			"id":                 item.ID,
+			"topic":              item.Topic,
+			"model":              item.Model,
+			"status":             item.Status,
+			"tags":               item.Tags,
+			"positive_keywords":  toKeywordResponse(item.PositiveKeywords),
+			"negative_keywords":  toKeywordResponse(item.NegativeKeywords),
+			"is_favorited":       item.IsFavorited,
+			"is_liked":           item.IsLiked,
+			"like_count":         item.LikeCount,
+			"updated_at":         item.UpdatedAt,
+			"published_at":       item.PublishedAt,
+			"generation_profile": item.Generation,
 		})
 	}
 
@@ -373,9 +388,10 @@ func (h *PromptHandler) ListPromptVersions(c *gin.Context) {
 	items := make([]gin.H, 0, len(result.Versions))
 	for _, version := range result.Versions {
 		items = append(items, gin.H{
-			"version_no": version.VersionNo,
-			"model":      version.Model,
-			"created_at": version.CreatedAt,
+			"version_no":         version.VersionNo,
+			"model":              version.Model,
+			"created_at":         version.CreatedAt,
+			"generation_profile": version.Generation,
 		})
 	}
 	response.Success(c, http.StatusOK, gin.H{"versions": items}, nil)
@@ -418,13 +434,14 @@ func (h *PromptHandler) GetPromptVersion(c *gin.Context) {
 		return
 	}
 	response.Success(c, http.StatusOK, gin.H{
-		"version_no":        detail.VersionNo,
-		"model":             detail.Model,
-		"body":              detail.Body,
-		"instructions":      detail.Instructions,
-		"positive_keywords": toKeywordResponse(detail.PositiveKeywords),
-		"negative_keywords": toKeywordResponse(detail.NegativeKeywords),
-		"created_at":        detail.CreatedAt,
+		"version_no":         detail.VersionNo,
+		"model":              detail.Model,
+		"body":               detail.Body,
+		"instructions":       detail.Instructions,
+		"positive_keywords":  toKeywordResponse(detail.PositiveKeywords),
+		"negative_keywords":  toKeywordResponse(detail.NegativeKeywords),
+		"created_at":         detail.CreatedAt,
+		"generation_profile": detail.Generation,
 	}, nil)
 }
 
@@ -457,22 +474,23 @@ func (h *PromptHandler) GetPrompt(c *gin.Context) {
 	}
 
 	response.Success(c, http.StatusOK, gin.H{
-		"id":                detail.ID,
-		"topic":             detail.Topic,
-		"body":              detail.Body,
-		"instructions":      detail.Instructions,
-		"model":             detail.Model,
-		"status":            detail.Status,
-		"tags":              detail.Tags,
-		"positive_keywords": toKeywordResponse(detail.PositiveKeywords),
-		"negative_keywords": toKeywordResponse(detail.NegativeKeywords),
-		"is_favorited":      detail.IsFavorited,
-		"is_liked":          detail.IsLiked,
-		"like_count":        detail.LikeCount,
-		"workspace_token":   detail.WorkspaceToken,
-		"created_at":        detail.CreatedAt,
-		"updated_at":        detail.UpdatedAt,
-		"published_at":      detail.PublishedAt,
+		"id":                 detail.ID,
+		"topic":              detail.Topic,
+		"body":               detail.Body,
+		"instructions":       detail.Instructions,
+		"model":              detail.Model,
+		"status":             detail.Status,
+		"tags":               detail.Tags,
+		"positive_keywords":  toKeywordResponse(detail.PositiveKeywords),
+		"negative_keywords":  toKeywordResponse(detail.NegativeKeywords),
+		"is_favorited":       detail.IsFavorited,
+		"is_liked":           detail.IsLiked,
+		"like_count":         detail.LikeCount,
+		"workspace_token":    detail.WorkspaceToken,
+		"created_at":         detail.CreatedAt,
+		"updated_at":         detail.UpdatedAt,
+		"published_at":       detail.PublishedAt,
+		"generation_profile": detail.Generation,
 	}, nil)
 }
 
@@ -858,6 +876,7 @@ func (h *PromptHandler) GeneratePrompt(c *gin.Context) {
 		return
 	}
 
+	generationProfile := toGenerationProfilePayload(req.GenerationProfile, req.StepwiseReasoning, req.Temperature, req.TopP, req.MaxTokens)
 	out, err := h.service.GeneratePrompt(c.Request.Context(), promptsvc.GenerateInput{
 		UserID:            userID,
 		Topic:             req.Topic,
@@ -867,13 +886,12 @@ func (h *PromptHandler) GeneratePrompt(c *gin.Context) {
 		Instructions:      req.Instructions,
 		ExistingBody:      req.ExistingBody,
 		Tone:              req.Tone,
-		Temperature:       req.Temperature,
-		MaxTokens:         req.MaxTokens,
 		PromptID:          req.PromptID,
 		IncludeKeywordRef: req.IncludeKeywordRef,
 		PositiveKeywords:  toServiceKeywords(req.PositiveKeywords),
 		NegativeKeywords:  toServiceKeywords(req.NegativeKeywords),
 		WorkspaceToken:    strings.TrimSpace(req.WorkspaceToken),
+		GenerationProfile: generationProfile,
 	})
 	if err != nil {
 		if errors.Is(err, promptsvc.ErrContentRejected) {
@@ -956,6 +974,7 @@ func (h *PromptHandler) SavePrompt(c *gin.Context) {
 		return
 	}
 
+	generationProfile := toGenerationProfilePayload(req.GenerationProfile, false, 0, 0, 0)
 	result, err := h.service.Save(c.Request.Context(), promptsvc.SaveInput{
 		UserID:                   userID,
 		PromptID:                 req.PromptID,
@@ -970,6 +989,7 @@ func (h *PromptHandler) SavePrompt(c *gin.Context) {
 		NegativeKeywords:         toServiceKeywords(req.NegativeKeywords),
 		WorkspaceToken:           strings.TrimSpace(req.WorkspaceToken),
 		EnforcePublishValidation: true,
+		GenerationProfile:        generationProfile,
 	})
 	if err != nil {
 		if errors.Is(err, promptsvc.ErrPositiveKeywordLimit) {
@@ -1130,6 +1150,27 @@ func extractContentRejectReason(err error) string {
 		}
 	}
 	return message
+}
+
+// toGenerationProfilePayload 将请求体中的生成配置合并为 Service 层可用的结构体。
+func toGenerationProfilePayload(payload *generationProfilePayload, stepwise bool, temperature, topP float64, maxTokens int) *promptdomain.GenerationProfile {
+	if payload != nil {
+		return &promptdomain.GenerationProfile{
+			StepwiseReasoning: payload.StepwiseReasoning,
+			Temperature:       payload.Temperature,
+			TopP:              payload.TopP,
+			MaxOutputTokens:   payload.MaxOutputTokens,
+		}
+	}
+	if !stepwise && temperature == 0 && topP == 0 && maxTokens == 0 {
+		return nil
+	}
+	return &promptdomain.GenerationProfile{
+		StepwiseReasoning: stepwise,
+		Temperature:       temperature,
+		TopP:              topP,
+		MaxOutputTokens:   maxTokens,
+	}
 }
 
 // toServiceKeywords 将请求体中的关键词载荷转换为 Service 层使用的结构体。

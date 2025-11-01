@@ -5,6 +5,7 @@
 ## 最近进展
 
 - 调整 Prompt 工作台：前端仅在检测到关键词顺序或权重实际变化时才调用 `POST /api/prompts/keywords/sync`，显著降低接口调用频率，后端无需额外改动即可受益。
+- Prompt 生成参数可配置：`prompts` 表新增 `generation_profile` TEXT 字段，保存逐步推理、温度、Top P、最大输出 tokens 等配置，并在生成/保存时透传到模型调用链；相关默认值通过 `PROMPT_GENERATE_*` 环境变量控制。
 - 解析 & 生成统一接入内容审核：新增 `Service.auditContent`，在解析前和生成后复用用户配置的模型执行违规检测，若命中策略会返回 `CONTENT_REJECTED` 错误码与可读提示，前端直接用于 toast。
 - 新增 `POST /api/prompts/import`，可上传导出的 JSON 文件并选择“合并/覆盖”模式批量回灌 Prompt，导入批大小由 `PROMPT_IMPORT_BATCH_SIZE` 控制。
 - 本地离线模式下会自动关闭邮箱验证、Prompt 生成与公共库的限流器，避免开发或演示环境频繁操作触发限流提示。

@@ -33,6 +33,9 @@ import {
   PROMPT_KEYWORD_MAX_LENGTH,
   PROMPT_TAG_MAX_LENGTH,
   DEFAULT_KEYWORD_WEIGHT,
+  PROMPT_GENERATE_TEMPERATURE_DEFAULT,
+  PROMPT_GENERATE_TOP_P_DEFAULT,
+  PROMPT_GENERATE_MAX_OUTPUT_DEFAULT,
 } from "../config/prompt";
 import { usePromptWorkbench } from "../hooks/usePromptWorkbench";
 import { isLocalMode } from "../lib/runtimeMode";
@@ -77,6 +80,9 @@ export default function PromptDetailPage(): JSX.Element {
   const setCollections = usePromptWorkbench((state) => state.setCollections);
   const setTags = usePromptWorkbench((state) => state.setTags);
   const setInstructions = usePromptWorkbench((state) => state.setInstructions);
+  const overwriteGenerationProfile = usePromptWorkbench(
+    (state) => state.overwriteGenerationProfile,
+  );
 
   const detailQuery = useQuery({
     queryKey: ["prompt-detail", promptId],
@@ -116,10 +122,59 @@ export default function PromptDetailPage(): JSX.Element {
   const versionDetail = versionDetailQuery.data;
 
   const [showFullInstructions, setShowFullInstructions] = useState(false);
+  const [profileDialogOpen, setProfileDialogOpen] = useState(false);
+  const activeGenerationProfile = useMemo(() => {
+    if (!detail) {
+      return null;
+    }
+  const profileSource =
+    selectedVersion && versionDetail?.generation_profile
+      ? versionDetail.generation_profile
+      : detail.generation_profile;
+  if (!profileSource) {
+    return null;
+  }
+  return {
+    stepwiseReasoning: Boolean(profileSource.stepwise_reasoning),
+    temperature:
+      typeof profileSource.temperature === "number"
+        ? profileSource.temperature
+        : PROMPT_GENERATE_TEMPERATURE_DEFAULT,
+    topP:
+      typeof profileSource.top_p === "number"
+        ? profileSource.top_p
+        : PROMPT_GENERATE_TOP_P_DEFAULT,
+    maxOutputTokens:
+      typeof profileSource.max_output_tokens === "number"
+        ? profileSource.max_output_tokens
+        : PROMPT_GENERATE_MAX_OUTPUT_DEFAULT,
+  };
+  }, [detail, selectedVersion, versionDetail]);
+  const decimalFormatter = useMemo(
+    () =>
+      new Intl.NumberFormat(i18n.language, {
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 3,
+      }),
+    [i18n.language],
+  );
+  const integerFormatter = useMemo(
+    () =>
+      new Intl.NumberFormat(i18n.language, {
+        maximumFractionDigits: 0,
+      }),
+    [i18n.language],
+  );
 
   useEffect(() => {
     setShowFullInstructions(false);
   }, [selectedVersion, detail?.id]);
+
+  useEffect(() => {
+    if (!activeGenerationProfile) {
+      setProfileDialogOpen(false);
+    }
+  }, [activeGenerationProfile]);
 
   const selectedVersionSummary = selectedVersion !== null ? versions.find((entry) => entry.versionNo === selectedVersion) : null;
   const latestVersionSummary = versions[0];
@@ -292,6 +347,23 @@ export default function PromptDetailPage(): JSX.Element {
     const negative = mapKeywords(detail.negative_keywords, "negative");
     setCollections(positive, negative);
     setTags(detail.tags ?? []);
+    if (detail.generation_profile) {
+      overwriteGenerationProfile({
+        stepwiseReasoning: Boolean(detail.generation_profile.stepwise_reasoning),
+        temperature:
+          typeof detail.generation_profile.temperature === "number"
+            ? detail.generation_profile.temperature
+            : PROMPT_GENERATE_TEMPERATURE_DEFAULT,
+        topP:
+          typeof detail.generation_profile.top_p === "number"
+            ? detail.generation_profile.top_p
+            : PROMPT_GENERATE_TOP_P_DEFAULT,
+        maxOutputTokens:
+          typeof detail.generation_profile.max_output_tokens === "number"
+            ? detail.generation_profile.max_output_tokens
+            : PROMPT_GENERATE_MAX_OUTPUT_DEFAULT,
+      });
+    }
     navigate("/prompt-workbench");
   };
 
@@ -316,6 +388,25 @@ export default function PromptDetailPage(): JSX.Element {
     );
     setCollections(positive, negative);
     setTags(detail.tags ?? []);
+    const profileSource =
+      versionDetail.generation_profile ?? detail.generation_profile;
+    if (profileSource) {
+      overwriteGenerationProfile({
+        stepwiseReasoning: Boolean(profileSource.stepwise_reasoning),
+        temperature:
+          typeof profileSource.temperature === "number"
+            ? profileSource.temperature
+            : PROMPT_GENERATE_TEMPERATURE_DEFAULT,
+        topP:
+          typeof profileSource.top_p === "number"
+            ? profileSource.top_p
+            : PROMPT_GENERATE_TOP_P_DEFAULT,
+        maxOutputTokens:
+          typeof profileSource.max_output_tokens === "number"
+            ? profileSource.max_output_tokens
+            : PROMPT_GENERATE_MAX_OUTPUT_DEFAULT,
+      });
+    }
     toast.success(
       t("promptDetail.versions.loadSuccess", {
         version: versionDetail.versionNo,
@@ -409,7 +500,7 @@ const handleOpenSubmit = () => {
               onClick={handleBack}
               className="transition-transform hover:-translate-y-0.5"
             >
-              {t("promptDetail.actions.back")}
+              {t("promptDetail.actions.back", { defaultValue: "返回上一页" })}
             </Button>
             <Button
               variant="secondary"
@@ -417,8 +508,19 @@ const handleOpenSubmit = () => {
               disabled={!detail}
               className="transition-transform hover:-translate-y-0.5"
             >
-              {t("promptDetail.actions.edit")}
+              {t("promptDetail.actions.edit", { defaultValue: "继续编辑" })}
             </Button>
+            {activeGenerationProfile ? (
+              <Button
+                variant="outline"
+                onClick={() => setProfileDialogOpen(true)}
+                className="transition-transform hover:-translate-y-0.5"
+              >
+                {t("promptDetail.actions.viewGenerationProfile", {
+                  defaultValue: "查看生成配置",
+                })}
+              </Button>
+            ) : null}
             {canSubmitPublic ? (
               <Button
                 onClick={handleOpenSubmit}
@@ -528,8 +630,8 @@ const handleOpenSubmit = () => {
                         })}
                       </p>
                     )
-                  ) : null}
-                </div>
+            ) : null}
+          </div>
 
                 <div className="space-y-2">
                   <label
@@ -904,6 +1006,91 @@ const handleOpenSubmit = () => {
           </GlassCard>
         </div>
       )}
+      {profileDialogOpen && activeGenerationProfile ? (
+        <div className="fixed inset-0 z-[140] flex items-center justify-center px-6 py-10">
+          <div
+            className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
+            onClick={() => setProfileDialogOpen(false)}
+          />
+          <GlassCard className="relative z-[141] w-full max-w-md space-y-4 border border-slate-200 bg-white/95 p-6 text-slate-700 shadow-[0_30px_60px_-35px_rgba(15,23,42,0.75)] dark:border-slate-700 dark:bg-slate-900/90 dark:text-slate-200">
+            <div className="space-y-1">
+              <p className="text-xs font-semibold uppercase tracking-[0.28em] text-slate-400 dark:text-slate-500">
+                {t("promptDetail.generationProfileCard.eyebrow", {
+                  defaultValue: "生成配置",
+                })}
+              </p>
+              <div className="flex items-start justify-between gap-2">
+                <div>
+                  <h3 className="text-base font-semibold text-slate-800 dark:text-slate-100">
+                    {t("promptDetail.generationProfileCard.title", {
+                      defaultValue: "当前参数",
+                    })}
+                  </h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    {t("promptDetail.generationProfileCard.subtitle", {
+                      defaultValue: "展示最近一次生成时使用的高级参数。",
+                    })}
+                  </p>
+                </div>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 rounded-full text-slate-400 hover:text-slate-600 focus-visible:ring-slate-300 dark:text-slate-500 dark:hover:text-slate-200"
+                  onClick={() => setProfileDialogOpen(false)}
+                  aria-label={t("promptDetail.generationProfileCard.close", {
+                    defaultValue: "关闭生成配置",
+                  })}
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+            <div className="grid gap-2 text-sm text-slate-600 dark:text-slate-300">
+              <span>
+                {t(
+                  activeGenerationProfile.stepwiseReasoning
+                    ? "promptDetail.generationProfileCard.stepwiseOn"
+                    : "promptDetail.generationProfileCard.stepwiseOff",
+                  {
+                    defaultValue: activeGenerationProfile.stepwiseReasoning
+                      ? "逐步推理：已开启"
+                      : "逐步推理：已关闭",
+                  },
+                )}
+              </span>
+              <span>
+                {t("promptDetail.generationProfileCard.temperature", {
+                  value: decimalFormatter.format(
+                    activeGenerationProfile.temperature,
+                  ),
+                  defaultValue: `采样温度：${decimalFormatter.format(
+                    activeGenerationProfile.temperature,
+                  )}`,
+                })}
+              </span>
+              <span>
+                {t("promptDetail.generationProfileCard.topP", {
+                  value: decimalFormatter.format(activeGenerationProfile.topP),
+                  defaultValue: `Top P：${decimalFormatter.format(
+                    activeGenerationProfile.topP,
+                  )}`,
+                })}
+              </span>
+              <span>
+                {t("promptDetail.generationProfileCard.maxTokens", {
+                  value: integerFormatter.format(
+                    activeGenerationProfile.maxOutputTokens,
+                  ),
+                  defaultValue: `最大输出 Tokens：${integerFormatter.format(
+                    activeGenerationProfile.maxOutputTokens,
+                  )}`,
+                })}
+              </span>
+            </div>
+          </GlassCard>
+        </div>
+      ) : null}
     </div>
   );
 }

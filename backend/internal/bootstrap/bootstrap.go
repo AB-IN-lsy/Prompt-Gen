@@ -545,6 +545,18 @@ func loadPromptConfig(logger *zap.SugaredLogger, isLocal bool) promptsvc.Config 
 			DailyQuota:  freeTierLimit,
 			Window:      freeTierWindow,
 		},
+		Generation: promptsvc.GenerationConfig{
+			DefaultTemperature: parseFloatEnv("PROMPT_GENERATE_TEMPERATURE_DEFAULT", promptsvc.DefaultGenerationTemperature, logger),
+			MinTemperature:     parseFloatEnv("PROMPT_GENERATE_TEMPERATURE_MIN", promptsvc.MinGenerationTemperature, logger),
+			MaxTemperature:     parseFloatEnv("PROMPT_GENERATE_TEMPERATURE_MAX", promptsvc.MaxGenerationTemperature, logger),
+			DefaultTopP:        parseFloatEnv("PROMPT_GENERATE_TOP_P_DEFAULT", promptsvc.DefaultGenerationTopP, logger),
+			MinTopP:            parseFloatEnv("PROMPT_GENERATE_TOP_P_MIN", promptsvc.MinGenerationTopP, logger),
+			MaxTopP:            parseFloatEnv("PROMPT_GENERATE_TOP_P_MAX", promptsvc.MaxGenerationTopP, logger),
+			DefaultMaxTokens:   parseIntEnv("PROMPT_GENERATE_MAX_OUTPUT_DEFAULT", promptsvc.DefaultGenerationMaxTokens, logger),
+			MinMaxTokens:       parseIntEnv("PROMPT_GENERATE_MAX_OUTPUT_MIN", promptsvc.MinGenerationMaxTokens, logger),
+			MaxMaxTokens:       parseIntEnv("PROMPT_GENERATE_MAX_OUTPUT_MAX", promptsvc.MaxGenerationMaxTokens, logger),
+			DefaultStepwise:    parseBoolEnv("PROMPT_GENERATE_STEPWISE_DEFAULT", false),
+		},
 	}
 }
 

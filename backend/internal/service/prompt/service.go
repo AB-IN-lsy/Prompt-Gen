@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
 	"strings"
@@ -73,6 +74,8 @@ type Service struct {
 	versionKeepLimit    int
 	importBatchSize     int
 	freeTier            *freeTier
+	generationDefault   promptdomain.GenerationProfile
+	generationBounds    generationBounds
 }
 
 const (
@@ -106,8 +109,9 @@ const DefaultVersionRetentionLimit = 5
 const DefaultImportBatchSize = 20
 
 const (
-	workspaceAttrInstructions = "instructions"
-	workspaceAttrTags         = "tags"
+	workspaceAttrInstructions      = "instructions"
+	workspaceAttrTags              = "tags"
+	workspaceAttrGenerationProfile = "generation_profile"
 )
 
 const (
@@ -117,6 +121,43 @@ const (
 	// defaultKeywordWeight 用于 Interpret/Augment 未返回权重或手动录入时的兜底值。
 	defaultKeywordWeight = 5
 )
+
+const (
+	// DefaultGenerationTemperature 定义生成 Prompt 时的默认采样温度。
+	DefaultGenerationTemperature = 0.7
+	// DefaultGenerationTopP 定义生成 Prompt 时的默认 TopP 累积概率。
+	DefaultGenerationTopP = 0.9
+	// DefaultGenerationMaxTokens 为生成请求提供默认的最大输出 token。
+	DefaultGenerationMaxTokens = 1024
+	// MinGenerationTemperature 限制温度的最小值，避免非法参数。
+	MinGenerationTemperature = 0.0
+	// MaxGenerationTemperature 限制温度的最大值。
+	MaxGenerationTemperature = 2.0
+	// MinGenerationTopP 定义 TopP 的最小值。
+	MinGenerationTopP = 0.0
+	// MaxGenerationTopP 定义 TopP 的最大值。
+	MaxGenerationTopP = 1.0
+	// MinGenerationMaxTokens 控制最小的输出 token 数。
+	MinGenerationMaxTokens = 32
+	// MaxGenerationMaxTokens 控制最大的输出 token 数。
+	MaxGenerationMaxTokens = 4096
+)
+
+type floatRange struct {
+	Min float64
+	Max float64
+}
+
+type intRange struct {
+	Min int
+	Max int
+}
+
+type generationBounds struct {
+	Temperature floatRange
+	TopP        floatRange
+	MaxTokens   intRange
+}
 
 const (
 	// DefaultPromptExportDir 定义 Prompt 导出的默认保存路径（相对项目根目录）。
@@ -174,6 +215,21 @@ type Config struct {
 	ImportBatchSize     int
 	Audit               AuditConfig
 	FreeTier            FreeTierConfig
+	Generation          GenerationConfig
+}
+
+// GenerationConfig 描述 Prompt 生成参数的可配置范围与默认值。
+type GenerationConfig struct {
+	DefaultTemperature float64
+	MinTemperature     float64
+	MaxTemperature     float64
+	DefaultTopP        float64
+	MinTopP            float64
+	MaxTopP            float64
+	DefaultMaxTokens   int
+	MinMaxTokens       int
+	MaxMaxTokens       int
+	DefaultStepwise    bool
 }
 
 // FreeTierUsageSnapshot 描述免费额度的当前余量与重置时间。
@@ -215,6 +271,47 @@ func NewServiceWithConfig(prompts *repository.PromptRepository, keywords *reposi
 	if cfg.ImportBatchSize <= 0 {
 		cfg.ImportBatchSize = DefaultImportBatchSize
 	}
+	genCfg := cfg.Generation
+	if genCfg.MinTemperature < MinGenerationTemperature {
+		genCfg.MinTemperature = MinGenerationTemperature
+	}
+	if genCfg.MaxTemperature <= 0 {
+		genCfg.MaxTemperature = MaxGenerationTemperature
+	}
+	if genCfg.MaxTemperature < genCfg.MinTemperature {
+		genCfg.MaxTemperature = genCfg.MinTemperature
+	}
+	if genCfg.DefaultTemperature <= 0 {
+		genCfg.DefaultTemperature = DefaultGenerationTemperature
+	}
+	tempDefault := clampFloat(genCfg.DefaultTemperature, genCfg.MinTemperature, genCfg.MaxTemperature)
+	if genCfg.MinTopP < MinGenerationTopP {
+		genCfg.MinTopP = MinGenerationTopP
+	}
+	if genCfg.MaxTopP <= 0 {
+		genCfg.MaxTopP = MaxGenerationTopP
+	}
+	if genCfg.MaxTopP < genCfg.MinTopP {
+		genCfg.MaxTopP = genCfg.MinTopP
+	}
+	if genCfg.DefaultTopP <= 0 {
+		genCfg.DefaultTopP = DefaultGenerationTopP
+	}
+	topPDefault := clampFloat(genCfg.DefaultTopP, genCfg.MinTopP, genCfg.MaxTopP)
+	if genCfg.MinMaxTokens <= 0 {
+		genCfg.MinMaxTokens = MinGenerationMaxTokens
+	}
+	if genCfg.MaxMaxTokens <= 0 {
+		genCfg.MaxMaxTokens = MaxGenerationMaxTokens
+	}
+	if genCfg.MaxMaxTokens < genCfg.MinMaxTokens {
+		genCfg.MaxMaxTokens = genCfg.MinMaxTokens
+	}
+	if genCfg.DefaultMaxTokens <= 0 {
+		genCfg.DefaultMaxTokens = DefaultGenerationMaxTokens
+	}
+	maxTokensDefault := clampInt(genCfg.DefaultMaxTokens, genCfg.MinMaxTokens, genCfg.MaxMaxTokens)
+	cfg.Generation = genCfg
 	baseExportDir := strings.TrimSpace(cfg.ExportDirectory)
 	if baseExportDir == "" {
 		baseExportDir = DefaultPromptExportDir
@@ -259,6 +356,26 @@ func NewServiceWithConfig(prompts *repository.PromptRepository, keywords *reposi
 		versionKeepLimit:    cfg.VersionRetention,
 		importBatchSize:     cfg.ImportBatchSize,
 		freeTier:            freeTier,
+		generationDefault: promptdomain.GenerationProfile{
+			StepwiseReasoning: genCfg.DefaultStepwise,
+			Temperature:       tempDefault,
+			TopP:              topPDefault,
+			MaxOutputTokens:   maxTokensDefault,
+		},
+		generationBounds: generationBounds{
+			Temperature: floatRange{
+				Min: genCfg.MinTemperature,
+				Max: genCfg.MaxTemperature,
+			},
+			TopP: floatRange{
+				Min: genCfg.MinTopP,
+				Max: genCfg.MaxTopP,
+			},
+			MaxTokens: intRange{
+				Min: genCfg.MinMaxTokens,
+				Max: genCfg.MaxMaxTokens,
+			},
+		},
 	}, nil
 }
 
@@ -344,6 +461,7 @@ func (s *Service) ListPrompts(ctx context.Context, input ListPromptsInput) (List
 			IsFavorited:      record.IsFavorited,
 			IsLiked:          record.IsLiked,
 			LikeCount:        record.LikeCount,
+			Generation:       s.decodeGenerationProfile(record.GenerationProfile),
 			UpdatedAt:        record.UpdatedAt,
 			PublishedAt:      record.PublishedAt,
 		})
@@ -378,9 +496,10 @@ func (s *Service) ListPromptVersions(ctx context.Context, input ListVersionsInpu
 	summaries := make([]PromptVersionSummary, 0, len(versions))
 	for _, version := range versions {
 		summaries = append(summaries, PromptVersionSummary{
-			VersionNo: version.VersionNo,
-			Model:     version.Model,
-			CreatedAt: version.CreatedAt,
+			VersionNo:  version.VersionNo,
+			Model:      version.Model,
+			Generation: s.decodeGenerationProfile(version.GenerationProfile),
+			CreatedAt:  version.CreatedAt,
 		})
 	}
 	return ListVersionsOutput{Versions: summaries}, nil
@@ -413,6 +532,7 @@ func (s *Service) GetPromptVersionDetail(ctx context.Context, input GetVersionDe
 		Model:            version.Model,
 		PositiveKeywords: positive,
 		NegativeKeywords: negative,
+		Generation:       s.decodeGenerationProfile(version.GenerationProfile),
 		CreatedAt:        version.CreatedAt,
 	}, nil
 }
@@ -430,20 +550,21 @@ type ExportPromptsOutput struct {
 }
 
 type promptExportRecord struct {
-	ID               uint                             `json:"id"`
-	Topic            string                           `json:"topic"`
-	Body             string                           `json:"body"`
-	Instructions     string                           `json:"instructions"`
-	Model            string                           `json:"model"`
-	Status           string                           `json:"status"`
-	Tags             []string                         `json:"tags"`
-	PositiveKeywords []promptdomain.PromptKeywordItem `json:"positive_keywords"`
-	NegativeKeywords []promptdomain.PromptKeywordItem `json:"negative_keywords"`
-	IsFavorited      bool                             `json:"is_favorited"`
-	PublishedAt      *time.Time                       `json:"published_at,omitempty"`
-	CreatedAt        time.Time                        `json:"created_at"`
-	UpdatedAt        time.Time                        `json:"updated_at"`
-	LatestVersionNo  int                              `json:"latest_version_no"`
+	ID                uint                             `json:"id"`
+	Topic             string                           `json:"topic"`
+	Body              string                           `json:"body"`
+	Instructions      string                           `json:"instructions"`
+	Model             string                           `json:"model"`
+	Status            string                           `json:"status"`
+	Tags              []string                         `json:"tags"`
+	PositiveKeywords  []promptdomain.PromptKeywordItem `json:"positive_keywords"`
+	NegativeKeywords  []promptdomain.PromptKeywordItem `json:"negative_keywords"`
+	IsFavorited       bool                             `json:"is_favorited"`
+	PublishedAt       *time.Time                       `json:"published_at,omitempty"`
+	CreatedAt         time.Time                        `json:"created_at"`
+	UpdatedAt         time.Time                        `json:"updated_at"`
+	LatestVersionNo   int                              `json:"latest_version_no"`
+	GenerationProfile promptdomain.GenerationProfile   `json:"generation_profile"`
 }
 
 type promptExportEnvelope struct {
@@ -496,20 +617,21 @@ func (s *Service) ExportPrompts(ctx context.Context, input ExportPromptsInput) (
 		positive := keywordItemsToDomain(decodePromptKeywords(record.PositiveKeywords))
 		negative := keywordItemsToDomain(decodePromptKeywords(record.NegativeKeywords))
 		exportItems = append(exportItems, promptExportRecord{
-			ID:               record.ID,
-			Topic:            record.Topic,
-			Body:             record.Body,
-			Instructions:     record.Instructions,
-			Model:            record.Model,
-			Status:           record.Status,
-			Tags:             decodeTags(record.Tags),
-			PositiveKeywords: positive,
-			NegativeKeywords: negative,
-			IsFavorited:      record.IsFavorited,
-			PublishedAt:      record.PublishedAt,
-			CreatedAt:        record.CreatedAt,
-			UpdatedAt:        record.UpdatedAt,
-			LatestVersionNo:  record.LatestVersionNo,
+			ID:                record.ID,
+			Topic:             record.Topic,
+			Body:              record.Body,
+			Instructions:      record.Instructions,
+			Model:             record.Model,
+			Status:            record.Status,
+			Tags:              decodeTags(record.Tags),
+			PositiveKeywords:  positive,
+			NegativeKeywords:  negative,
+			IsFavorited:       record.IsFavorited,
+			PublishedAt:       record.PublishedAt,
+			CreatedAt:         record.CreatedAt,
+			UpdatedAt:         record.UpdatedAt,
+			LatestVersionNo:   record.LatestVersionNo,
+			GenerationProfile: s.decodeGenerationProfile(record.GenerationProfile),
 		})
 	}
 
@@ -636,6 +758,8 @@ func (s *Service) importPromptRecord(ctx context.Context, userID uint, record pr
 		PositiveKeywords: positiveItems,
 		NegativeKeywords: negativeItems,
 	}
+	profile := record.GenerationProfile
+	input.GenerationProfile = &profile
 
 	result, err := s.persistPrompt(ctx, input, status, "")
 	if err != nil {
@@ -712,13 +836,14 @@ func (s *Service) syncImportedMetadata(ctx context.Context, promptID uint, recor
 		return fmt.Errorf("encode negative keywords for version: %w", err)
 	}
 	version := promptdomain.PromptVersion{
-		PromptID:         promptID,
-		VersionNo:        versionNo,
-		Body:             record.Body,
-		Instructions:     record.Instructions,
-		PositiveKeywords: string(positiveBytes),
-		NegativeKeywords: string(negativeBytes),
-		Model:            record.Model,
+		PromptID:          promptID,
+		VersionNo:         versionNo,
+		Body:              record.Body,
+		Instructions:      record.Instructions,
+		PositiveKeywords:  string(positiveBytes),
+		NegativeKeywords:  string(negativeBytes),
+		Model:             record.Model,
+		GenerationProfile: s.encodeGenerationProfile(record.GenerationProfile),
 	}
 	if !record.UpdatedAt.IsZero() {
 		version.CreatedAt = record.UpdatedAt
@@ -742,6 +867,7 @@ func (s *Service) GetPrompt(ctx context.Context, input GetPromptInput) (PromptDe
 		}
 		return PromptDetail{}, err
 	}
+	profile := s.decodeGenerationProfile(entity.GenerationProfile)
 	detail := PromptDetail{
 		ID:               entity.ID,
 		Topic:            entity.Topic,
@@ -758,6 +884,7 @@ func (s *Service) GetPrompt(ctx context.Context, input GetPromptInput) (PromptDe
 		CreatedAt:        entity.CreatedAt,
 		UpdatedAt:        entity.UpdatedAt,
 		PublishedAt:      entity.PublishedAt,
+		Generation:       profile,
 	}
 
 	if s.workspace != nil {
@@ -772,9 +899,16 @@ func (s *Service) GetPrompt(ctx context.Context, input GetPromptInput) (PromptDe
 			Status:    entity.Status,
 			UpdatedAt: time.Now(),
 		}
+		attrs := make(map[string]string)
 		if tags := detail.Tags; len(tags) > 0 {
-			encoded := encodeTagsAttribute(tags)
-			snapshot.Attributes = map[string]string{workspaceAttrTags: encoded}
+			attrs[workspaceAttrTags] = encodeTagsAttribute(tags)
+		}
+		if strings.TrimSpace(detail.Instructions) != "" {
+			attrs[workspaceAttrInstructions] = detail.Instructions
+		}
+		attrs[workspaceAttrGenerationProfile] = s.encodeGenerationProfile(profile)
+		if len(attrs) > 0 {
+			snapshot.Attributes = attrs
 		}
 		storeCtx, cancel := s.workspaceContext(ctx)
 		token, workspaceErr := s.workspace.CreateOrReplace(storeCtx, input.UserID, snapshot)
@@ -982,6 +1116,7 @@ type PromptSummary struct {
 	IsFavorited      bool
 	IsLiked          bool
 	LikeCount        uint
+	Generation       promptdomain.GenerationProfile
 	UpdatedAt        time.Time
 	PublishedAt      *time.Time
 }
@@ -996,9 +1131,10 @@ type ListPromptsOutput struct {
 
 // PromptVersionSummary 返回版本列表中的概要信息。
 type PromptVersionSummary struct {
-	VersionNo int
-	Model     string
-	CreatedAt time.Time
+	VersionNo  int
+	Model      string
+	Generation promptdomain.GenerationProfile
+	CreatedAt  time.Time
 }
 
 // ListVersionsOutput 携带 Prompt 历史版本的集合。
@@ -1037,6 +1173,7 @@ type PromptDetail struct {
 	CreatedAt        time.Time
 	UpdatedAt        time.Time
 	PublishedAt      *time.Time
+	Generation       promptdomain.GenerationProfile
 }
 
 // PromptVersionDetail 包含历史版本的完整内容。
@@ -1047,6 +1184,7 @@ type PromptVersionDetail struct {
 	Model            string
 	PositiveKeywords []KeywordItem
 	NegativeKeywords []KeywordItem
+	Generation       promptdomain.GenerationProfile
 	CreatedAt        time.Time
 }
 
@@ -1158,10 +1296,9 @@ type GenerateInput struct {
 	Instructions      string
 	Tone              string
 	Language          string
-	Temperature       float64
-	MaxTokens         int
 	PromptID          uint
 	IncludeKeywordRef bool
+	GenerationProfile *promptdomain.GenerationProfile
 }
 
 // GenerateOutput 返回生成的 Prompt、模型信息与耗时。
@@ -1272,6 +1409,7 @@ type SaveInput struct {
 	Publish                  bool
 	WorkspaceToken           string
 	EnforcePublishValidation bool
+	GenerationProfile        *promptdomain.GenerationProfile
 }
 
 // SaveOutput 返回保存后的 Prompt 元数据。
@@ -1699,7 +1837,8 @@ func (s *Service) GeneratePrompt(ctx context.Context, input GenerateInput) (Gene
 	if err := enforceKeywordLimit(s.keywordLimit, input.PositiveKeywords, input.NegativeKeywords); err != nil {
 		return GenerateOutput{}, err
 	}
-	req := buildGenerateRequest(input)
+	profile := s.normalizeGenerationProfile(input.GenerationProfile)
+	req := buildGenerateRequest(input, profile)
 	req.Model = modelKey
 	start := time.Now()
 	modelCtx, cancel := s.modelInvocationContext(ctx)
@@ -1720,10 +1859,15 @@ func (s *Service) GeneratePrompt(ctx context.Context, input GenerateInput) (Gene
 		// 写回最新草稿并刷新 TTL，防止用户在生成后继续调整时工作区被 Redis 过期策略清理。
 		storeCtx, cancelStore := s.workspaceContext(ctx)
 		defer cancelStore()
-		if err := s.workspace.UpdateDraftBody(storeCtx, input.UserID, strings.TrimSpace(input.WorkspaceToken), promptText); err != nil {
+		token := strings.TrimSpace(input.WorkspaceToken)
+		if err := s.workspace.UpdateDraftBody(storeCtx, input.UserID, token, promptText); err != nil {
 			s.logger.Warnw("update workspace draft failed", "user_id", input.UserID, "token", input.WorkspaceToken, "error", err)
-		} else if err := s.workspace.Touch(storeCtx, input.UserID, strings.TrimSpace(input.WorkspaceToken)); err != nil {
+		} else if err := s.workspace.Touch(storeCtx, input.UserID, token); err != nil {
 			s.logger.Warnw("touch workspace failed", "user_id", input.UserID, "token", input.WorkspaceToken, "error", err)
+		} else if err := s.workspace.SetAttributes(storeCtx, input.UserID, token, map[string]string{
+			workspaceAttrGenerationProfile: s.encodeGenerationProfile(profile),
+		}); err != nil {
+			s.logger.Warnw("set workspace generation profile failed", "user_id", input.UserID, "token", input.WorkspaceToken, "error", err)
 		}
 	}
 	return GenerateOutput{
@@ -1789,6 +1933,12 @@ func (s *Service) Save(ctx context.Context, input SaveInput) (SaveOutput, error)
 					input.Instructions = instr
 				}
 			}
+			if input.GenerationProfile == nil {
+				if raw := strings.TrimSpace(snapshot.Attributes[workspaceAttrGenerationProfile]); raw != "" {
+					profile := s.decodeGenerationProfile(raw)
+					input.GenerationProfile = &profile
+				}
+			}
 			if snapshot.PromptID != 0 && input.PromptID == 0 {
 				input.PromptID = snapshot.PromptID
 			}
@@ -1815,6 +1965,8 @@ func (s *Service) Save(ctx context.Context, input SaveInput) (SaveOutput, error)
 	}
 	input.Tags = cleanedTags
 	input.Instructions = strings.TrimSpace(input.Instructions)
+	normalizedProfile := s.normalizeGenerationProfile(input.GenerationProfile)
+	input.GenerationProfile = &normalizedProfile
 
 	action := promptdomain.TaskActionCreate
 	if input.PromptID != 0 {
@@ -1829,8 +1981,9 @@ func (s *Service) Save(ctx context.Context, input SaveInput) (SaveOutput, error)
 	if workspaceEnabled {
 		metaCtx, cancel := s.workspaceContext(ctx)
 		attrs := map[string]string{
-			workspaceAttrTags:         encodeTagsAttribute(input.Tags),
-			workspaceAttrInstructions: input.Instructions,
+			workspaceAttrTags:              encodeTagsAttribute(input.Tags),
+			workspaceAttrInstructions:      input.Instructions,
+			workspaceAttrGenerationProfile: s.encodeGenerationProfile(normalizedProfile),
 		}
 		if err := s.workspace.SetAttributes(metaCtx, input.UserID, workspaceToken, attrs); err != nil {
 			s.logger.Warnw("set workspace tags failed", "user_id", input.UserID, "token", workspaceToken, "error", err)
@@ -2060,9 +2213,19 @@ func (s *Service) processPersistenceTask(ctx context.Context, task promptdomain.
 		Publish:                  task.Publish,
 		EnforcePublishValidation: true,
 	}
+	if input.GenerationProfile == nil && strings.TrimSpace(task.GenerationProfile) != "" {
+		profile := s.decodeGenerationProfile(task.GenerationProfile)
+		input.GenerationProfile = &profile
+	}
 	if len(input.Tags) == 0 {
 		if tags := extractTagsFromAttributes(snapshot.Attributes); len(tags) > 0 {
 			input.Tags = s.truncateTags(tags)
+		}
+	}
+	if input.GenerationProfile == nil {
+		if raw := strings.TrimSpace(snapshot.Attributes[workspaceAttrGenerationProfile]); raw != "" {
+			profile := s.decodeGenerationProfile(raw)
+			input.GenerationProfile = &profile
 		}
 	}
 	if input.PromptID == 0 && snapshot.PromptID != 0 {
@@ -2085,14 +2248,17 @@ func (s *Service) processPersistenceTask(ctx context.Context, task promptdomain.
 		return fmt.Errorf("tag limit: %w", err)
 	}
 	input.Tags = cleanedTags
+	normalizedProfile := s.normalizeGenerationProfile(input.GenerationProfile)
+	input.GenerationProfile = &normalizedProfile
 	result, err := s.persistPrompt(ctx, input, status, action)
 	if err != nil {
 		return fmt.Errorf("persist prompt: %w", err)
 	}
 	metaCtx, cancelMeta := s.workspaceContext(ctx)
 	attrs := map[string]string{
-		workspaceAttrTags:         encodeTagsAttribute(input.Tags),
-		workspaceAttrInstructions: input.Instructions,
+		workspaceAttrTags:              encodeTagsAttribute(input.Tags),
+		workspaceAttrInstructions:      input.Instructions,
+		workspaceAttrGenerationProfile: s.encodeGenerationProfile(normalizedProfile),
 	}
 	if err := s.workspace.SetAttributes(metaCtx, task.UserID, task.WorkspaceToken, attrs); err != nil {
 		s.logger.Warnw("set workspace tags failed", "task_id", task.TaskID, "token", task.WorkspaceToken, "error", err)
@@ -2120,6 +2286,8 @@ func (s *Service) persistPrompt(ctx context.Context, input SaveInput, status, ac
 		return SaveOutput{}, err
 	}
 	input.Tags = cleanedTags
+	profile := s.normalizeGenerationProfile(input.GenerationProfile)
+	input.GenerationProfile = &profile
 	// 只有当这次保存的最终状态是 published，并且调用方显式要求执行发布校验（EnforcePublishValidation == true）时，才会去跑
 	// validatePublishInput。validatePublishInput 会检查发布必须具备的字段，例如主题、正文、补充要求、模型、正/负向关键词、标签等。一旦缺少，就返回错误，
 	// 阻止这次发布
@@ -2138,14 +2306,14 @@ func (s *Service) persistPrompt(ctx context.Context, input SaveInput, status, ac
 	}
 	switch action {
 	case promptdomain.TaskActionUpdate:
-		return s.updatePromptRecord(ctx, input, status)
+		return s.updatePromptRecord(ctx, input, profile, status)
 	default:
-		return s.createPromptRecord(ctx, input, status)
+		return s.createPromptRecord(ctx, input, profile, status)
 	}
 }
 
 // createPromptRecord 写入新的 Prompt，并在必要时记录首个版本。
-func (s *Service) createPromptRecord(ctx context.Context, input SaveInput, status string) (SaveOutput, error) {
+func (s *Service) createPromptRecord(ctx context.Context, input SaveInput, profile promptdomain.GenerationProfile, status string) (SaveOutput, error) {
 	encodedPos, err := s.marshalKeywordItems(input.PositiveKeywords)
 	if err != nil {
 		return SaveOutput{}, err
@@ -2160,16 +2328,17 @@ func (s *Service) createPromptRecord(ctx context.Context, input SaveInput, statu
 	}
 	topic := normalizeMixedLanguageSpacing(input.Topic)
 	entity := &promptdomain.Prompt{
-		UserID:           input.UserID,
-		Topic:            topic,
-		Body:             input.Body,
-		Instructions:     input.Instructions,
-		PositiveKeywords: string(encodedPos),
-		NegativeKeywords: string(encodedNeg),
-		Model:            strings.TrimSpace(input.Model),
-		Status:           status,
-		Tags:             string(encodedTags),
-		LatestVersionNo:  0,
+		UserID:            input.UserID,
+		Topic:             topic,
+		Body:              input.Body,
+		Instructions:      input.Instructions,
+		PositiveKeywords:  string(encodedPos),
+		NegativeKeywords:  string(encodedNeg),
+		Model:             strings.TrimSpace(input.Model),
+		Status:            status,
+		Tags:              string(encodedTags),
+		LatestVersionNo:   0,
+		GenerationProfile: s.encodeGenerationProfile(profile),
 	}
 	if status == promptdomain.PromptStatusPublished {
 		now := time.Now()
@@ -2203,7 +2372,7 @@ func (s *Service) createPromptRecord(ctx context.Context, input SaveInput, statu
 }
 
 // updatePromptRecord 更新已有 Prompt，并在发布时生成新的版本快照。
-func (s *Service) updatePromptRecord(ctx context.Context, input SaveInput, status string) (SaveOutput, error) {
+func (s *Service) updatePromptRecord(ctx context.Context, input SaveInput, profile promptdomain.GenerationProfile, status string) (SaveOutput, error) {
 	sanitizedTopic := normalizeMixedLanguageSpacing(strings.TrimSpace(input.Topic))
 	entity, err := s.prompts.FindByID(ctx, input.UserID, input.PromptID)
 	if err != nil {
@@ -2237,6 +2406,7 @@ func (s *Service) updatePromptRecord(ctx context.Context, input SaveInput, statu
 	entity.Model = strings.TrimSpace(input.Model)
 	entity.Status = status
 	entity.Tags = string(encodedTags)
+	entity.GenerationProfile = s.encodeGenerationProfile(profile)
 	if status == promptdomain.PromptStatusPublished {
 		currentVersion := entity.LatestVersionNo
 		if entity.ID != 0 {
@@ -2339,13 +2509,14 @@ func (s *Service) validatePublishInput(input SaveInput) error {
 // recordPromptVersion 写入 Prompt 的历史版本，便于后续回滚。
 func (s *Service) recordPromptVersion(ctx context.Context, prompt *promptdomain.Prompt) error {
 	version := &promptdomain.PromptVersion{
-		PromptID:         prompt.ID,
-		VersionNo:        prompt.LatestVersionNo,
-		Body:             prompt.Body,
-		Instructions:     prompt.Instructions,
-		PositiveKeywords: prompt.PositiveKeywords,
-		NegativeKeywords: prompt.NegativeKeywords,
-		Model:            prompt.Model,
+		PromptID:          prompt.ID,
+		VersionNo:         prompt.LatestVersionNo,
+		Body:              prompt.Body,
+		Instructions:      prompt.Instructions,
+		PositiveKeywords:  prompt.PositiveKeywords,
+		NegativeKeywords:  prompt.NegativeKeywords,
+		Model:             prompt.Model,
+		GenerationProfile: prompt.GenerationProfile,
 	}
 	return s.prompts.CreateVersion(ctx, version)
 }
@@ -2805,7 +2976,7 @@ func buildAugmentRequest(input AugmentInput) modeldomain.ChatCompletionRequest {
 }
 
 // buildGenerateRequest 依据主题与关键词生成最终 Prompt 的模型请求体。
-func buildGenerateRequest(input GenerateInput) modeldomain.ChatCompletionRequest {
+func buildGenerateRequest(input GenerateInput, profile promptdomain.GenerationProfile) modeldomain.ChatCompletionRequest {
 	lang := languageOrDefault(input.Language)
 	system := "你是一名 Prompt 工程师，需要根据给定主题与关键词生成高质量的提示词，帮助大模型完成任务。"
 	builder := &strings.Builder{}
@@ -2831,11 +3002,15 @@ func buildGenerateRequest(input GenerateInput) modeldomain.ChatCompletionRequest
 	if input.IncludeKeywordRef {
 		fmt.Fprintf(builder, "请在 Prompt 中自然融入这些关键词，而非简单罗列。")
 	}
+	if profile.StepwiseReasoning {
+		fmt.Fprintf(builder, "\n请先用简洁的步骤梳理你的思考过程，再给出最终优化后的 Prompt。最终输出仍需仅包含完整的 Prompt 正文。")
+	}
 	return modeldomain.ChatCompletionRequest{
 		Model:       strings.TrimSpace(input.ModelKey),
 		Messages:    []modeldomain.ChatMessage{{Role: "system", Content: system}, {Role: "user", Content: builder.String()}},
-		Temperature: input.Temperature,
-		MaxTokens:   input.MaxTokens,
+		Temperature: profile.Temperature,
+		MaxTokens:   profile.MaxOutputTokens,
+		TopP:        profile.TopP,
 	}
 }
 
@@ -2927,6 +3102,77 @@ func (s *Service) truncateTags(tags []string) []string {
 	return cleaned
 }
 
+type generationProfileRaw struct {
+	StepwiseReasoning *bool    `json:"stepwise_reasoning"`
+	Temperature       *float64 `json:"temperature"`
+	TopP              *float64 `json:"top_p"`
+	MaxOutputTokens   *int     `json:"max_output_tokens"`
+}
+
+// defaultGenerationProfile 返回应用级默认的生成配置副本。
+func (s *Service) defaultGenerationProfile() promptdomain.GenerationProfile {
+	return promptdomain.GenerationProfile{
+		StepwiseReasoning: s.generationDefault.StepwiseReasoning,
+		Temperature:       s.generationDefault.Temperature,
+		TopP:              s.generationDefault.TopP,
+		MaxOutputTokens:   s.generationDefault.MaxOutputTokens,
+	}
+}
+
+// normalizeGenerationProfile 根据服务配置对生成参数进行兜底和校验。
+func (s *Service) normalizeGenerationProfile(profile *promptdomain.GenerationProfile) promptdomain.GenerationProfile {
+	base := s.defaultGenerationProfile()
+	if profile == nil {
+		return base
+	}
+	base.StepwiseReasoning = profile.StepwiseReasoning
+	if s.generationBounds.Temperature.Min == 0 || profile.Temperature != 0 {
+		base.Temperature = clampFloat(profile.Temperature, s.generationBounds.Temperature.Min, s.generationBounds.Temperature.Max)
+	}
+	if s.generationBounds.TopP.Min == 0 || profile.TopP != 0 {
+		base.TopP = clampFloat(profile.TopP, s.generationBounds.TopP.Min, s.generationBounds.TopP.Max)
+	}
+	if profile.MaxOutputTokens != 0 {
+		base.MaxOutputTokens = clampInt(profile.MaxOutputTokens, s.generationBounds.MaxTokens.Min, s.generationBounds.MaxTokens.Max)
+	}
+	return base
+}
+
+// decodeGenerationProfile 将数据库中的生成配置 JSON 解析为结构体，并应用默认值。
+func (s *Service) decodeGenerationProfile(raw string) promptdomain.GenerationProfile {
+	base := s.defaultGenerationProfile()
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return base
+	}
+	var payload generationProfileRaw
+	if err := json.Unmarshal([]byte(trimmed), &payload); err != nil {
+		return base
+	}
+	if payload.StepwiseReasoning != nil {
+		base.StepwiseReasoning = *payload.StepwiseReasoning
+	}
+	if payload.Temperature != nil {
+		base.Temperature = clampFloat(*payload.Temperature, s.generationBounds.Temperature.Min, s.generationBounds.Temperature.Max)
+	}
+	if payload.TopP != nil {
+		base.TopP = clampFloat(*payload.TopP, s.generationBounds.TopP.Min, s.generationBounds.TopP.Max)
+	}
+	if payload.MaxOutputTokens != nil {
+		base.MaxOutputTokens = clampInt(*payload.MaxOutputTokens, s.generationBounds.MaxTokens.Min, s.generationBounds.MaxTokens.Max)
+	}
+	return base
+}
+
+// encodeGenerationProfile 将生成配置编码为 JSON 字符串，便于持久化或缓存。
+func (s *Service) encodeGenerationProfile(profile promptdomain.GenerationProfile) string {
+	raw, err := json.Marshal(profile)
+	if err != nil {
+		return "{}"
+	}
+	return string(raw)
+}
+
 // extractTagsFromAttributes 从 Redis workspace attributes 中解析标签字符串并转换为切片。
 func extractTagsFromAttributes(attrs map[string]string) []string {
 	if len(attrs) == 0 {
@@ -2982,6 +3228,37 @@ func decodeTags(raw string) []string {
 		}
 	}
 	return cleaned
+}
+
+// clampFloat 将浮点值限制在 [min, max] 区间内，避免模型参数越界。
+func clampFloat(value, min, max float64) float64 {
+	if max < min {
+		return min
+	}
+	if math.IsNaN(value) || math.IsInf(value, 0) {
+		return min
+	}
+	if value < min {
+		return min
+	}
+	if value > max {
+		return max
+	}
+	return value
+}
+
+// clampInt 将整型值限制在 [min, max] 区间，确保请求参数符合模型限制。
+func clampInt(value, min, max int) int {
+	if max < min {
+		return min
+	}
+	if value < min {
+		return min
+	}
+	if value > max {
+		return max
+	}
+	return value
 }
 
 // normaliseExportDir 规范化导出目录路径，处理 ~ 前缀与相对路径。

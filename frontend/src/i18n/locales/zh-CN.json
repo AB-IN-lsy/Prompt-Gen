@@ -413,6 +413,25 @@
     "modelHint": "解析需求、补词与生成都会使用该模型。",
     "modelEmptyHint": "暂无可用模型，请先在设置页配置。",
     "modelManageLink": "配置模型",
+    "generationSettingsButton": "生成配置",
+    "settingsDialog": {
+      "title": "生成配置",
+      "description": "调节采样参数，控制输出的稳定性与创意度。",
+      "confirm": "应用",
+      "cancel": "取消",
+      "stepwiseLabel": "启用逐步推理",
+      "stepwiseHint": "开启后将引导模型先梳理思考步骤，再输出最终 Prompt。",
+      "temperatureLabel": "采样温度",
+      "temperatureRange": "范围：{{min}} - {{max}}",
+      "temperatureHint": "数值越高越具创造性，越低越稳定。",
+      "topPLabel": "Top P",
+      "topPRange": "范围：{{min}} - {{max}}",
+      "topPHint": "控制采样概率分布，拉近或放大输出差异。",
+      "maxOutputLabel": "最大输出 Tokens",
+      "maxOutputRange": "范围：{{min}} - {{max}}",
+      "maxOutputHint": "限制生成长度，防止过短或超出模型上限。",
+      "applySuccess": "生成配置已更新"
+    },
     "descriptionEyebrow": "需求解析",
     "descriptionTitle": "告诉我们你想要什么",
     "descriptionPlaceholder": "例如：生成一份聚焦 React Hooks 的技术面试 Prompt",
@@ -520,7 +539,18 @@
     "publish": "发布",
     "weight": "权重 {{value}}",
     "modelFallback": "模型不可用，已自动切换到 {{model}}。",
-    "modelDisabled": "该模型已禁用或不可用。"
+    "modelDisabled": "该模型已禁用或不可用。",
+    "generationProfileCard": {
+      "eyebrow": "生成配置",
+      "title": "当前参数",
+      "subtitle": "展示最近一次生成时使用的高级参数。",
+      "stepwiseOn": "逐步推理：已开启",
+      "stepwiseOff": "逐步推理：已关闭",
+      "temperature": "采样温度：{{value}}",
+      "topP": "Top P：{{value}}",
+      "maxTokens": "最大输出 Tokens：{{value}}",
+      "close": "关闭生成配置"
+    }
   },
   "contextMenu": {
     "undo": "撤销",
@@ -820,6 +850,7 @@
     "actions": {
       "back": "返回上一页",
       "edit": "继续编辑",
+      "viewGenerationProfile": "查看生成配置",
       "copyBody": "复制正文",
       "copyMarkdown": "复制 Markdown",
       "submitPublic": "投稿到公共库"

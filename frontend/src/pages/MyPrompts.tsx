@@ -26,6 +26,9 @@ import {
   KEYWORD_ROW_LIMIT,
   DEFAULT_KEYWORD_WEIGHT,
   MY_PROMPTS_PAGE_SIZE,
+  PROMPT_GENERATE_TEMPERATURE_DEFAULT,
+  PROMPT_GENERATE_TOP_P_DEFAULT,
+  PROMPT_GENERATE_MAX_OUTPUT_DEFAULT,
 } from "../config/prompt";
 import {
   deletePrompt,
@@ -93,6 +96,9 @@ export default function MyPromptsPage(): JSX.Element {
   const setCollections = usePromptWorkbench((state) => state.setCollections);
   const setTags = usePromptWorkbench((state) => state.setTags);
   const setInstructions = usePromptWorkbench((state) => state.setInstructions);
+  const overwriteGenerationProfile = usePromptWorkbench(
+    (state) => state.overwriteGenerationProfile,
+  );
 
   const [status, setStatus] = useState<StatusFilter>("all");
   const [page, setPage] = useState(1);
@@ -334,6 +340,23 @@ export default function MyPromptsPage(): JSX.Element {
     const negative = mapKeywords(detail.negative_keywords, "negative");
     setCollections(positive, negative);
     setTags(detail.tags ?? []);
+    if (detail.generation_profile) {
+      overwriteGenerationProfile({
+        stepwiseReasoning: Boolean(detail.generation_profile.stepwise_reasoning),
+        temperature:
+          typeof detail.generation_profile.temperature === "number"
+            ? detail.generation_profile.temperature
+            : PROMPT_GENERATE_TEMPERATURE_DEFAULT,
+        topP:
+          typeof detail.generation_profile.top_p === "number"
+            ? detail.generation_profile.top_p
+            : PROMPT_GENERATE_TOP_P_DEFAULT,
+        maxOutputTokens:
+          typeof detail.generation_profile.max_output_tokens === "number"
+            ? detail.generation_profile.max_output_tokens
+            : PROMPT_GENERATE_MAX_OUTPUT_DEFAULT,
+      });
+    }
   }
 
   function mapKeywords(

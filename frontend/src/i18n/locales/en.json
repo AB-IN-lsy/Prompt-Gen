@@ -413,6 +413,25 @@
     "modelHint": "The selected model will be used to interpret, augment and generate prompts.",
     "modelEmptyHint": "No models available yet. Configure them in settings.",
     "modelManageLink": "Manage models",
+    "generationSettingsButton": "Generation settings",
+    "settingsDialog": {
+      "title": "Generation settings",
+      "description": "Tune sampling parameters to balance creativity and stability.",
+      "confirm": "Apply",
+      "cancel": "Cancel",
+      "stepwiseLabel": "Enable stepwise reasoning",
+      "stepwiseHint": "When enabled, the model will outline its reasoning steps before producing the final prompt.",
+      "temperatureLabel": "Sampling temperature",
+      "temperatureRange": "Range: {{min}} - {{max}}",
+      "temperatureHint": "Higher values produce more creative outputs, lower values stay closer to the input.",
+      "topPLabel": "Top P",
+      "topPRange": "Range: {{min}} - {{max}}",
+      "topPHint": "Control the cumulative probability mass to widen or narrow the output distribution.",
+      "maxOutputLabel": "Max output tokens",
+      "maxOutputRange": "Range: {{min}} - {{max}}",
+      "maxOutputHint": "Limit the response length to avoid overly short or truncated outputs.",
+      "applySuccess": "Generation settings updated."
+    },
     "descriptionEyebrow": "Natural language",
     "descriptionTitle": "Describe your need",
     "descriptionPlaceholder": "e.g. generate an interview prompt focusing on React Hooks",
@@ -520,7 +539,18 @@
     "publish": "Publish",
     "weight": "Weight {{value}}",
     "modelFallback": "Selected model is unavailable. Switched to {{model}}.",
-    "modelDisabled": "This model is disabled and can’t be selected."
+    "modelDisabled": "This model is disabled and can’t be selected.",
+    "generationProfileCard": {
+      "eyebrow": "Generation",
+      "title": "Active parameters",
+      "subtitle": "These are the advanced settings used for the most recent generation.",
+      "stepwiseOn": "Stepwise reasoning: enabled",
+      "stepwiseOff": "Stepwise reasoning: disabled",
+      "temperature": "Temperature: {{value}}",
+      "topP": "Top P: {{value}}",
+      "maxTokens": "Max output tokens: {{value}}",
+      "close": "Close generation settings"
+    }
   },
   "contextMenu": {
     "undo": "Undo",
@@ -820,6 +850,7 @@
     "actions": {
       "back": "Go back",
       "edit": "Continue editing",
+      "viewGenerationProfile": "View generation settings",
       "copyBody": "Copy body",
       "copyMarkdown": "Copy Markdown",
       "submitPublic": "Submit to library"

@@ -31,19 +31,20 @@ type WorkspaceSnapshot struct {
 
 // PersistenceTask 描述需要异步落库的任务。
 type PersistenceTask struct {
-	TaskID         string    `json:"task_id"`             // 队列任务 ID
-	UserID         uint      `json:"user_id"`             // 用户 ID
-	PromptID       uint      `json:"prompt_id,omitempty"` // 目标 Prompt（为空表示创建）
-	WorkspaceToken string    `json:"workspace_token"`     // 工作区 token
-	Publish        bool      `json:"publish"`             // 是否发布
-	Topic          string    `json:"topic"`               // 主题
-	Body           string    `json:"body"`                // 正文
-	Instructions   string    `json:"instructions"`        // 补充要求
-	Model          string    `json:"model"`               // 模型键
-	Status         string    `json:"status"`              // 目标状态
-	Tags           []string  `json:"tags,omitempty"`      // 标签
-	RequestedAt    time.Time `json:"requested_at"`        // 入队时间
-	Action         string    `json:"action,omitempty"`    // 动作类型（create/update）
+	TaskID            string    `json:"task_id"`                      // 队列任务 ID
+	UserID            uint      `json:"user_id"`                      // 用户 ID
+	PromptID          uint      `json:"prompt_id,omitempty"`          // 目标 Prompt（为空表示创建）
+	WorkspaceToken    string    `json:"workspace_token"`              // 工作区 token
+	Publish           bool      `json:"publish"`                      // 是否发布
+	Topic             string    `json:"topic"`                        // 主题
+	Body              string    `json:"body"`                         // 正文
+	Instructions      string    `json:"instructions"`                 // 补充要求
+	Model             string    `json:"model"`                        // 模型键
+	Status            string    `json:"status"`                       // 目标状态
+	Tags              []string  `json:"tags,omitempty"`               // 标签
+	RequestedAt       time.Time `json:"requested_at"`                 // 入队时间
+	Action            string    `json:"action,omitempty"`             // 动作类型（create/update）
+	GenerationProfile string    `json:"generation_profile,omitempty"` // 生成配置 JSON
 }
 
 const (
