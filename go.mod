@@ -15,11 +15,13 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/joho/godotenv v1.5.1
 	github.com/mojocn/base64Captcha v1.3.5
+	github.com/prometheus/client_golang v1.19.1
 	github.com/redis/go-redis/v9 v9.5.3
 	github.com/volcengine/volcengine-go-sdk v1.1.38
 	go.uber.org/zap v1.27.0
 	golang.org/x/crypto v0.42.0
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1
+	gorm.io/datatypes v1.1.1
 	gorm.io/driver/mysql v1.6.0
 	gorm.io/driver/sqlite v1.6.0
 	gorm.io/gorm v1.31.0
@@ -34,13 +36,16 @@ require (
 	github.com/alibabacloud-go/tea-utils/v2 v2.0.4 // indirect
 	github.com/alibabacloud-go/tea-xml v1.1.2 // indirect
 	github.com/aliyun/credentials-go v1.1.2 // indirect
+	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/clbanning/mxj/v2 v2.5.5 // indirect
 	github.com/jmespath/go-jmespath v0.4.0 // indirect
+	github.com/prometheus/client_model v0.5.0 // indirect
+	github.com/prometheus/common v0.48.0 // indirect
+	github.com/prometheus/procfs v0.12.0 // indirect
 	github.com/tjfoc/gmsm v1.3.2 // indirect
 	github.com/volcengine/volc-sdk-golang v1.0.23 // indirect
 	gopkg.in/ini.v1 v1.56.0 // indirect
-	gopkg.in/yaml.v2 v2.2.8 // indirect
-	gorm.io/datatypes v1.1.1 // indirect
+	gopkg.in/yaml.v2 v2.4.0 // indirect
 )
 
 require (

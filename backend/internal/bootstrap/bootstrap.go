@@ -21,6 +21,7 @@ import (
 	"electron-go-app/backend/internal/handler"
 	"electron-go-app/backend/internal/infra/captcha"
 	"electron-go-app/backend/internal/infra/email"
+	"electron-go-app/backend/internal/infra/metrics"
 	promptinfra "electron-go-app/backend/internal/infra/prompt"
 	"electron-go-app/backend/internal/infra/ratelimit"
 	"electron-go-app/backend/internal/infra/token"
@@ -60,6 +61,8 @@ type Application struct {
 // BuildApplication 将底层资源 (数据库、Redis 等) 与业务配置装配成完整的 HTTP 应用：
 // 1. 初始化仓储与领域服务；2. 注入限流、邮件、验证码等外围依赖；3. 构造路由与中间件，返回可直接启动的应用实体。
 func BuildApplication(ctx context.Context, logger *zap.SugaredLogger, resources *app.Resources, cfg RuntimeConfig) (*Application, error) {
+	metrics.MustRegister()
+
 	// 创建核心仓储：用户信息与邮箱验证令牌都依赖 MySQL/Gorm.
 	userRepo := repository.NewUserRepository(resources.DBConn())
 	verificationRepo := repository.NewEmailVerificationRepository(resources.DBConn())

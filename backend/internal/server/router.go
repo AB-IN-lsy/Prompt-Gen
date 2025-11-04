@@ -11,6 +11,7 @@ import (
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 type RouterOptions struct {
@@ -81,6 +82,8 @@ func NewRouter(opts RouterOptions) *gin.Engine {
 	} else {
 		r.Static("/static", "./public")
 	}
+
+	r.GET("/metrics", gin.WrapH(promhttp.Handler()))
 
 	api := r.Group("/api")
 	{

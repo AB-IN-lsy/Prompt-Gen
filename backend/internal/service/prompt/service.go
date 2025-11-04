@@ -14,6 +14,7 @@ import (
 	"unicode"
 
 	promptdomain "electron-go-app/backend/internal/domain/prompt"
+	"electron-go-app/backend/internal/infra/metrics"
 	modeldomain "electron-go-app/backend/internal/infra/model/deepseek"
 	"electron-go-app/backend/internal/infra/ratelimit"
 	"electron-go-app/backend/internal/repository"
@@ -1819,65 +1820,98 @@ func (s *Service) SyncWorkspaceKeywords(ctx context.Context, input SyncWorkspace
 }
 
 // GeneratePrompt 调用模型生成 Prompt，并返回正文与耗时。
-func (s *Service) GeneratePrompt(ctx context.Context, input GenerateInput) (GenerateOutput, error) {
+func (s *Service) GeneratePrompt(ctx context.Context, input GenerateInput) (output GenerateOutput, err error) {
+	start := time.Now()
+	defer func() {
+		modelLabel := strings.TrimSpace(input.ModelKey)
+		if trimmed := strings.TrimSpace(output.Model); trimmed != "" {
+			modelLabel = trimmed
+		}
+		metrics.ObservePromptGenerate(classifyGenerateError(err), modelLabel, time.Since(start), output.Usage)
+	}()
+
 	if strings.TrimSpace(input.Topic) == "" {
-		return GenerateOutput{}, errors.New("topic is empty")
+		err = errors.New("topic is empty")
+		return
 	}
 	modelKey := strings.TrimSpace(input.ModelKey)
 	if modelKey == "" {
 		if alias := s.freeTier.defaultAlias(); alias != "" {
 			modelKey = alias
 		} else {
-			return GenerateOutput{}, errors.New("model key is empty")
+			err = errors.New("model key is empty")
+			return
 		}
 	}
 	if len(input.PositiveKeywords) == 0 {
-		return GenerateOutput{}, errors.New("positive keywords required")
+		err = errors.New("positive keywords required")
+		return
 	}
-	if err := enforceKeywordLimit(s.keywordLimit, input.PositiveKeywords, input.NegativeKeywords); err != nil {
-		return GenerateOutput{}, err
+	if err = enforceKeywordLimit(s.keywordLimit, input.PositiveKeywords, input.NegativeKeywords); err != nil {
+		return
 	}
 	profile := s.normalizeGenerationProfile(input.GenerationProfile)
 	req := buildGenerateRequest(input, profile)
 	req.Model = modelKey
-	start := time.Now()
 	modelCtx, cancel := s.modelInvocationContext(ctx)
 	defer cancel()
-	invokeRes, err := s.invokeModelWithFallback(modelCtx, input.UserID, modelKey, req)
-	if err != nil {
-		return GenerateOutput{}, err
+	invokeRes, invokeErr := s.invokeModelWithFallback(modelCtx, input.UserID, modelKey, req)
+	if invokeErr != nil {
+		err = invokeErr
+		return
 	}
 	duration := time.Since(start)
 	promptText := extractPromptText(invokeRes.Response)
 	if promptText == "" {
-		return GenerateOutput{}, errors.New("model returned empty prompt")
+		err = errors.New("model returned empty prompt")
+		return
 	}
-	if err := s.auditContent(ctx, input.UserID, modelKey, promptText, auditStageGenerateOutput); err != nil {
-		return GenerateOutput{}, err
+	if err = s.auditContent(ctx, input.UserID, modelKey, promptText, auditStageGenerateOutput); err != nil {
+		return
 	}
 	if s.workspace != nil && strings.TrimSpace(input.WorkspaceToken) != "" {
 		// 写回最新草稿并刷新 TTL，防止用户在生成后继续调整时工作区被 Redis 过期策略清理。
 		storeCtx, cancelStore := s.workspaceContext(ctx)
 		defer cancelStore()
 		token := strings.TrimSpace(input.WorkspaceToken)
-		if err := s.workspace.UpdateDraftBody(storeCtx, input.UserID, token, promptText); err != nil {
-			s.logger.Warnw("update workspace draft failed", "user_id", input.UserID, "token", input.WorkspaceToken, "error", err)
-		} else if err := s.workspace.Touch(storeCtx, input.UserID, token); err != nil {
-			s.logger.Warnw("touch workspace failed", "user_id", input.UserID, "token", input.WorkspaceToken, "error", err)
-		} else if err := s.workspace.SetAttributes(storeCtx, input.UserID, token, map[string]string{
+		if updateErr := s.workspace.UpdateDraftBody(storeCtx, input.UserID, token, promptText); updateErr != nil {
+			s.logger.Warnw("update workspace draft failed", "user_id", input.UserID, "token", input.WorkspaceToken, "error", updateErr)
+		} else if touchErr := s.workspace.Touch(storeCtx, input.UserID, token); touchErr != nil {
+			s.logger.Warnw("touch workspace failed", "user_id", input.UserID, "token", input.WorkspaceToken, "error", touchErr)
+		} else if attrErr := s.workspace.SetAttributes(storeCtx, input.UserID, token, map[string]string{
 			workspaceAttrGenerationProfile: s.encodeGenerationProfile(profile),
-		}); err != nil {
-			s.logger.Warnw("set workspace generation profile failed", "user_id", input.UserID, "token", input.WorkspaceToken, "error", err)
+		}); attrErr != nil {
+			s.logger.Warnw("set workspace generation profile failed", "user_id", input.UserID, "token", input.WorkspaceToken, "error", attrErr)
 		}
 	}
-	return GenerateOutput{
-		Model:        invokeRes.Response.Model,
+	output = GenerateOutput{
+		Model:        strings.TrimSpace(invokeRes.Response.Model),
 		Prompt:       promptText,
 		Duration:     duration,
 		Usage:        invokeRes.Response.Usage,
 		PositiveUsed: input.PositiveKeywords,
 		NegativeUsed: input.NegativeKeywords,
-	}, nil
+	}
+	return
+}
+
+// classifyGenerateError 将生成接口返回的错误归类为指标标签，方便监控统计。
+func classifyGenerateError(err error) string {
+	if err == nil {
+		return "success"
+	}
+	switch {
+	case errors.Is(err, ErrContentRejected):
+		return "content_rejected"
+	case errors.Is(err, ErrPositiveKeywordLimit), errors.Is(err, ErrNegativeKeywordLimit):
+		return "keyword_limit"
+	case errors.Is(err, ErrModelInvocationFailed):
+		return "model_error"
+	case errors.Is(err, context.DeadlineExceeded):
+		return "timeout"
+	default:
+		return "error"
+	}
 }
 
 // Save 保存或发布 Prompt：
@@ -1885,9 +1919,14 @@ func (s *Service) GeneratePrompt(ctx context.Context, input GenerateInput) (Gene
 //  2. 校验关键词 & 标签数量上限
 //  3. 创建/更新 Prompt 主记录与关键词表
 //  4. 回写工作区元数据（prompt_id/status/tags）保持前端同步
-func (s *Service) Save(ctx context.Context, input SaveInput) (SaveOutput, error) {
+func (s *Service) Save(ctx context.Context, input SaveInput) (output SaveOutput, err error) {
+	defer func() {
+		metrics.RecordPromptSave(classifySaveResult(err, output.Status, input.Publish))
+	}()
+
 	if input.UserID == 0 {
-		return SaveOutput{}, errors.New("user id required")
+		err = errors.New("user id required")
+		return
 	}
 	status := normalizeStatus(input.Status, input.Publish)
 	workspaceToken := strings.TrimSpace(input.WorkspaceToken)
@@ -1896,14 +1935,14 @@ func (s *Service) Save(ctx context.Context, input SaveInput) (SaveOutput, error)
 	var snapshot promptdomain.WorkspaceSnapshot
 	if workspaceEnabled {
 		storeCtx, cancel := s.workspaceContext(ctx)
-		snap, err := s.workspace.Snapshot(storeCtx, input.UserID, workspaceToken)
+		snap, snapErr := s.workspace.Snapshot(storeCtx, input.UserID, workspaceToken)
 		cancel()
-		if err != nil {
-			if errors.Is(err, redis.Nil) {
+		if snapErr != nil {
+			if errors.Is(snapErr, redis.Nil) {
 				s.logger.Warnw("workspace snapshot expired", "user_id", input.UserID, "token", workspaceToken)
 				workspaceEnabled = false
 			} else {
-				s.logger.Warnw("load workspace snapshot failed", "user_id", input.UserID, "token", workspaceToken, "error", err)
+				s.logger.Warnw("load workspace snapshot failed", "user_id", input.UserID, "token", workspaceToken, "error", snapErr)
 				workspaceEnabled = false
 			}
 		} else {
@@ -1950,18 +1989,19 @@ func (s *Service) Save(ctx context.Context, input SaveInput) (SaveOutput, error)
 
 	topicLookup := normalizeMixedLanguageSpacing(strings.TrimSpace(input.Topic))
 	if input.PromptID == 0 && topicLookup != "" {
-		if existing, err := s.prompts.FindByUserAndTopic(ctx, input.UserID, topicLookup); err == nil {
+		if existing, lookupErr := s.prompts.FindByUserAndTopic(ctx, input.UserID, topicLookup); lookupErr == nil {
 			input.PromptID = existing.ID
 		}
 	}
 
-	if err := enforceKeywordLimit(s.keywordLimit, input.PositiveKeywords, input.NegativeKeywords); err != nil {
-		return SaveOutput{}, err
+	if err = enforceKeywordLimit(s.keywordLimit, input.PositiveKeywords, input.NegativeKeywords); err != nil {
+		return
 	}
 
-	cleanedTags, err := s.normalizeTags(input.Tags)
+	var cleanedTags []string
+	cleanedTags, err = s.normalizeTags(input.Tags)
 	if err != nil {
-		return SaveOutput{}, err
+		return
 	}
 	input.Tags = cleanedTags
 	input.Instructions = strings.TrimSpace(input.Instructions)
@@ -1973,9 +2013,9 @@ func (s *Service) Save(ctx context.Context, input SaveInput) (SaveOutput, error)
 		action = promptdomain.TaskActionUpdate
 	}
 
-	result, err := s.persistPrompt(ctx, input, status, action)
+	output, err = s.persistPrompt(ctx, input, status, action)
 	if err != nil {
-		return SaveOutput{}, err
+		return
 	}
 
 	if workspaceEnabled {
@@ -1985,20 +2025,42 @@ func (s *Service) Save(ctx context.Context, input SaveInput) (SaveOutput, error)
 			workspaceAttrInstructions:      input.Instructions,
 			workspaceAttrGenerationProfile: s.encodeGenerationProfile(normalizedProfile),
 		}
-		if err := s.workspace.SetAttributes(metaCtx, input.UserID, workspaceToken, attrs); err != nil {
-			s.logger.Warnw("set workspace tags failed", "user_id", input.UserID, "token", workspaceToken, "error", err)
+		if setErr := s.workspace.SetAttributes(metaCtx, input.UserID, workspaceToken, attrs); setErr != nil {
+			s.logger.Warnw("set workspace tags failed", "user_id", input.UserID, "token", workspaceToken, "error", setErr)
 		}
-		if err := s.workspace.SetPromptMeta(metaCtx, input.UserID, workspaceToken, result.PromptID, status); err != nil {
-			s.logger.Warnw("set workspace meta failed", "user_id", input.UserID, "token", workspaceToken, "error", err)
+		if metaErr := s.workspace.SetPromptMeta(metaCtx, input.UserID, workspaceToken, output.PromptID, status); metaErr != nil {
+			s.logger.Warnw("set workspace meta failed", "user_id", input.UserID, "token", workspaceToken, "error", metaErr)
 		}
-		if err := s.workspace.Touch(metaCtx, input.UserID, workspaceToken); err != nil {
-			s.logger.Warnw("touch workspace failed", "user_id", input.UserID, "token", workspaceToken, "error", err)
+		if touchErr := s.workspace.Touch(metaCtx, input.UserID, workspaceToken); touchErr != nil {
+			s.logger.Warnw("touch workspace failed", "user_id", input.UserID, "token", workspaceToken, "error", touchErr)
 		}
 		cancel()
-		result.Token = workspaceToken
+		output.Token = workspaceToken
 	}
 
-	return result, nil
+	return
+}
+
+// classifySaveResult 将保存或发布的结果映射为监控标签，区分成功状态与常见错误。
+func classifySaveResult(err error, status string, requestedPublish bool) string {
+	if err != nil {
+		switch {
+		case errors.Is(err, ErrPositiveKeywordLimit), errors.Is(err, ErrNegativeKeywordLimit):
+			return "keyword_limit"
+		case errors.Is(err, ErrTagLimitExceeded):
+			return "tag_limit"
+		default:
+			return "error"
+		}
+	}
+	trimmed := strings.TrimSpace(status)
+	if trimmed != "" {
+		return trimmed
+	}
+	if requestedPublish {
+		return "published"
+	}
+	return "draft"
 }
 
 // helper: 构造关键词实体。
