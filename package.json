@@ -13,7 +13,7 @@
     "build:frontend": "npm --prefix frontend run build:electron",
     "build:frontend:web": "npm --prefix frontend run build",
     "build:backend": "node scripts/build-backend.mjs",
-    "prepare:offline": "npm run build:frontend && npm run build:backend",
+    "prepare:offline": "npm --prefix frontend install --include=dev && npm run build:frontend && npm run build:backend",
     "dist:mac": "npm run prepare:offline && electron-builder --mac --publish never",
     "dist:win": "npm run prepare:offline && electron-builder --win --publish never",
     "dist:all": "npm run prepare:offline && electron-builder --mac --win --publish never",
