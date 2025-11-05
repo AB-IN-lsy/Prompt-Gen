@@ -31,7 +31,8 @@
     "publicPromptReview": "Public prompt review",
     "changelogAdmin": "Manage changelog",
     "help": "Help Center",
-    "adminSection": "Admin console"
+    "adminSection": "Admin console",
+    "adminMetrics": "Metrics"
   },
   "helpPage": {
     "eyebrow": "Help center",
@@ -116,23 +117,25 @@
       "description": "Discover community knowledge, source code, and support channels maintained by AB-IN.",
       "contacts": [
         {
-          "label": "AB-IN CSDN Blog · ab-in.blog.csdn.net",
+          "label": "CSDN",
           "href": "https://ab-in.blog.csdn.net/",
           "type": "external"
         },
         {
-          "label": "GitHub · AB-IN/Prompt-Gen",
+          "label": "GitHub",
           "href": "https://github.com/AB-IN-lsy/Prompt-Gen",
           "type": "external"
         },
         {
-          "label": "Email · ab-in-liusy@outlook.com",
+          "label": "Outlook",
           "href": "mailto:ab-in-liusy@outlook.com",
           "type": "email"
         }
       ],
       "note": "Questions or ideas? Open an issue or PR – contributions welcome.",
-      "contactTitle": "Contact"
+      "contactTitle": "Contact",
+      "starCta": "Star on GitHub",
+      "starCount": "3"
     },
     "sectionOrder": [
       "quickStart",
@@ -822,7 +825,7 @@
     "drafts": {
       "title": "Draft reminder",
       "subtitle": "Review drafts before deciding the next step.",
-      "updatedAt": "Last updated: {{date}}{{time}}",
+      "updatedAt": "Last updated: {{date}} {{time}}",
       "resume": "View details",
       "loading": "Loading drafts…",
       "empty": "No drafts yet. Head to the workbench to create one.",
@@ -1113,5 +1116,39 @@
     "EMAIL_ALREADY_VERIFIED": "This email address has already been verified.",
     "VERIFICATION_TOKEN_INVALID": "The verification token is invalid or has expired.",
     "INVALID_CREDENTIALS": "Incorrect email or password. Please try again."
+  },
+  "adminMetricsPage": {
+    "eyebrow": "Metrics",
+    "title": "Admin Insights",
+    "subtitle": "Track daily active users, request volume, and system health trends.",
+    "accessDeniedTitle": "Admins Only",
+    "lastUpdated": "Last updated: {{time}}",
+    "empty": "No metrics available yet",
+    "refreshButton": "Refresh",
+    "cards": {
+      "dau": "Daily Active Users",
+      "requests": "Generation Requests",
+      "successRate": "Success Rate",
+      "avgLatency": "Average Latency"
+    },
+    "charts": {
+      "activity": {
+        "title": "Daily Activity",
+        "description": "Active users, generation requests, and success rate over the last {{days}} days.",
+        "series": {
+          "activeUsers": "Active Users",
+          "requests": "Requests",
+          "successRate": "Success Rate"
+        }
+      },
+      "persistence": {
+        "title": "Saves & Latency",
+        "description": "Save operations and average response time across the last {{days}} days.",
+        "series": {
+          "saveRequests": "Save Requests",
+          "avgLatency": "Avg Latency (ms)"
+        }
+      }
+    }
   }
 }

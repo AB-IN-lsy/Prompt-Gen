@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { cn } from "../../lib/utils";
@@ -7,6 +7,8 @@ type MenuState = {
     visible: boolean;
     x: number;
     y: number;
+    anchorX: number;
+    anchorY: number;
     hasSelection: boolean;
     isEditable: boolean;
 };
@@ -15,6 +17,8 @@ const initialState: MenuState = {
     visible: false,
     x: 0,
     y: 0,
+    anchorX: 0,
+    anchorY: 0,
     hasSelection: false,
     isEditable: false,
 };
@@ -102,8 +106,9 @@ function isEditableElement(target: EventTarget | null): boolean {
 }
 
 export function DesktopContextMenu(): JSX.Element | null {
-    const { t, i18n } = useTranslation();
+    const { t } = useTranslation();
     const [state, setState] = useState<MenuState>(initialState);
+    const menuRef = useRef<HTMLDivElement | null>(null);
 
     useEffect(() => {
         if (typeof window === "undefined" || !window.desktop) {
@@ -118,29 +123,21 @@ export function DesktopContextMenu(): JSX.Element | null {
             const selection = window.getSelection();
             const hasSelection = Boolean(selection && selection.toString().trim().length > 0);
             const targetEditable = isEditableElement(event.target);
-            const viewportWidth = window.innerWidth;
-            const viewportHeight = window.innerHeight;
-            const menuWidth = 216;
-            const menuHeight = 280;
-            let x = event.clientX;
-            let y = event.clientY;
-            if (x + menuWidth > viewportWidth) {
-                x = viewportWidth - menuWidth - 8;
-            }
-            if (y + menuHeight > viewportHeight) {
-                y = viewportHeight - menuHeight - 8;
-            }
+            const anchorX = event.clientX;
+            const anchorY = event.clientY;
             setState({
                 visible: true,
-                x,
-                y,
+                x: anchorX,
+                y: anchorY,
+                anchorX,
+                anchorY,
                 hasSelection,
                 isEditable: targetEditable,
             });
         };
 
         const hideMenu = () => {
-            setState((prev) => (prev.visible ? { ...prev, visible: false } : prev));
+            setState((prev) => (prev.visible ? initialState : prev));
         };
 
         document.addEventListener("contextmenu", handleContextMenu);
@@ -153,6 +150,45 @@ export function DesktopContextMenu(): JSX.Element | null {
             document.removeEventListener("keydown", hideMenu);
         };
     }, []);
+
+    useLayoutEffect(() => {
+        if (!state.visible || typeof window === "undefined") {
+            return;
+        }
+        const menuElement = menuRef.current;
+        if (!menuElement) {
+            return;
+        }
+        const rect = menuElement.getBoundingClientRect();
+        const { innerWidth, innerHeight } = window;
+        const viewportPadding = 8;
+        const pointerOffset = 4;
+
+        let nextX = state.anchorX + pointerOffset;
+        let nextY = state.anchorY + pointerOffset;
+
+        if (nextX + rect.width + viewportPadding > innerWidth) {
+            const flippedX = state.anchorX - rect.width - pointerOffset;
+            nextX = flippedX >= viewportPadding ? flippedX : Math.max(innerWidth - rect.width - viewportPadding, viewportPadding);
+        } else if (nextX < viewportPadding) {
+            nextX = viewportPadding;
+        }
+
+        if (nextY + rect.height + viewportPadding > innerHeight) {
+            const flippedY = state.anchorY - rect.height - pointerOffset;
+            nextY = flippedY >= viewportPadding ? flippedY : Math.max(innerHeight - rect.height - viewportPadding, viewportPadding);
+        } else if (nextY < viewportPadding) {
+            nextY = viewportPadding;
+        }
+
+        if (Math.abs(nextX - state.x) > 0.5 || Math.abs(nextY - state.y) > 0.5) {
+            setState((prev) => ({
+                ...prev,
+                x: nextX,
+                y: nextY,
+            }));
+        }
+    }, [state.visible, state.anchorX, state.anchorY, state.x, state.y]);
 
     const isVisible = state.visible && Boolean(window.desktop);
     const isMac = useMemo(() => navigator.platform.toLowerCase().includes("mac"), []);
@@ -176,6 +212,7 @@ export function DesktopContextMenu(): JSX.Element | null {
                     "pointer-events-auto absolute min-w-[208px] rounded-2xl border p-2 text-xs shadow-2xl backdrop-blur",
                     "border-black/5 bg-white/95 text-slate-800 dark:border-white/10 dark:bg-slate-900/95 dark:text-slate-100"
                 )}
+                ref={menuRef}
                 style={{ left: state.x, top: state.y }}
             >
                 {MENU_ITEMS.map((item, index) => {

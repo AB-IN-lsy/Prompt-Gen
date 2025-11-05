@@ -341,7 +341,7 @@ export function MarkdownEditor({
               key={action}
               type="button"
               onClick={() => handleToolbarAction(action)}
-              className="flex items-center gap-1 rounded-md border border-white/70 bg-white/80 px-2 py-1 text-slate-600 shadow-sm transition hover:border-primary/40 hover:text-primary focus:outline-none dark:border-slate-700 dark:bg-slate-800/70 dark:text-slate-200 dark:hover:border-primary/40"
+              className="flex items-center gap-1 rounded-md border border-white/70 bg-white/80 px-2 py-1 text-slate-600 shadow-sm transition hover:-translate-y-0.5 hover:border-primary/40 hover:text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:border-slate-700 dark:bg-slate-800/70 dark:text-slate-200 dark:hover:border-primary/40 dark:hover:text-primary dark:focus-visible:ring-offset-slate-900"
               title={label}
               aria-label={label}
             >

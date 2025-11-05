@@ -127,6 +127,7 @@ func setupPromptServiceWithConfig(t *testing.T, cfg promptsvc.Config) (*promptsv
 		nil,
 		nil,
 		nil,
+		nil,
 		cfg,
 	)
 	if err != nil {
@@ -715,6 +716,7 @@ func TestPromptServiceManualKeywordDuplicate(t *testing.T) {
 		keywordRepo,
 		modelStub,
 		store,
+		nil,
 		nil,
 		nil,
 		nil,
@@ -1482,7 +1484,7 @@ func TestGeneratePromptUsesFreeTierWhenCredentialMissing(t *testing.T) {
 		},
 	}
 
-	service, err := promptsvc.NewServiceWithConfig(promptRepo, keywordRepo, primaryInvoker, nil, nil, nil, nil, cfg)
+	service, err := promptsvc.NewServiceWithConfig(promptRepo, keywordRepo, primaryInvoker, nil, nil, nil, nil, nil, cfg)
 	if err != nil {
 		t.Fatalf("init prompt service: %v", err)
 	}

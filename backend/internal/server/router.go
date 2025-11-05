@@ -20,6 +20,7 @@ type RouterOptions struct {
 	UploadHandler        *handler.UploadHandler
 	ModelHandler         *handler.ModelHandler
 	ChangelogHandler     *handler.ChangelogHandler
+	AdminMetricsHandler  *handler.AdminMetricsHandler
 	PromptHandler        *handler.PromptHandler
 	PromptCommentHandler *handler.PromptCommentHandler
 	PublicPromptHandler  *handler.PublicPromptHandler
@@ -106,6 +107,14 @@ func NewRouter(opts RouterOptions) *gin.Engine {
 			authGroup.POST("/logout", opts.AuthHandler.Logout)
 			authGroup.POST("/verify-email/request", opts.AuthHandler.RequestEmailVerification)
 			authGroup.POST("/verify-email/confirm", opts.AuthHandler.VerifyEmail)
+		}
+
+		if opts.AdminMetricsHandler != nil {
+			admin := api.Group("/admin")
+			if opts.AuthMW != nil {
+				admin.Use(opts.AuthMW.Handle())
+			}
+			admin.GET("/metrics", opts.AdminMetricsHandler.Overview)
 		}
 
 		// /api/users 下的路由需要登录才能访问，所以单独分组，再挂载 JWT 鉴权中间件。

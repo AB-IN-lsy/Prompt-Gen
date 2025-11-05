@@ -31,7 +31,8 @@
     "publicPromptReview": "公共库审核",
     "changelogAdmin": "管理更新日志",
     "help": "帮助中心",
-    "adminSection": "管理后台"
+    "adminSection": "管理后台",
+    "adminMetrics": "运营监控"
   },
   "helpPage": {
     "eyebrow": "帮助中心",
@@ -116,23 +117,25 @@
       "description": "探索由 AB-IN 维护的资料、源码与支持渠道。",
       "contacts": [
         {
-          "label": "AB-IN CSDN 博客 · ab-in.blog.csdn.net",
+          "label": "CSDN",
           "href": "https://ab-in.blog.csdn.net/",
           "type": "external"
         },
         {
-          "label": "GitHub · AB-IN/Prompt-Gen",
+          "label": "GitHub",
           "href": "https://github.com/AB-IN-lsy/Prompt-Gen",
           "type": "external"
         },
         {
-          "label": "邮箱 · ab-in-liusy@outlook.com",
+          "label": "Outlook",
           "href": "mailto:ab-in-liusy@outlook.com",
           "type": "email"
         }
       ],
       "note": "欢迎提交 Issue 与 PR，一起完善 PromptGen。",
-      "contactTitle": "联系我"
+      "contactTitle": "联系我",
+      "starCta": "GitHub 点个 Star",
+      "starCount": "3"
     },
     "sectionOrder": [
       "quickStart",
@@ -822,7 +825,7 @@
     "drafts": {
       "title": "草稿提醒",
       "subtitle": "查看草稿并决策后续动作。",
-      "updatedAt": "最近更新：{{date}}{{time}}",
+      "updatedAt": "最近更新：{{date}} {{time}}",
       "resume": "查看详情",
       "loading": "正在加载草稿…",
       "empty": "暂时没有草稿，去工作台开始创作吧。",
@@ -1113,5 +1116,39 @@
     "EMAIL_ALREADY_VERIFIED": "邮箱已验证，无需重复操作。",
     "VERIFICATION_TOKEN_INVALID": "验证码无效或已过期，请重新获取。",
     "INVALID_CREDENTIALS": "邮箱或密码错误，请检查后重试。"
+  },
+  "adminMetricsPage": {
+    "eyebrow": "运营监控",
+    "title": "管理员指标面板",
+    "subtitle": "追踪日活、请求量与后台健康度。",
+    "accessDeniedTitle": "仅管理员可访问",
+    "lastUpdated": "最近刷新：{{time}}",
+    "empty": "暂无可视化数据",
+    "refreshButton": "刷新数据",
+    "cards": {
+      "dau": "日活用户",
+      "requests": "生成请求总数",
+      "successRate": "成功率",
+      "avgLatency": "平均耗时"
+    },
+    "charts": {
+      "activity": {
+        "title": "日活与生成趋势",
+        "description": "最近 {{days}} 天的日活、生成请求与成功率。",
+        "series": {
+          "activeUsers": "日活用户",
+          "requests": "生成请求",
+          "successRate": "成功率"
+        }
+      },
+      "persistence": {
+        "title": "保存次数与平均耗时",
+        "description": "最近 {{days}} 天保存次数与平均耗时。",
+        "series": {
+          "saveRequests": "保存次数",
+          "avgLatency": "平均耗时 (ms)"
+        }
+      }
+    }
   }
 }

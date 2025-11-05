@@ -28,6 +28,7 @@ import (
 	"electron-go-app/backend/internal/middleware"
 	"electron-go-app/backend/internal/repository"
 	"electron-go-app/backend/internal/server"
+	adminmetricssvc "electron-go-app/backend/internal/service/adminmetrics"
 	authsvc "electron-go-app/backend/internal/service/auth"
 	changelogsrv "electron-go-app/backend/internal/service/changelog"
 	modelsvc "electron-go-app/backend/internal/service/model"
@@ -49,13 +50,14 @@ type RuntimeConfig struct {
 }
 
 type Application struct {
-	Resources *app.Resources
-	AuthSvc   *authsvc.Service
-	UserSvc   *usersvc.Service
-	ModelSvc  *modelsvc.Service
-	PromptSvc *promptsvc.Service
-	Changelog *changelogsrv.Service
-	Router    http.Handler
+	Resources    *app.Resources
+	AuthSvc      *authsvc.Service
+	UserSvc      *usersvc.Service
+	ModelSvc     *modelsvc.Service
+	PromptSvc    *promptsvc.Service
+	Changelog    *changelogsrv.Service
+	AdminMetrics *adminmetricssvc.Service
+	Router       http.Handler
 }
 
 // BuildApplication 将底层资源 (数据库、Redis 等) 与业务配置装配成完整的 HTTP 应用：
@@ -74,6 +76,7 @@ func BuildApplication(ctx context.Context, logger *zap.SugaredLogger, resources 
 	publicPromptRepo := repository.NewPublicPromptRepository(resources.DBConn())
 	promptCommentRepo := repository.NewPromptCommentRepository(resources.DBConn())
 	promptCommentLikeRepo := repository.NewPromptCommentLikeRepository(resources.DBConn())
+	adminMetricsRepo := repository.NewAdminMetricsRepository(resources.DBConn())
 
 	isLocalMode := strings.EqualFold(cfg.Mode, config.ModeLocal)
 
@@ -81,6 +84,9 @@ func BuildApplication(ctx context.Context, logger *zap.SugaredLogger, resources 
 		workspaceStore   promptsvc.WorkspaceStore
 		persistenceQueue promptsvc.PersistenceQueue
 	)
+	adminMetricsCfg := loadAdminMetricsConfig(logger)
+	adminMetricsSvc := adminmetricssvc.NewService(adminMetricsCfg, logger.With("component", "service.adminmetrics"), adminMetricsRepo)
+	adminMetricsSvc.Start(ctx)
 	if resources.Redis != nil {
 		workspaceStore = promptinfra.NewWorkspaceStore(resources.Redis)
 		persistenceQueue = promptinfra.NewPersistenceQueue(resources.Redis, "")
@@ -161,13 +167,14 @@ func BuildApplication(ctx context.Context, logger *zap.SugaredLogger, resources 
 	// 用户服务与 Handler 相对简单，主要负责用户信息的 CRUD。
 	userService := usersvc.NewService(userRepo, modelRepo)
 	userHandler := handler.NewUserHandler(userService)
+	adminMetricsHandler := handler.NewAdminMetricsHandler(adminMetricsSvc)
 
 	// Prompt 服务与 Handler 较为复杂，涉及关键词管理、工作空间、持久化队列等。
 	promptCfg := loadPromptConfig(logger, isLocalMode)
 	// 模型服务与 Handler 负责模型凭据的管理与测试连接。
 	modelService := modelsvc.NewService(modelRepo, userRepo)
 	// 构建 Prompt 工作台服务，并注入关键词上限、限流配置等依赖。
-	promptService, err := promptsvc.NewServiceWithConfig(promptRepo, keywordRepo, modelService, workspaceStore, persistenceQueue, logger, freeTierLimiter, promptCfg)
+	promptService, err := promptsvc.NewServiceWithConfig(promptRepo, keywordRepo, modelService, workspaceStore, persistenceQueue, logger, freeTierLimiter, adminMetricsSvc, promptCfg)
 	if err != nil {
 		return nil, fmt.Errorf("init prompt service: %w", err)
 	}
@@ -270,6 +277,7 @@ func BuildApplication(ctx context.Context, logger *zap.SugaredLogger, resources 
 		UploadHandler:        uploadHandler,
 		ModelHandler:         modelHandler,
 		ChangelogHandler:     changelogHandler,
+		AdminMetricsHandler:  adminMetricsHandler,
 		PromptHandler:        promptHandler,
 		PromptCommentHandler: commentHandler,
 		PublicPromptHandler:  publicPromptHandler,
@@ -280,13 +288,14 @@ func BuildApplication(ctx context.Context, logger *zap.SugaredLogger, resources 
 	})
 
 	return &Application{
-		Resources: resources,
-		AuthSvc:   authService,
-		UserSvc:   userService,
-		ModelSvc:  modelService,
-		PromptSvc: promptService,
-		Changelog: changelogService,
-		Router:    router,
+		Resources:    resources,
+		AuthSvc:      authService,
+		UserSvc:      userService,
+		ModelSvc:     modelService,
+		PromptSvc:    promptService,
+		Changelog:    changelogService,
+		AdminMetrics: adminMetricsSvc,
+		Router:       router,
 	}, nil
 }
 
@@ -487,6 +496,22 @@ func loadPromptCommentRateLimit(logger *zap.SugaredLogger) handler.PromptComment
 	return handler.PromptCommentRateLimit{
 		CreateLimit:  limit,
 		CreateWindow: window,
+	}
+}
+
+// loadAdminMetricsConfig 读取管理员指标缓存的刷新周期与保留窗口。
+func loadAdminMetricsConfig(logger *zap.SugaredLogger) adminmetricssvc.Config {
+	interval := parseDurationEnv("ADMIN_METRICS_REFRESH_INTERVAL", 5*time.Minute, logger)
+	retention := parseIntEnv("ADMIN_METRICS_RETENTION_DAYS", 7, logger)
+	if interval <= 0 {
+		interval = 5 * time.Minute
+	}
+	if retention <= 0 {
+		retention = 7
+	}
+	return adminmetricssvc.Config{
+		RefreshInterval: interval,
+		RetentionDays:   retention,
 	}
 }
 

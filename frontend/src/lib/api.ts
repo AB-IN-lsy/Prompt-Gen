@@ -1821,6 +1821,56 @@ export async function fetchChangelogEntries(
   }
 }
 
+export interface AdminMetricsDailyMetric {
+  date: string;
+  active_users: number;
+  generate_requests: number;
+  generate_success: number;
+  generate_success_rate: number;
+  average_latency_ms: number;
+  save_requests: number;
+}
+
+export interface AdminMetricsTotals {
+  active_users: number;
+  generate_requests: number;
+  generate_success: number;
+  generate_success_rate: number;
+  average_latency_ms: number;
+  save_requests: number;
+}
+
+export interface AdminMetricsSnapshot {
+  refreshed_at: string;
+  range_days: number;
+  daily: AdminMetricsDailyMetric[];
+  totals: AdminMetricsTotals;
+}
+
+export async function fetchAdminMetrics(): Promise<AdminMetricsSnapshot> {
+  try {
+    const response: AxiosResponse<AdminMetricsSnapshot> = await http.get(
+      "/admin/metrics",
+    );
+    const snapshot = response.data;
+    return {
+      refreshed_at: snapshot?.refreshed_at ?? "",
+      range_days: snapshot?.range_days ?? 0,
+      totals: snapshot?.totals ?? {
+        active_users: 0,
+        generate_requests: 0,
+        generate_success: 0,
+        generate_success_rate: 0,
+        average_latency_ms: 0,
+        save_requests: 0,
+      },
+      daily: Array.isArray(snapshot?.daily) ? snapshot.daily : [],
+    };
+  } catch (error) {
+    throw normaliseError(error);
+  }
+}
+
 export async function createChangelogEntry(
   payload: ChangelogPayload,
 ): Promise<ChangelogCreateResult> {

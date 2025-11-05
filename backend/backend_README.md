@@ -7,6 +7,8 @@
 - 调整 Prompt 工作台：前端仅在检测到关键词顺序或权重实际变化时才调用 `POST /api/prompts/keywords/sync`，显著降低接口调用频率，后端无需额外改动即可受益。
 - Prompt 生成参数可配置：`prompts` 表新增 `generation_profile` TEXT 字段，保存逐步推理、温度、Top P、最大输出 tokens 等配置，并在生成/保存时透传到模型调用链；相关默认值通过 `PROMPT_GENERATE_*` 环境变量控制。
 - 新增 Prometheus 指标：后端会在 `/metrics` 暴露生成/保存相关指标，可配合 Grafana Cloud 进行性能与错误监控。
+- 管理员指标缓存就绪：`internal/service/adminmetrics` 会基于生成/保存事件维护按日聚合的活跃用户、请求量、成功率、平均耗时与保存次数，刷新周期、保留窗口通过 `ADMIN_METRICS_REFRESH_INTERVAL`、`ADMIN_METRICS_RETENTION_DAYS` 配置；新增 `GET /api/admin/metrics` 供前端仪表盘直接消费。
+- 管理员指标持久化：服务会将原始事件写入 `admin_metrics_events`，按日聚合结果写入 `admin_metrics_daily`，启动时自动回放最近 `ADMIN_METRICS_RETENTION_DAYS` 天的数据以恢复内存缓存；当快照刷新后会同步更新 MySQL 并清理过期事件。
 - 解析 & 生成统一接入内容审核：新增 `Service.auditContent`，在解析前和生成后复用用户配置的模型执行违规检测，若命中策略会返回 `CONTENT_REJECTED` 错误码与可读提示，前端直接用于 toast。
 - 新增 `POST /api/prompts/import`，可上传导出的 JSON 文件并选择“合并/覆盖”模式批量回灌 Prompt，导入批大小由 `PROMPT_IMPORT_BATCH_SIZE` 控制。
 - 本地离线模式下会自动关闭邮箱验证、Prompt 生成与公共库的限流器，避免开发或演示环境频繁操作触发限流提示。
@@ -132,6 +134,15 @@
 - 当需要同步线上 MySQL 中的最新公共 Prompt、更新日志时，运行 `go run ./backend/cmd/export-offline-data -output-dir backend/data/bootstrap`。命令会根据环境变量连接数据库，并写入同名 JSON 文件，后续打包可直接复用。
 - 导出完成后再执行 `go run ./backend/cmd/offline-bootstrap -output ./release/assets/promptgen-offline.db` 生成最新的 SQLite，确保离线安装包携带最新数据。
 - 客户端启动时会按 `badge+locale`、`author_user_id+topic` 的组合键增量合并 JSON 数据，不会覆盖已有本地条目，仅插入或更新新版本内容。
+
+### 管理员指标缓存
+
+| 变量 | 作用 |
+| --- | --- |
+| `ADMIN_METRICS_REFRESH_INTERVAL` | 后台指标快照的刷新周期（`time.Duration` 格式），默认 `5m` |
+| `ADMIN_METRICS_RETENTION_DAYS` | 内存缓存按日保留的天数，默认 `7` |
+
+> 若未配置上述变量，服务会使用默认值；将间隔缩短可提升实时性，但需评估数据库压力。
 
 ### 验证码与 Redis
 

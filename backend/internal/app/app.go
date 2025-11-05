@@ -18,6 +18,7 @@ import (
 
 	bootstrapdata "electron-go-app/backend/internal/bootstrapdata"
 	"electron-go-app/backend/internal/config"
+	adminmetricsdomain "electron-go-app/backend/internal/domain/adminmetrics"
 	changelog "electron-go-app/backend/internal/domain/changelog"
 	promptdomain "electron-go-app/backend/internal/domain/prompt"
 	domain "electron-go-app/backend/internal/domain/user"
@@ -80,6 +81,8 @@ func InitResources(ctx context.Context) (*Resources, error) {
 		&promptdomain.PublicPrompt{},
 		&promptdomain.PromptComment{},
 		&promptdomain.PromptCommentLike{},
+		&adminmetricsdomain.DailyRecord{},
+		&adminmetricsdomain.EventRecord{},
 	); err != nil {
 		return nil, fmt.Errorf("auto migrate: %w", err)
 	}
@@ -159,6 +162,8 @@ func initLocalResources(ctx context.Context, flags config.RuntimeFlags) (*Resour
 		&promptdomain.PublicPrompt{},
 		&promptdomain.PromptComment{},
 		&promptdomain.PromptCommentLike{},
+		&adminmetricsdomain.DailyRecord{},
+		&adminmetricsdomain.EventRecord{},
 	); err != nil {
 		return nil, fmt.Errorf("auto migrate sqlite: %w", err)
 	}

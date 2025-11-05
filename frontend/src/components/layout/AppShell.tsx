@@ -33,6 +33,7 @@ import {
     ScrollText,
     Library,
     ClipboardCheck,
+    BarChart3,
     Menu,
     X,
     PanelLeftClose,
@@ -58,6 +59,7 @@ const baseNavItems = [
 
 // 仅管理员显示的额外导航项。
 const adminNavItems = [
+    { labelKey: "nav.adminMetrics", icon: BarChart3, to: "/admin/metrics" },
     { labelKey: "nav.ipGuard", icon: ShieldAlert, to: "/ip-guard" },
     { labelKey: "nav.publicPromptReview", icon: ClipboardCheck, to: "/admin/public-prompts" },
     { labelKey: "nav.changelogAdmin", icon: ScrollText, to: "/admin/changelog" }

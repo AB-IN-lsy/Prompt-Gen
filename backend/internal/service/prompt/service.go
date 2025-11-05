@@ -18,6 +18,7 @@ import (
 	modeldomain "electron-go-app/backend/internal/infra/model/deepseek"
 	"electron-go-app/backend/internal/infra/ratelimit"
 	"electron-go-app/backend/internal/repository"
+	adminmetrics "electron-go-app/backend/internal/service/adminmetrics"
 	modelsvc "electron-go-app/backend/internal/service/model"
 
 	"github.com/redis/go-redis/v9"
@@ -77,6 +78,7 @@ type Service struct {
 	freeTier            *freeTier
 	generationDefault   promptdomain.GenerationProfile
 	generationBounds    generationBounds
+	adminMetrics        *adminmetrics.Service
 }
 
 const (
@@ -241,7 +243,7 @@ type FreeTierUsageSnapshot struct {
 }
 
 // NewServiceWithConfig 构建 Service，并允许自定义分页等配置。
-func NewServiceWithConfig(prompts *repository.PromptRepository, keywords *repository.KeywordRepository, model ModelInvoker, workspace WorkspaceStore, queue PersistenceQueue, logger *zap.SugaredLogger, freeLimiter ratelimit.Limiter, cfg Config) (*Service, error) {
+func NewServiceWithConfig(prompts *repository.PromptRepository, keywords *repository.KeywordRepository, model ModelInvoker, workspace WorkspaceStore, queue PersistenceQueue, logger *zap.SugaredLogger, freeLimiter ratelimit.Limiter, adminMetrics *adminmetrics.Service, cfg Config) (*Service, error) {
 	if logger == nil {
 		logger = zap.NewNop().Sugar()
 	}
@@ -377,6 +379,7 @@ func NewServiceWithConfig(prompts *repository.PromptRepository, keywords *reposi
 				Max: genCfg.MaxMaxTokens,
 			},
 		},
+		adminMetrics: adminMetrics,
 	}, nil
 }
 
@@ -1827,7 +1830,17 @@ func (s *Service) GeneratePrompt(ctx context.Context, input GenerateInput) (outp
 		if trimmed := strings.TrimSpace(output.Model); trimmed != "" {
 			modelLabel = trimmed
 		}
-		metrics.ObservePromptGenerate(classifyGenerateError(err), modelLabel, time.Since(start), output.Usage)
+		elapsed := time.Since(start)
+		metrics.ObservePromptGenerate(classifyGenerateError(err), modelLabel, elapsed, output.Usage)
+		if s.adminMetrics != nil {
+			s.adminMetrics.RecordActivity(adminmetrics.ActivityEvent{
+				UserID:    input.UserID,
+				Kind:      adminmetrics.ActivityGenerate,
+				Success:   err == nil,
+				Duration:  elapsed,
+				Timestamp: time.Now(),
+			})
+		}
 	}()
 
 	if strings.TrimSpace(input.Topic) == "" {
@@ -1922,6 +1935,14 @@ func classifyGenerateError(err error) string {
 func (s *Service) Save(ctx context.Context, input SaveInput) (output SaveOutput, err error) {
 	defer func() {
 		metrics.RecordPromptSave(classifySaveResult(err, output.Status, input.Publish))
+		if s.adminMetrics != nil {
+			s.adminMetrics.RecordActivity(adminmetrics.ActivityEvent{
+				UserID:    input.UserID,
+				Kind:      adminmetrics.ActivitySave,
+				Success:   err == nil,
+				Timestamp: time.Now(),
+			})
+		}
 	}()
 
 	if input.UserID == 0 {
