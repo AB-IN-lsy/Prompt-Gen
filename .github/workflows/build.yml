@@ -36,7 +36,7 @@ jobs:
       - name: 安装依赖
         run: |
           npm install
-          npm --prefix frontend install
+          npm --prefix frontend install --include=dev
           go mod download
 
       - name: 构建 Windows 安装包
@@ -72,7 +72,7 @@ jobs:
       - name: 安装依赖
         run: |
           npm install
-          npm --prefix frontend install
+          npm --prefix frontend install --include=dev
           go mod download
 
       - name: 构建 macOS 安装包
