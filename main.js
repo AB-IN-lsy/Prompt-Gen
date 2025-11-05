@@ -11,7 +11,8 @@ const {
     ipcMain,
     globalShortcut,
     Tray,
-    nativeImage
+    nativeImage,
+    screen
 } = require("electron");
 const path = require("path");
 const fs = require("fs");
@@ -32,6 +33,18 @@ function loadEnvFiles() {
 }
 
 loadEnvFiles();
+
+const hasSingleInstanceLock = app.requestSingleInstanceLock();
+if (!hasSingleInstanceLock) {
+    app.quit();
+} else {
+    app.on("second-instance", () => {
+        if (splashWindow && !splashWindow.isDestroyed()) {
+            splashWindow.show();
+        }
+        showMainWindow();
+    });
+}
 
 const APP_START_TIME = process.hrtime.bigint();
 
@@ -304,6 +317,19 @@ const showMainWindow = () => {
         mainWindow.show();
     }
     mainWindow.focus();
+    emitWindowVisibility(mainWindow, true);
+};
+
+const toggleMainWindowVisibility = () => {
+    if (!mainWindow || mainWindow.isDestroyed()) {
+        showMainWindow();
+        return;
+    }
+    if (!mainWindow.isVisible() || mainWindow.isMinimized()) {
+        showMainWindow();
+        return;
+    }
+    hideWindowToTray(mainWindow);
 };
 
 function refreshTrayMenu() {
@@ -401,6 +427,7 @@ const hideWindowToTray = (win) => {
         return;
     }
     win.hide();
+    emitWindowVisibility(win, false);
     if (
         process.platform === "win32" &&
         typeof tray?.displayBalloon === "function" &&
@@ -559,10 +586,141 @@ const startBackend = () => {
 const isDev = !app.isPackaged && !forceDist;
 console.log("[runtime]", "isDev=", isDev);
 const DEV_SERVER_URL = process.env.VITE_DEV_SERVER_URL || "http://localhost:5173";
+const TOGGLE_VISIBILITY_SHORTCUT = process.platform === "darwin" ? "Command+Shift+M" : "Control+Shift+M";
 const WINDOW_STATE_CHANNEL = "window:state";
+const WINDOW_VISIBILITY_CHANNEL = "window:visibility";
 const DEFAULT_WINDOW = {
     width: 1200,
     height: 720
+};
+const WINDOW_STATE_PREF_KEY = "windowState";
+const WINDOW_STATE_SAVE_DELAY = 350;
+
+let windowStateSaveTimer = null;
+let lastKnownWindowBounds = null;
+
+const coerceWindowBounds = (raw) => {
+    if (!raw || typeof raw !== "object") {
+        return null;
+    }
+    const width = Number(raw.width);
+    const height = Number(raw.height);
+    if (!Number.isFinite(width) || !Number.isFinite(height)) {
+        return null;
+    }
+    const result = {
+        width: Math.max(640, Math.round(width)),
+        height: Math.max(480, Math.round(height)),
+        isMaximized: Boolean(raw.isMaximized)
+    };
+    if (Number.isFinite(raw.x) && Number.isFinite(raw.y)) {
+        result.x = Math.round(raw.x);
+        result.y = Math.round(raw.y);
+    }
+    return result;
+};
+
+const ensureBoundsVisible = (state) => {
+    if (!state || typeof state.x !== "number" || typeof state.y !== "number") {
+        return state;
+    }
+    try {
+        const displays = screen.getAllDisplays();
+        if (!displays || displays.length === 0) {
+            return state;
+        }
+        const rect = {
+            x: state.x,
+            y: state.y,
+            width: state.width,
+            height: state.height
+        };
+        const intersects = displays.some((display) => {
+            const area = display.workArea || display.bounds;
+            const horizontal =
+                rect.x < area.x + area.width && rect.x + rect.width > area.x;
+            const vertical =
+                rect.y < area.y + area.height && rect.y + rect.height > area.y;
+            return horizontal && vertical;
+        });
+        if (!intersects) {
+            return { ...state, x: undefined, y: undefined };
+        }
+    } catch (error) {
+        console.warn("[window] ensure bounds visible failed:", error);
+    }
+    return state;
+};
+
+const loadInitialWindowState = () => {
+    const stored = coerceWindowBounds(preferenceCache[WINDOW_STATE_PREF_KEY]);
+    const base = {
+        width: DEFAULT_WINDOW.width,
+        height: DEFAULT_WINDOW.height,
+        isMaximized: false
+    };
+    if (!stored) {
+        return base;
+    }
+    const merged = ensureBoundsVisible({
+        ...base,
+        ...stored
+    });
+    return {
+        width: merged.width ?? base.width,
+        height: merged.height ?? base.height,
+        x: typeof merged.x === "number" ? merged.x : undefined,
+        y: typeof merged.y === "number" ? merged.y : undefined,
+        isMaximized: Boolean(merged.isMaximized)
+    };
+};
+
+const rememberBoundsIfNeeded = (win) => {
+    if (!win || win.isDestroyed()) {
+        return;
+    }
+    if (win.isMaximized() || win.isMinimized()) {
+        return;
+    }
+    lastKnownWindowBounds = win.getBounds();
+};
+
+const persistWindowState = (win, immediate = false) => {
+    if (!win || win.isDestroyed()) {
+        return;
+    }
+    const commit = () => {
+        const isMaximized = win.isMaximized();
+        let bounds = lastKnownWindowBounds;
+        if (!bounds) {
+            bounds = isMaximized ? win.getNormalBounds() : win.getBounds();
+        }
+        if (!bounds || !Number.isFinite(bounds.width) || !Number.isFinite(bounds.height)) {
+            bounds = {
+                width: DEFAULT_WINDOW.width,
+                height: DEFAULT_WINDOW.height,
+                x: undefined,
+                y: undefined
+            };
+        }
+        const payload = {
+            width: bounds.width,
+            height: bounds.height,
+            x: typeof bounds.x === "number" ? bounds.x : undefined,
+            y: typeof bounds.y === "number" ? bounds.y : undefined,
+            isMaximized
+        };
+        preferenceCache[WINDOW_STATE_PREF_KEY] = payload;
+        persistPreferencesToDisk(preferenceCache);
+    };
+    if (immediate) {
+        commit();
+        return;
+    }
+    if (windowStateSaveTimer) {
+        clearTimeout(windowStateSaveTimer);
+    }
+    windowStateSaveTimer = setTimeout(commit, WINDOW_STATE_SAVE_DELAY);
 };
 
 const getWindowFromEvent = (event) => BrowserWindow.fromWebContents(event.sender);
@@ -575,6 +733,13 @@ const emitWindowState = (win) => {
         isMaximized: win.isMaximized(),
         isAlwaysOnTop: win.isAlwaysOnTop()
     });
+};
+
+const emitWindowVisibility = (win, visible) => {
+    if (!win || win.isDestroyed()) {
+        return;
+    }
+    win.webContents.send(WINDOW_VISIBILITY_CHANNEL, { visible: Boolean(visible) });
 };
 
 ipcMain.handle("window:get-state", (event) => {
@@ -690,9 +855,10 @@ function createMainWindow() {
         return mainWindow;
     }
 
-    mainWindow = new BrowserWindow({
-        width: DEFAULT_WINDOW.width,
-        height: DEFAULT_WINDOW.height,
+    const initialWindowState = loadInitialWindowState();
+    const windowOptions = {
+        width: initialWindowState.width,
+        height: initialWindowState.height,
         show: false,
         backgroundColor: "#f8f9fa",
         frame: false,
@@ -708,7 +874,13 @@ function createMainWindow() {
             nodeIntegration: false,
             contextIsolation: true
         }
-    });
+    };
+    if (typeof initialWindowState.x === "number" && typeof initialWindowState.y === "number") {
+        windowOptions.x = initialWindowState.x;
+        windowOptions.y = initialWindowState.y;
+    }
+
+    mainWindow = new BrowserWindow(windowOptions);
     logStartupMetric("main window instantiated");
 
     if (isDev) {
@@ -724,14 +896,23 @@ function createMainWindow() {
     mainWindow.once("ready-to-show", () => {
         logStartupMetric("main window ready-to-show");
         scheduleSplashClose();
-        mainWindow.show();
-        if (process.platform !== "darwin") {
+        if (initialWindowState.isMaximized) {
+            mainWindow.maximize();
+            mainWindow.show();
+        } else {
+            mainWindow.show();
+        }
+        if (process.platform !== "darwin" && !mainWindow.isMaximized()) {
             mainWindow.setAspectRatio(DEFAULT_WINDOW.width / DEFAULT_WINDOW.height);
         }
         emitWindowState(mainWindow);
+        emitWindowVisibility(mainWindow, true);
         if (enableDevTools && !mainWindow.webContents.isDevToolsOpened()) {
             mainWindow.webContents.openDevTools({ mode: "detach" });
         }
+        lastKnownWindowBounds = initialWindowState.isMaximized
+            ? mainWindow.getNormalBounds()
+            : mainWindow.getBounds();
     });
 
     mainWindow.webContents.once("did-finish-load", () => {
@@ -751,13 +932,44 @@ function createMainWindow() {
         destroySplashWindow();
     });
 
-    mainWindow.on("maximize", () => emitWindowState(mainWindow));
-    mainWindow.on("unmaximize", () => emitWindowState(mainWindow));
+    const handleBoundsChange = () => {
+        rememberBoundsIfNeeded(mainWindow);
+        persistWindowState(mainWindow);
+    };
+
+    mainWindow.on("move", handleBoundsChange);
+    mainWindow.on("resize", handleBoundsChange);
+
+    mainWindow.on("maximize", () => {
+        emitWindowState(mainWindow);
+        persistWindowState(mainWindow, true);
+    });
+    mainWindow.on("unmaximize", () => {
+        emitWindowState(mainWindow);
+        rememberBoundsIfNeeded(mainWindow);
+        persistWindowState(mainWindow, true);
+    });
     mainWindow.on("focus", () => emitWindowState(mainWindow));
+    mainWindow.on("restore", () => {
+        emitWindowState(mainWindow);
+        emitWindowVisibility(mainWindow, true);
+        rememberBoundsIfNeeded(mainWindow);
+        persistWindowState(mainWindow, true);
+    });
+    mainWindow.on("minimize", () => {
+        emitWindowVisibility(mainWindow, false);
+        persistWindowState(mainWindow, true);
+    });
+    mainWindow.on("show", () => {
+        emitWindowVisibility(mainWindow, true);
+        rememberBoundsIfNeeded(mainWindow);
+    });
+    mainWindow.on("hide", () => emitWindowVisibility(mainWindow, false));
 
     mainWindow.setMenuBarVisibility(false);
     mainWindow.on("close", (event) => {
         handleMainWindowClose(event, mainWindow);
+        persistWindowState(mainWindow, true);
     });
     mainWindow.on("closed", () => {
         mainWindow = null;
@@ -791,6 +1003,13 @@ app.whenReady().then(() => {
         if (!registered) {
             console.warn("[devtools] failed to register shortcut", DEVTOOLS_SHORTCUT);
         }
+    }
+
+    const toggleRegistered = globalShortcut.register(TOGGLE_VISIBILITY_SHORTCUT, () => {
+        toggleMainWindowVisibility();
+    });
+    if (!toggleRegistered) {
+        console.warn("[shortcut] failed to register", TOGGLE_VISIBILITY_SHORTCUT);
     }
 
     app.on("activate", () => {
