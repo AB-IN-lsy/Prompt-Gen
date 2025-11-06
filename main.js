@@ -781,18 +781,6 @@ ipcMain.handle("window:close", (event) => {
     win.close();
 });
 
-ipcMain.handle("window:toggle-always-on-top", (event) => {
-    const win = getWindowFromEvent(event);
-    if (!win) {
-        return { isMaximized: false, isAlwaysOnTop: false };
-    }
-    const nextAlwaysOnTop = !win.isAlwaysOnTop();
-    win.setAlwaysOnTop(nextAlwaysOnTop);
-    const next = { isMaximized: win.isMaximized(), isAlwaysOnTop: nextAlwaysOnTop };
-    emitWindowState(win);
-    return next;
-});
-
 ipcMain.handle("window:execute-edit-command", (event, command) => {
     const webContents = event.sender;
     if (!webContents || typeof command !== "string") {

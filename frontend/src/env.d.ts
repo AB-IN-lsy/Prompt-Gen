@@ -36,7 +36,6 @@ interface DesktopAPI {
     minimize(): Promise<void>;
     toggleMaximize(): Promise<ElectronWindowState>;
     close(): Promise<void>;
-    toggleAlwaysOnTop(): Promise<ElectronWindowState>;
     getWindowState(): Promise<ElectronWindowState>;
     onWindowState(callback: (state: ElectronWindowState) => void): () => void;
     executeEditCommand(command: "undo" | "redo" | "cut" | "copy" | "paste" | "delete" | "selectAll" | "reload"): Promise<void>;

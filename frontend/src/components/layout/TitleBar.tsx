@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Minus, Maximize2, Minimize2, X, Pin, PinOff } from "lucide-react";
+import { Minus, Maximize2, Minimize2, X } from "lucide-react";
 import { cn } from "../../lib/utils";
 
 type WindowState = {
@@ -11,8 +11,6 @@ const defaultState: WindowState = {
     isMaximized: false,
     isAlwaysOnTop: false
 };
-
-const noop = () => undefined;
 
 export function TitleBar() {
     const [state, setState] = useState<WindowState>(defaultState);
@@ -40,7 +38,7 @@ export function TitleBar() {
 
     useEffect(() => {
         if (!electronAvailable || !window.desktop) {
-            return noop;
+            return () => undefined;
         }
         let disposed = false;
 
@@ -64,16 +62,6 @@ export function TitleBar() {
             }
         };
     }, [electronAvailable]);
-
-    const toggleAlwaysOnTop = () => {
-        if (!electronAvailable || !window.desktop) {
-            return;
-        }
-        window.desktop
-            .toggleAlwaysOnTop()
-            .then((next) => next && setState(next))
-            .catch(() => undefined);
-    };
 
     const toggleMaximize = () => {
         if (!electronAvailable || !window.desktop) {
@@ -104,9 +92,7 @@ export function TitleBar() {
     };
 
     const ControlIcon = state.isMaximized ? Minimize2 : Maximize2;
-    const pinActive = state.isAlwaysOnTop;
     const showWindowControls = electronAvailable && !isMac;
-    const showMacPin = electronAvailable && isMac;
 
     return (
         <div
@@ -121,22 +107,6 @@ export function TitleBar() {
             </div>
             {electronAvailable ? (
                 <div className="no-drag flex items-center gap-2 text-xs normal-case tracking-normal">
-                    {(showWindowControls || showMacPin) && (
-                        <button
-                            type="button"
-                            aria-label={pinActive ? "取消置顶" : "窗口置顶"}
-                            className={cn(
-                                "flex h-7 w-24 items-center justify-center gap-1 rounded-full border border-slate-600/60 bg-slate-800/70 px-3 text-[0.7rem] font-semibold uppercase tracking-[0.2em] transition-colors",
-                                pinActive
-                                    ? "border-emerald-400/70 bg-emerald-500/20 text-emerald-300 hover:bg-emerald-500/30"
-                                    : "text-slate-300 hover:border-slate-400/60 hover:bg-slate-700/70 hover:text-slate-100"
-                            )}
-                            onClick={toggleAlwaysOnTop}
-                        >
-                            {pinActive ? <PinOff className="h-3.5 w-3.5" /> : <Pin className="h-3.5 w-3.5" />}
-                            <span>{pinActive ? "Pin Off" : "Pin"}</span>
-                        </button>
-                    )}
                     {showWindowControls && (
                         <>
                             <button

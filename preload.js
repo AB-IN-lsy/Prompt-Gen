@@ -8,7 +8,6 @@ const desktopApi = {
     minimize: () => ipcRenderer.invoke("window:minimize"),
     toggleMaximize: () => ipcRenderer.invoke("window:toggle-maximize"),
     close: () => ipcRenderer.invoke("window:close"),
-    toggleAlwaysOnTop: () => ipcRenderer.invoke("window:toggle-always-on-top"),
     getWindowState: () => ipcRenderer.invoke("window:get-state"),
     onWindowState: (callback) => {
         if (typeof callback !== "function") {
