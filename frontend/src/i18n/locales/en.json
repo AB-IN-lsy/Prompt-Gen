@@ -32,6 +32,7 @@
     "changelogAdmin": "Manage changelog",
     "help": "Help Center",
     "adminSection": "Admin console",
+    "adminUsers": "User overview",
     "adminMetrics": "Metrics"
   },
   "helpPage": {
@@ -695,6 +696,7 @@
     "cancel": "Cancel",
     "close": "Close",
     "loading": "Loading...",
+    "untitled": "Untitled",
     "search": "Search",
     "retry": "Retry"
   },
@@ -1116,6 +1118,53 @@
     "EMAIL_ALREADY_VERIFIED": "This email address has already been verified.",
     "VERIFICATION_TOKEN_INVALID": "The verification token is invalid or has expired.",
     "INVALID_CREDENTIALS": "Incorrect email or password. Please try again."
+  },
+  "adminUsersPage": {
+    "eyebrow": "Admin console",
+    "title": "User overview",
+    "subtitle": "Inspect online status and prompt activity at a glance.",
+    "searchPlaceholder": "Search by username or email…",
+    "summary": {
+      "totalUsers": "Total users",
+      "onlineUsers": "Online users",
+      "totalPrompts": "Total prompts",
+      "publishedPrompts": "Published"
+    },
+    "actions": {
+      "refresh": "Refresh",
+      "clear": "Clear"
+    },
+    "meta": {
+      "onlineThreshold": "Online threshold: logins within {{minutes}} minutes are marked online"
+    },
+    "table": {
+      "username": "Username",
+      "email": "Email",
+      "online": "Online status",
+      "onlineLabel": "Online",
+      "offline": "Offline",
+      "lastLogin": "Last login",
+      "promptOverview": "Prompt summary",
+      "recentPrompt": "Recent prompts",
+      "empty": "No users match your filters.",
+      "noRecentPrompts": "No recent activity",
+      "recentUpdatedAt": "Updated {{time}}",
+      "lastPromptUpdated": "Latest prompt: {{time}}",
+      "never": "Not recorded"
+    },
+    "promptTotals": {
+      "total": "Total",
+      "draft": "Draft",
+      "published": "Published",
+      "archived": "Archived"
+    },
+    "pagination": {
+      "prev": "Previous",
+      "next": "Next",
+      "page": "Page {{page}} of {{total}}",
+      "count": "Showing {{count}} users"
+    },
+    "accessDeniedTitle": "You do not have access to this page."
   },
   "adminMetricsPage": {
     "eyebrow": "Metrics",

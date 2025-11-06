@@ -25,6 +25,7 @@ import PromptDetailPage from "./pages/PromptDetail";
 import PublicPromptsPage from "./pages/PublicPrompts";
 import AdminPublicPromptsPage from "./pages/AdminPublicPrompts";
 import AdminMetricsPage from "./pages/AdminMetrics";
+import AdminUsersPage from "./pages/AdminUsers";
 import { useAuth, useIsAuthenticated } from "./hooks/useAuth";
 import { isLocalMode } from "./lib/runtimeMode";
 import { EntryTransition } from "./components/visuals/EntryTransition";
@@ -196,6 +197,7 @@ export default function App() {
                 <Route path="/logs" element={<LogsPage />} />
                 <Route path="/ip-guard" element={<IpGuardPage />} />
                 <Route path="/help" element={<HelpPage />} />
+                <Route path="/admin/users" element={<AdminUsersPage />} />
                 <Route path="/admin/metrics" element={<AdminMetricsPage />} />
                 <Route path="/admin/public-prompts" element={<AdminPublicPromptsPage />} />
                 <Route path="/admin/changelog" element={<ChangelogAdminPage />} />

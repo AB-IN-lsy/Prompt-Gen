@@ -1871,6 +1871,111 @@ export async function fetchAdminMetrics(): Promise<AdminMetricsSnapshot> {
   }
 }
 
+export interface AdminUserPromptTotals {
+  total: number;
+  draft: number;
+  published: number;
+  archived: number;
+}
+
+export interface AdminUserPromptSummary {
+  id: number;
+  topic: string;
+  status: string;
+  updated_at: string;
+  created_at: string;
+}
+
+export interface AdminUserOverviewItem {
+  id: number;
+  username: string;
+  email: string;
+  avatar_url?: string | null;
+  is_admin: boolean;
+  last_login_at?: string | null;
+  created_at: string;
+  updated_at: string;
+  is_online: boolean;
+  prompt_totals: AdminUserPromptTotals;
+  latest_prompt_at?: string | null;
+  recent_prompts: AdminUserPromptSummary[];
+}
+
+export interface AdminUserOverviewResponse {
+  items: AdminUserOverviewItem[];
+  total: number;
+  page: number;
+  page_size: number;
+  online_threshold_seconds: number;
+}
+
+export interface FetchAdminUsersParams {
+  page?: number;
+  pageSize?: number;
+  query?: string;
+}
+
+export async function fetchAdminUsers(
+  params?: FetchAdminUsersParams,
+): Promise<AdminUserOverviewResponse> {
+  try {
+    const response: AxiosResponse<AdminUserOverviewResponse> = await http.get(
+      "/admin/users",
+      {
+        params: {
+          page: params?.page,
+          page_size: params?.pageSize,
+          query: params?.query,
+        },
+      },
+    );
+    const payload = response.data ?? {};
+    const rawItems = Array.isArray(payload.items) ? payload.items : [];
+    const items: AdminUserOverviewItem[] = rawItems.map((item) => ({
+      id: item.id ?? 0,
+      username: item.username ?? "",
+      email: item.email ?? "",
+      avatar_url: item.avatar_url ?? null,
+      is_admin: Boolean(item.is_admin),
+      last_login_at: item.last_login_at ?? null,
+      created_at: item.created_at ?? "",
+      updated_at: item.updated_at ?? "",
+      is_online: Boolean(item.is_online),
+      prompt_totals: {
+        total: item.prompt_totals?.total ?? 0,
+        draft: item.prompt_totals?.draft ?? 0,
+        published: item.prompt_totals?.published ?? 0,
+        archived: item.prompt_totals?.archived ?? 0,
+      },
+      latest_prompt_at: item.latest_prompt_at ?? null,
+      recent_prompts: Array.isArray(item.recent_prompts)
+        ? item.recent_prompts.map((prompt) => ({
+            id: prompt.id ?? 0,
+            topic: prompt.topic ?? "",
+            status: prompt.status ?? "",
+            updated_at: prompt.updated_at ?? "",
+            created_at: prompt.created_at ?? "",
+          }))
+        : [],
+    }));
+    return {
+      items,
+      total: typeof payload.total === "number" ? payload.total : items.length,
+      page: typeof payload.page === "number" ? payload.page : params?.page ?? 1,
+      page_size:
+        typeof payload.page_size === "number"
+          ? payload.page_size
+          : params?.pageSize ?? items.length,
+      online_threshold_seconds:
+        typeof payload.online_threshold_seconds === "number"
+          ? payload.online_threshold_seconds
+          : 0,
+    };
+  } catch (error) {
+    throw normaliseError(error);
+  }
+}
+
 export async function createChangelogEntry(
   payload: ChangelogPayload,
 ): Promise<ChangelogCreateResult> {

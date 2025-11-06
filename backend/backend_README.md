@@ -9,6 +9,7 @@
 - 新增 Prometheus 指标：后端会在 `/metrics` 暴露生成/保存相关指标，可配合 Grafana Cloud 进行性能与错误监控。
 - 管理员指标缓存就绪：`internal/service/adminmetrics` 会基于生成/保存事件维护按日聚合的活跃用户、请求量、成功率、平均耗时与保存次数，刷新周期、保留窗口通过 `ADMIN_METRICS_REFRESH_INTERVAL`、`ADMIN_METRICS_RETENTION_DAYS` 配置；新增 `GET /api/admin/metrics` 供前端仪表盘直接消费。
 - 管理员指标持久化：服务会将原始事件写入 `admin_metrics_events`，按日聚合结果写入 `admin_metrics_daily`，启动时自动回放最近 `ADMIN_METRICS_RETENTION_DAYS` 天的数据以恢复内存缓存；当快照刷新后会同步更新 MySQL 并清理过期事件。
+- 管理员用户总览上线：新增 `internal/service/adminuser` 聚合用户、Prompt 统计与最近活动，配置项通过 `ADMIN_USER_*` 控制分页、近况条数与在线阈值；`GET /api/admin/users` 返回在线状态、Prompt 数量分布及最近更新的 Prompt 摘要，便于后台巡检。
 - 解析 & 生成统一接入内容审核：新增 `Service.auditContent`，在解析前和生成后复用用户配置的模型执行违规检测，若命中策略会返回 `CONTENT_REJECTED` 错误码与可读提示，前端直接用于 toast。
 - 新增 `POST /api/prompts/import`，可上传导出的 JSON 文件并选择“合并/覆盖”模式批量回灌 Prompt，导入批大小由 `PROMPT_IMPORT_BATCH_SIZE` 控制。
 - 本地离线模式下会自动关闭邮箱验证、Prompt 生成与公共库的限流器，避免开发或演示环境频繁操作触发限流提示。
@@ -143,6 +144,60 @@
 | `ADMIN_METRICS_RETENTION_DAYS` | 内存缓存按日保留的天数，默认 `7` |
 
 > 若未配置上述变量，服务会使用默认值；将间隔缩短可提升实时性，但需评估数据库压力。
+
+### 管理员用户总览
+
+| 变量 | 作用 |
+| --- | --- |
+| `ADMIN_USER_PAGE_SIZE` | `/api/admin/users` 默认每页返回的用户数量，默认 `20` |
+| `ADMIN_USER_PAGE_SIZE_MAX` | 单页允许的最大数量，超出请求会被截断，默认 `100` |
+| `ADMIN_USER_RECENT_PROMPT_LIMIT` | 每名用户返回的“最近 Prompt”条数，默认 `3` |
+| `ADMIN_USER_ONLINE_THRESHOLD` | 计算在线状态时允许的最近登录阈值，例如 `15m` |
+
+接口 `GET /api/admin/users` 仅限管理员调用，支持 `page`、`page_size`、`query` 查询参数（模糊匹配用户名 / 邮箱）。返回结构示例：
+
+```json
+{
+  "success": true,
+  "data": {
+    "items": [
+      {
+        "id": 1,
+        "username": "alice",
+        "email": "alice@example.com",
+        "avatar_url": "/static/avatars/xx.png",
+        "is_admin": true,
+        "last_login_at": "2025-11-05T12:00:00Z",
+        "created_at": "2025-10-01T08:00:00Z",
+        "updated_at": "2025-11-05T11:59:00Z",
+        "is_online": true,
+        "prompt_totals": {
+          "total": 12,
+          "draft": 4,
+          "published": 6,
+          "archived": 2
+        },
+        "latest_prompt_at": "2025-11-05T11:55:00Z",
+        "recent_prompts": [
+          {
+            "id": 88,
+            "topic": "产品发布稿",
+            "status": "published",
+            "updated_at": "2025-11-05T11:55:00Z",
+            "created_at": "2025-11-03T09:30:00Z"
+          }
+        ]
+      }
+    ],
+    "total": 36,
+    "page": 1,
+    "page_size": 20,
+    "online_threshold_seconds": 900
+  }
+}
+```
+
+`is_online` 由 `last_login_at` 与 `ADMIN_USER_ONLINE_THRESHOLD` 比较得出；`recent_prompts` 会按照更新时间倒序返回最近活动，协助快速定位活跃用户的内容。
 
 ### 验证码与 Redis
 
@@ -332,6 +387,8 @@ go run ./backend/cmd/sendmail -to you@example.com -name "测试账号"
 
 ## 对外 API
 
+> 后端 HTTP 服务默认监听 `SERVER_PORT`（缺省值 `9090`）。下表列出的路径均需拼接在 `http://<host>:<SERVER_PORT>` 之后，例如本地调试常用的 `http://localhost:9090/api/...`。
+
 | 方法 | 路径 | 描述 | 请求参数 |
 | --- | --- | --- | --- |
 | `GET` | `/api/auth/captcha` | 获取图形验证码 | 无；按客户端 IP 控制限流 |
@@ -371,6 +428,8 @@ go run ./backend/cmd/sendmail -to you@example.com -name "测试账号"
 | `DELETE` | `/api/prompts/comments/:id/like` | 取消点赞指定评论 | 无额外参数，需登录 |
 | `POST` | `/api/prompts/comments/:id/review` | 审核评论（管理员） | JSON：`status`（`approved/rejected/pending`）、`note`（可选），需管理员权限 |
 | `DELETE` | `/api/prompts/comments/:id` | 删除评论（管理员） | 级联移除评论及其子回复，需管理员权限 |
+| `GET` | `/api/admin/metrics` | 管理员指标快照 | 无额外参数；需管理员权限，返回按 `ADMIN_METRICS_*` 配置生成的缓存 |
+| `GET` | `/api/admin/users` | 管理员用户总览 | Query：`page`、`page_size`、`query`（可选），需管理员权限 |
 | `GET` | `/api/changelog` | 获取更新日志列表 | Query：`locale`（可选，默认 `en`） |
 | `POST` | `/api/changelog` | 新增更新日志（管理员） | JSON：`locale`、`badge`、`title`、`summary`、`items[]`、`published_at` |
 | `PUT` | `/api/changelog/:id` | 编辑指定日志（管理员） | 同 `POST` |
@@ -515,6 +574,8 @@ ALTER TABLE prompts
 - **登出**：调用 `/api/auth/logout`，服务端删除刷新令牌记录，阻止后续续期；前端清理本地缓存。
 
 ### 接口详情
+
+> 本节示例默认通过 `http://localhost:9090` 访问后端服务；如果修改了 `SERVER_PORT`，请将示例中的端口替换为实际值。
 
 #### POST /api/auth/register
 
@@ -1402,6 +1463,103 @@ ALTER TABLE prompts
 - **路径参数**：`ip` 支持 IPv4/IPv6 字符串，按原样编码。
 - **成功响应**：`204`。
 - **常见错误**：Redis 不可用或 IP Guard 未启用 → `503`；非管理员 → `403`。
+
+#### GET /api/admin/metrics
+
+- **用途**：返回管理员仪表盘所需的运营指标快照，读自内存缓存，无需直接扫描数据库。
+- **请求头**：`Authorization: Bearer <access_token>`，且 `is_admin=true`。
+- **成功响应**：`200`
+
+  ```json
+  {
+    "success": true,
+    "data": {
+      "refreshed_at": "2025-11-07T01:30:00Z",
+      "range_days": 7,
+      "totals": {
+        "active_users": 42,
+        "generate_requests": 128,
+        "generate_success": 118,
+        "generate_success_rate": 0.9219,
+        "average_latency_ms": 832.5,
+        "save_requests": 56
+      },
+      "daily": [
+        {
+          "date": "2025-11-06",
+          "active_users": 18,
+          "generate_requests": 56,
+          "generate_success": 50,
+          "generate_success_rate": 0.8929,
+          "average_latency_ms": 912.0,
+          "save_requests": 21
+        }
+      ]
+    }
+  }
+  ```
+
+- **常见错误**：服务尚未完成指标初始化 → `503`；非管理员访问 → `403`。
+- **调优提示**：刷新周期与保留天数由 `ADMIN_METRICS_REFRESH_INTERVAL`、`ADMIN_METRICS_RETENTION_DAYS` 控制。
+
+#### GET /api/admin/users
+
+- **用途**：展示管理员后台的用户列表、在线状态、Prompt 统计与最近活动。
+- **请求头**：`Authorization: Bearer <access_token>`，且 `is_admin=true`。
+- **查询参数**：
+  - `page`（可选，默认 1）：分页页码。
+  - `page_size`（可选，默认 `ADMIN_USER_PAGE_SIZE`）：单页大小，受 `ADMIN_USER_PAGE_SIZE_MAX` 限制。
+  - `query`（可选）：匹配用户名或邮箱的模糊搜索。
+- **成功响应**：`200`
+
+  ```json
+  {
+    "success": true,
+    "data": {
+      "items": [
+        {
+          "id": 9,
+          "username": "ab-in",
+          "email": "ab-in-liusy@outlook.com",
+          "avatar_url": null,
+          "is_admin": true,
+          "last_login_at": "2025-11-07T01:34:00Z",
+          "created_at": "2025-10-01T08:00:00Z",
+          "updated_at": "2025-11-07T01:34:00Z",
+          "is_online": true,
+          "prompt_totals": {
+            "total": 17,
+            "draft": 1,
+            "published": 16,
+            "archived": 0
+          },
+          "latest_prompt_at": "2025-11-05T19:32:00Z",
+          "recent_prompts": [
+            {
+              "id": 128,
+              "topic": "桌面端错误排查指南",
+              "status": "published",
+              "updated_at": "2025-11-05T19:32:00Z",
+              "created_at": "2025-11-03T09:30:00Z"
+            }
+          ]
+        }
+      ],
+      "total": 36,
+      "page": 1,
+      "page_size": 20,
+      "online_threshold_seconds": 900
+    }
+  }
+  ```
+
+- **常见错误**：
+  - 非管理员访问 → `403`。
+  - `page`/`page_size` 小于等于 0 → `400`。
+  - 数据库连接异常 → `500`。
+- **判定规则**：
+  - `is_online` 通过 `last_login_at` 与 `ADMIN_USER_ONLINE_THRESHOLD`（默认 15 分钟）比较得出，阈值内登录即判为在线。
+  - `recent_prompts` 默认返回每位用户最近 `ADMIN_USER_RECENT_PROMPT_LIMIT` 条，兼容 MySQL 5.6+。
 
 ## 启动与测试
 

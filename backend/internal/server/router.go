@@ -21,6 +21,7 @@ type RouterOptions struct {
 	ModelHandler         *handler.ModelHandler
 	ChangelogHandler     *handler.ChangelogHandler
 	AdminMetricsHandler  *handler.AdminMetricsHandler
+	AdminUserHandler     *handler.AdminUserHandler
 	PromptHandler        *handler.PromptHandler
 	PromptCommentHandler *handler.PromptCommentHandler
 	PublicPromptHandler  *handler.PublicPromptHandler
@@ -109,12 +110,17 @@ func NewRouter(opts RouterOptions) *gin.Engine {
 			authGroup.POST("/verify-email/confirm", opts.AuthHandler.VerifyEmail)
 		}
 
-		if opts.AdminMetricsHandler != nil {
+		if opts.AdminMetricsHandler != nil || opts.AdminUserHandler != nil {
 			admin := api.Group("/admin")
 			if opts.AuthMW != nil {
 				admin.Use(opts.AuthMW.Handle())
 			}
-			admin.GET("/metrics", opts.AdminMetricsHandler.Overview)
+			if opts.AdminMetricsHandler != nil {
+				admin.GET("/metrics", opts.AdminMetricsHandler.Overview)
+			}
+			if opts.AdminUserHandler != nil {
+				admin.GET("/users", opts.AdminUserHandler.Overview)
+			}
 		}
 
 		// /api/users 下的路由需要登录才能访问，所以单独分组，再挂载 JWT 鉴权中间件。

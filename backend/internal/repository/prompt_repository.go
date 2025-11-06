@@ -500,6 +500,55 @@ func (r *PromptRepository) ReplacePromptVersions(ctx context.Context, promptID u
 	})
 }
 
+// UserRecentPromptRow 用于管理员用户总览中展示的 Prompt 摘要。
+type UserRecentPromptRow struct {
+	UserID    uint      `json:"user_id"`
+	PromptID  uint      `json:"prompt_id"`
+	Topic     string    `json:"topic"`
+	Status    string    `json:"status"`
+	UpdatedAt time.Time `json:"updated_at"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+// ListRecentByUsers 返回给定用户最近更新的 Prompt，数量受 limit 限制。
+func (r *PromptRepository) ListRecentByUsers(ctx context.Context, userIDs []uint, limit int) (map[uint][]UserRecentPromptRow, error) {
+	result := make(map[uint][]UserRecentPromptRow, len(userIDs))
+	if r == nil || r.db == nil {
+		return result, fmt.Errorf("prompt repository not initialised")
+	}
+	if len(userIDs) == 0 || limit <= 0 {
+		return result, nil
+	}
+	query := `
+		SELECT p1.user_id,
+		       p1.id AS prompt_id,
+		       p1.topic,
+		       p1.status,
+		       p1.updated_at,
+		       p1.created_at
+		FROM prompts AS p1
+		WHERE p1.user_id IN ?
+		  AND (
+		    SELECT COUNT(*)
+		    FROM prompts AS p2
+		    WHERE p2.user_id = p1.user_id
+		      AND (
+		        p2.updated_at > p1.updated_at
+		        OR (p2.updated_at = p1.updated_at AND p2.id > p1.id)
+		      )
+		  ) < ?
+		ORDER BY p1.user_id ASC, p1.updated_at DESC, p1.id DESC
+	`
+	var rows []UserRecentPromptRow
+	if err := r.db.WithContext(ctx).Raw(query, userIDs, limit).Scan(&rows).Error; err != nil {
+		return nil, fmt.Errorf("list recent prompts: %w", err)
+	}
+	for _, row := range rows {
+		result[row.UserID] = append(result[row.UserID], row)
+	}
+	return result, nil
+}
+
 // KeywordRepository 负责关键词的增删查改。
 type KeywordRepository struct {
 	db *gorm.DB

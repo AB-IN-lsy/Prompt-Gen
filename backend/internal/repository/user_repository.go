@@ -8,9 +8,11 @@ package repository
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"time"
 
+	"electron-go-app/backend/internal/domain/prompt"
 	"electron-go-app/backend/internal/domain/user"
 
 	"gorm.io/gorm"
@@ -171,4 +173,89 @@ func (r *UserRepository) ListByIDs(ctx context.Context, ids []uint) (map[uint]*u
 		result[records[i].ID] = &records[i]
 	}
 	return result, nil
+}
+
+// AdminUserListFilter 描述管理员用户总览查询时使用的过滤条件。
+type AdminUserListFilter struct {
+	Query  string
+	Limit  int
+	Offset int
+}
+
+// AdminUserOverviewRow 承载每位用户的聚合统计信息。
+type AdminUserOverviewRow struct {
+	ID              uint       `json:"id"`
+	Username        string     `json:"username"`
+	Email           string     `json:"email"`
+	AvatarURL       string     `json:"avatar_url"`
+	IsAdmin         bool       `json:"is_admin"`
+	LastLoginAt     *time.Time `json:"last_login_at"`
+	CreatedAt       time.Time  `json:"created_at"`
+	UpdatedAt       time.Time  `json:"updated_at"`
+	PromptTotal     int64      `json:"prompt_total"`
+	PromptDraft     int64      `json:"prompt_draft"`
+	PromptPublished int64      `json:"prompt_published"`
+	PromptArchived  int64      `json:"prompt_archived"`
+	LatestPromptAt  *time.Time `json:"latest_prompt_at"`
+}
+
+// ListAdminOverview 返回管理员后台所需的用户聚合数据，包含 Prompt 数量与最近更新时间。
+func (r *UserRepository) ListAdminOverview(ctx context.Context, filter AdminUserListFilter) ([]AdminUserOverviewRow, int64, error) {
+	if r == nil || r.db == nil {
+		return nil, 0, fmt.Errorf("user repository not initialised")
+	}
+
+	query := r.db.WithContext(ctx).Table("users AS u")
+	if trimmed := strings.TrimSpace(filter.Query); trimmed != "" {
+		pattern := "%" + trimmed + "%"
+		query = query.Where("u.username LIKE ? OR u.email LIKE ?", pattern, pattern)
+	}
+
+	countQuery := r.db.WithContext(ctx).Model(&user.User{})
+	if trimmed := strings.TrimSpace(filter.Query); trimmed != "" {
+		pattern := "%" + trimmed + "%"
+		countQuery = countQuery.Where("username LIKE ? OR email LIKE ?", pattern, pattern)
+	}
+	var total int64
+	if err := countQuery.Count(&total).Error; err != nil {
+		return nil, 0, fmt.Errorf("count admin users: %w", err)
+	}
+	if total == 0 {
+		return []AdminUserOverviewRow{}, 0, nil
+	}
+
+	selectClause := `
+		u.id,
+		u.username,
+		u.email,
+		u.avatar_url,
+		u.is_admin,
+		u.last_login_at,
+		u.created_at,
+		u.updated_at,
+		COUNT(p.id) AS prompt_total,
+		COALESCE(SUM(CASE WHEN p.status = ? THEN 1 ELSE 0 END), 0) AS prompt_draft,
+		COALESCE(SUM(CASE WHEN p.status = ? THEN 1 ELSE 0 END), 0) AS prompt_published,
+		COALESCE(SUM(CASE WHEN p.status = ? THEN 1 ELSE 0 END), 0) AS prompt_archived,
+		MAX(p.updated_at) AS latest_prompt_at
+	`
+
+	listQuery := query.
+		Select(selectClause, prompt.PromptStatusDraft, prompt.PromptStatusPublished, prompt.PromptStatusArchived).
+		Joins("LEFT JOIN prompts AS p ON p.user_id = u.id").
+		Group("u.id").
+		Order("u.created_at DESC")
+
+	if filter.Offset > 0 {
+		listQuery = listQuery.Offset(filter.Offset)
+	}
+	if filter.Limit > 0 {
+		listQuery = listQuery.Limit(filter.Limit)
+	}
+
+	var rows []AdminUserOverviewRow
+	if err := listQuery.Scan(&rows).Error; err != nil {
+		return nil, 0, fmt.Errorf("list admin users: %w", err)
+	}
+	return rows, total, nil
 }

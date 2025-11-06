@@ -29,6 +29,7 @@ import (
 	"electron-go-app/backend/internal/repository"
 	"electron-go-app/backend/internal/server"
 	adminmetricssvc "electron-go-app/backend/internal/service/adminmetrics"
+	adminusersvc "electron-go-app/backend/internal/service/adminuser"
 	authsvc "electron-go-app/backend/internal/service/auth"
 	changelogsrv "electron-go-app/backend/internal/service/changelog"
 	modelsvc "electron-go-app/backend/internal/service/model"
@@ -57,6 +58,7 @@ type Application struct {
 	PromptSvc    *promptsvc.Service
 	Changelog    *changelogsrv.Service
 	AdminMetrics *adminmetricssvc.Service
+	AdminUsers   *adminusersvc.Service
 	Router       http.Handler
 }
 
@@ -87,6 +89,8 @@ func BuildApplication(ctx context.Context, logger *zap.SugaredLogger, resources 
 	adminMetricsCfg := loadAdminMetricsConfig(logger)
 	adminMetricsSvc := adminmetricssvc.NewService(adminMetricsCfg, logger.With("component", "service.adminmetrics"), adminMetricsRepo)
 	adminMetricsSvc.Start(ctx)
+	adminUserCfg := loadAdminUserConfig(logger)
+	adminUserSvc := adminusersvc.NewService(adminUserCfg, userRepo, promptRepo, logger.With("component", "service.adminuser"))
 	if resources.Redis != nil {
 		workspaceStore = promptinfra.NewWorkspaceStore(resources.Redis)
 		persistenceQueue = promptinfra.NewPersistenceQueue(resources.Redis, "")
@@ -168,6 +172,7 @@ func BuildApplication(ctx context.Context, logger *zap.SugaredLogger, resources 
 	userService := usersvc.NewService(userRepo, modelRepo)
 	userHandler := handler.NewUserHandler(userService)
 	adminMetricsHandler := handler.NewAdminMetricsHandler(adminMetricsSvc)
+	adminUserHandler := handler.NewAdminUserHandler(adminUserSvc)
 
 	// Prompt 服务与 Handler 较为复杂，涉及关键词管理、工作空间、持久化队列等。
 	promptCfg := loadPromptConfig(logger, isLocalMode)
@@ -278,6 +283,7 @@ func BuildApplication(ctx context.Context, logger *zap.SugaredLogger, resources 
 		ModelHandler:         modelHandler,
 		ChangelogHandler:     changelogHandler,
 		AdminMetricsHandler:  adminMetricsHandler,
+		AdminUserHandler:     adminUserHandler,
 		PromptHandler:        promptHandler,
 		PromptCommentHandler: commentHandler,
 		PublicPromptHandler:  publicPromptHandler,
@@ -295,6 +301,7 @@ func BuildApplication(ctx context.Context, logger *zap.SugaredLogger, resources 
 		PromptSvc:    promptService,
 		Changelog:    changelogService,
 		AdminMetrics: adminMetricsSvc,
+		AdminUsers:   adminUserSvc,
 		Router:       router,
 	}, nil
 }
@@ -512,6 +519,26 @@ func loadAdminMetricsConfig(logger *zap.SugaredLogger) adminmetricssvc.Config {
 	return adminmetricssvc.Config{
 		RefreshInterval: interval,
 		RetentionDays:   retention,
+	}
+}
+
+// loadAdminUserConfig 读取管理员用户总览页面依赖的分页、阈值等配置。
+func loadAdminUserConfig(logger *zap.SugaredLogger) adminusersvc.Config {
+	defaultPage := parseIntEnv("ADMIN_USER_PAGE_SIZE", 20, logger)
+	maxPage := parseIntEnv("ADMIN_USER_PAGE_SIZE_MAX", 100, logger)
+	if maxPage < defaultPage {
+		maxPage = defaultPage
+	}
+	recentLimit := parseIntEnv("ADMIN_USER_RECENT_PROMPT_LIMIT", 3, logger)
+	threshold := parseDurationEnv("ADMIN_USER_ONLINE_THRESHOLD", 15*time.Minute, logger)
+	if threshold <= 0 {
+		threshold = 15 * time.Minute
+	}
+	return adminusersvc.Config{
+		DefaultPageSize:   defaultPage,
+		MaxPageSize:       maxPage,
+		RecentPromptLimit: recentLimit,
+		OnlineThreshold:   threshold,
 	}
 }
 

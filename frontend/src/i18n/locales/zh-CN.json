@@ -32,6 +32,7 @@
     "changelogAdmin": "管理更新日志",
     "help": "帮助中心",
     "adminSection": "管理后台",
+    "adminUsers": "用户总览",
     "adminMetrics": "运营监控"
   },
   "helpPage": {
@@ -695,6 +696,7 @@
     "cancel": "取消",
     "close": "关闭",
     "loading": "加载中...",
+    "untitled": "未命名",
     "search": "搜索",
     "retry": "重试"
   },
@@ -1116,6 +1118,53 @@
     "EMAIL_ALREADY_VERIFIED": "邮箱已验证，无需重复操作。",
     "VERIFICATION_TOKEN_INVALID": "验证码无效或已过期，请重新获取。",
     "INVALID_CREDENTIALS": "邮箱或密码错误，请检查后重试。"
+  },
+  "adminUsersPage": {
+    "eyebrow": "管理后台",
+    "title": "用户总览",
+    "subtitle": "查看用户在线状态与 Prompt 使用情况。",
+    "searchPlaceholder": "搜索用户名或邮箱…",
+    "summary": {
+      "totalUsers": "总用户",
+      "onlineUsers": "在线用户",
+      "totalPrompts": "Prompt 总数",
+      "publishedPrompts": "已发布"
+    },
+    "actions": {
+      "refresh": "刷新",
+      "clear": "清除"
+    },
+    "meta": {
+      "onlineThreshold": "在线判定阈值：{{minutes}} 分钟内登录视为在线"
+    },
+    "table": {
+      "username": "用户名",
+      "email": "邮箱",
+      "online": "在线状态",
+      "onlineLabel": "在线",
+      "offline": "离线",
+      "lastLogin": "最近登录",
+      "promptOverview": "Prompt 概览",
+      "recentPrompt": "最近 Prompt",
+      "empty": "暂无符合条件的用户",
+      "noRecentPrompts": "暂无最近活动",
+      "recentUpdatedAt": "{{time}} 更新",
+      "lastPromptUpdated": "最近更新：{{time}}",
+      "never": "未记录"
+    },
+    "promptTotals": {
+      "total": "总数",
+      "draft": "草稿",
+      "published": "已发布",
+      "archived": "已归档"
+    },
+    "pagination": {
+      "prev": "上一页",
+      "next": "下一页",
+      "page": "第 {{page}} / {{total}} 页",
+      "count": "当前展示 {{count}} 位用户"
+    },
+    "accessDeniedTitle": "无权限访问用户总览"
   },
   "adminMetricsPage": {
     "eyebrow": "运营监控",
