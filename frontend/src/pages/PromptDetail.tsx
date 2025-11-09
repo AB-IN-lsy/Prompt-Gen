@@ -5,7 +5,7 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { toast } from "sonner";
-import { History, LoaderCircle, UploadCloud, X } from "lucide-react";
+import { History, LoaderCircle, Share2, UploadCloud, X } from "lucide-react";
 
 import { PageHeader } from "../components/layout/PageHeader";
 import { GlassCard } from "../components/ui/glass-card";
@@ -19,6 +19,8 @@ import {
   fetchPromptVersions,
   normaliseKeywordSource,
   submitPublicPrompt,
+  sharePrompt,
+  type SharePromptResponse,
   type PublicPromptSubmitPayload,
   type PublicPromptSubmitResult,
   type KeywordSource,
@@ -70,6 +72,8 @@ export default function PromptDetailPage(): JSX.Element {
   );
   const [submitUseSelectedVersion, setSubmitUseSelectedVersion] =
     useState(false);
+  const [shareDialogOpen, setShareDialogOpen] = useState(false);
+  const [shareResult, setShareResult] = useState<SharePromptResponse | null>(null);
 
   const resetWorkbench = usePromptWorkbench((state) => state.reset);
   const setTopic = usePromptWorkbench((state) => state.setTopic);
@@ -218,6 +222,22 @@ export default function PromptDetailPage(): JSX.Element {
         error instanceof Error
           ? error.message
           : t("promptDetail.publicSubmit.error");
+      toast.error(message);
+    },
+  });
+
+  const shareMutation = useMutation<SharePromptResponse, unknown, number>({
+    mutationFn: (targetId: number) => sharePrompt(targetId),
+    onSuccess: (data) => {
+      setShareResult(data);
+      setShareDialogOpen(true);
+      toast.success(t("promptDetail.share.success"));
+    },
+    onError: (error: unknown) => {
+      const message =
+        error instanceof Error
+          ? error.message
+          : t("promptDetail.share.error");
       toast.error(message);
     },
   });
@@ -487,6 +507,27 @@ const handleOpenSubmit = () => {
     submitMutation.mutate(payload);
   };
 
+  const handleShare = () => {
+    if (!detail || shareMutation.isPending) {
+      return;
+    }
+    shareMutation.mutate(detail.id);
+  };
+
+  const handleCopyShare = async () => {
+    if (!shareResult?.payload) {
+      toast.error(t("promptDetail.share.error"));
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(shareResult.payload);
+      toast.success(t("promptDetail.share.copied"));
+    } catch (error) {
+      console.error("copy share payload failed", error);
+      toast.error(t("promptDetail.copy.failed"));
+    }
+  };
+
   return (
     <div className="flex h-full flex-col gap-6">
       <PageHeader
@@ -509,6 +550,19 @@ const handleOpenSubmit = () => {
               className="transition-transform hover:-translate-y-0.5"
             >
               {t("promptDetail.actions.edit", { defaultValue: "继续编辑" })}
+            </Button>
+            <Button
+              variant="outline"
+              onClick={handleShare}
+              disabled={!detail || shareMutation.isPending}
+              className="transition-transform hover:-translate-y-0.5"
+            >
+              {shareMutation.isPending ? (
+                <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <Share2 className="mr-2 h-4 w-4" />
+              )}
+              {t("promptDetail.actions.share", { defaultValue: "分享" })}
             </Button>
             {activeGenerationProfile ? (
               <Button
@@ -1090,6 +1144,15 @@ const handleOpenSubmit = () => {
           </GlassCard>
         </div>
       ) : null}
+      <ShareDialog
+        open={shareDialogOpen}
+        topic={shareResult?.topic ?? detail?.topic ?? ""}
+        payload={shareResult?.payload ?? ""}
+        generatedAt={shareResult?.generated_at}
+        payloadSize={shareResult?.payload_size}
+        onCopy={handleCopyShare}
+        onClose={() => setShareDialogOpen(false)}
+      />
     </div>
   );
 }
@@ -1194,6 +1257,113 @@ function ErrorState({ onRetry }: { onRetry: () => void }) {
       <Button variant="secondary" onClick={onRetry}>
         {t("common.retry")}
       </Button>
+    </div>
+  );
+}
+
+interface ShareDialogProps {
+  open: boolean;
+  payload: string;
+  topic: string;
+  generatedAt?: string;
+  payloadSize?: number;
+  onCopy: () => void;
+  onClose: () => void;
+}
+
+function ShareDialog({
+  open,
+  payload,
+  topic,
+  generatedAt,
+  payloadSize,
+  onCopy,
+  onClose,
+}: ShareDialogProps) {
+  const { t, i18n } = useTranslation();
+
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+    const handler = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        onClose();
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [open, onClose]);
+
+  if (!open) {
+    return null;
+  }
+
+  const formatter = new Intl.DateTimeFormat(i18n.language, {
+    dateStyle: "medium",
+    timeStyle: "short",
+  });
+  const formattedTime = generatedAt ? formatter.format(new Date(generatedAt)) : null;
+  const charCount = typeof payloadSize === "number" ? payloadSize : payload.length;
+
+  return (
+    <div className="fixed inset-0 z-[130] flex items-center justify-center px-6 py-10">
+      <div
+        className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
+        onClick={onClose}
+        role="presentation"
+      />
+      <GlassCard className="relative z-[131] w-full max-w-2xl space-y-5 bg-white/95 text-slate-700 dark:bg-slate-900/80 dark:text-slate-200">
+        <div className="space-y-1">
+          <p className="text-xs font-semibold uppercase tracking-[0.3em] text-primary">
+            {t("promptDetail.share.title")}
+          </p>
+          <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
+            {topic || t("common.untitled")}
+          </h2>
+          <p className="text-sm text-slate-500 dark:text-slate-400">
+            {t("promptDetail.share.description")}
+          </p>
+        </div>
+        <Textarea
+          readOnly
+          value={payload}
+          rows={4}
+          className="h-auto min-h-[120px] rounded-2xl border border-slate-200 bg-white/70 font-mono text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-100"
+        />
+        <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-slate-500 dark:text-slate-400">
+          <span>
+            {t("promptDetail.share.payloadLength", {
+              count: charCount,
+            })}
+          </span>
+          {formattedTime ? (
+            <span>
+              {t("promptDetail.share.generatedAt", {
+                time: formattedTime,
+              })}
+            </span>
+          ) : null}
+        </div>
+        <div className="flex items-center justify-end gap-3">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={onClose}
+            className="border-slate-200 text-slate-600 hover:border-primary/40 hover:bg-primary/10 hover:text-primary dark:border-slate-700 dark:text-slate-300"
+          >
+            {t("common.close")}
+          </Button>
+          <Button
+            type="button"
+            onClick={onCopy}
+            disabled={!payload}
+            className="bg-primary text-primary-foreground hover:bg-primary/90"
+          >
+            {t("promptDetail.share.copy")}
+          </Button>
+        </div>
+      </GlassCard>
     </div>
   );
 }

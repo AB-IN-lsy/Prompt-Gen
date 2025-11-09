@@ -594,6 +594,19 @@
     "eyebrow": "Prompt library",
     "title": "My prompts",
     "subtitle": "Search, filter, and revisit drafts or published prompts at any time.",
+    "shareImport": {
+      "title": "Import share string",
+      "button": "Import share string",
+      "dialogTitle": "Paste the PGSHARE string",
+      "dialogDescription": "Use the Share button in a prompt detail page to generate a string that starts with PGSHARE-. Copy it here to recreate the prompt locally.",
+      "placeholder": "PGSHARE-...",
+      "hint": "Only plain text is supported. Please do not paste screenshots or attachments.",
+      "confirm": "Import now",
+      "loading": "Importing...",
+      "empty": "Paste the share string first",
+      "success": "Imported \"{{topic}}\". Check your list for the new draft.",
+      "error": "Failed to import the share string. Please try again later."
+    },
     "openWorkbench": "Open workbench",
     "manageBackups": "Manage backups",
     "export": {
@@ -879,10 +892,21 @@
     "actions": {
       "back": "Go back",
       "edit": "Continue editing",
+      "share": "Share",
       "viewGenerationProfile": "View generation settings",
       "copyBody": "Copy body",
       "copyMarkdown": "Copy Markdown",
       "submitPublic": "Submit to library"
+    },
+    "share": {
+      "title": "Share this prompt",
+      "description": "Copy the share string below and paste it into another PromptGen client to import offline.",
+      "copy": "Copy share string",
+      "copied": "Share string copied",
+      "payloadLength": "Characters: {{count}}",
+      "generatedAt": "Generated at {{time}}",
+      "success": "Share string ready. Paste it anywhere you like.",
+      "error": "Failed to generate share string. Please try again later."
     },
     "publicSubmit": {
       "title": "Submit to the public prompt library",

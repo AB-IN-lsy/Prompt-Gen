@@ -3,6 +3,7 @@ package prompt
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -79,6 +80,8 @@ type Service struct {
 	generationDefault   promptdomain.GenerationProfile
 	generationBounds    generationBounds
 	adminMetrics        *adminmetrics.Service
+	sharePrefix         string
+	shareMaxEncodedLen  int
 }
 
 const (
@@ -110,6 +113,12 @@ const DefaultVersionRetentionLimit = 5
 
 // DefaultImportBatchSize 控制导入 Prompt 时的批处理大小。
 const DefaultImportBatchSize = 20
+
+// DefaultSharePrefix 定义分享串使用的默认前缀。
+const DefaultSharePrefix = "PGSHARE"
+
+// DefaultShareMaxEncodedLength 限制分享串中编码内容的默认最大长度，防止剪贴板写入超大文本。
+const DefaultShareMaxEncodedLength = 16384
 
 const (
 	workspaceAttrInstructions      = "instructions"
@@ -202,6 +211,10 @@ var (
 	ErrTagLimitExceeded = errors.New("tags exceed limit")
 	// ErrModelInvocationFailed 表示调用模型失败，通常由网络或凭据问题导致。
 	ErrModelInvocationFailed = errors.New("model invocation failed")
+	// ErrSharePayloadInvalid 表示分享串解析失败或格式非法。
+	ErrSharePayloadInvalid = errors.New("share payload invalid")
+	// ErrSharePayloadTooLarge 表示分享串超出配置的长度上限。
+	ErrSharePayloadTooLarge = errors.New("share payload too large")
 )
 
 // Config 汇总 Prompt 服务的可配置参数。
@@ -219,6 +232,7 @@ type Config struct {
 	Audit               AuditConfig
 	FreeTier            FreeTierConfig
 	Generation          GenerationConfig
+	Share               ShareConfig
 }
 
 // GenerationConfig 描述 Prompt 生成参数的可配置范围与默认值。
@@ -233,6 +247,12 @@ type GenerationConfig struct {
 	MinMaxTokens       int
 	MaxMaxTokens       int
 	DefaultStepwise    bool
+}
+
+// ShareConfig 描述分享串的编码前缀与长度限制。
+type ShareConfig struct {
+	Prefix          string
+	MaxEncodedBytes int
 }
 
 // FreeTierUsageSnapshot 描述免费额度的当前余量与重置时间。
@@ -315,6 +335,15 @@ func NewServiceWithConfig(prompts *repository.PromptRepository, keywords *reposi
 	}
 	maxTokensDefault := clampInt(genCfg.DefaultMaxTokens, genCfg.MinMaxTokens, genCfg.MaxMaxTokens)
 	cfg.Generation = genCfg
+	shareCfg := cfg.Share
+	sharePrefix := strings.TrimSpace(shareCfg.Prefix)
+	if sharePrefix == "" {
+		sharePrefix = DefaultSharePrefix
+	}
+	shareMaxLen := shareCfg.MaxEncodedBytes
+	if shareMaxLen <= 0 {
+		shareMaxLen = DefaultShareMaxEncodedLength
+	}
 	baseExportDir := strings.TrimSpace(cfg.ExportDirectory)
 	if baseExportDir == "" {
 		baseExportDir = DefaultPromptExportDir
@@ -358,6 +387,8 @@ func NewServiceWithConfig(prompts *repository.PromptRepository, keywords *reposi
 		exportDir:           normalisedExportDir,
 		versionKeepLimit:    cfg.VersionRetention,
 		importBatchSize:     cfg.ImportBatchSize,
+		sharePrefix:         sharePrefix,
+		shareMaxEncodedLen:  shareMaxLen,
 		freeTier:            freeTier,
 		generationDefault: promptdomain.GenerationProfile{
 			StepwiseReasoning: genCfg.DefaultStepwise,
@@ -577,6 +608,42 @@ type promptExportEnvelope struct {
 	Prompts     []promptExportRecord `json:"prompts"`
 }
 
+const sharePayloadVersion = 1
+
+type promptShareEnvelope struct {
+	Version     int                `json:"version"`
+	GeneratedAt time.Time          `json:"generated_at"`
+	Prompt      promptExportRecord `json:"prompt"`
+}
+
+// SharePromptInput 描述生成分享串所需的参数。
+type SharePromptInput struct {
+	UserID   uint
+	PromptID uint
+}
+
+// SharePromptOutput 返回分享串以及基础元数据。
+type SharePromptOutput struct {
+	Payload     string
+	Topic       string
+	GeneratedAt time.Time
+	PayloadSize int
+}
+
+// ImportSharedPromptInput 描述通过分享串导入 Prompt 的请求。
+type ImportSharedPromptInput struct {
+	UserID  uint
+	Payload string
+}
+
+// ImportSharedPromptResult 返回导入后的 Prompt 元信息。
+type ImportSharedPromptResult struct {
+	PromptID   uint
+	Topic      string
+	Status     string
+	ImportedAt time.Time
+}
+
 // ImportMode 定义导入 Prompt 时的模式。
 type ImportMode string
 
@@ -711,6 +778,117 @@ func (s *Service) ImportPrompts(ctx context.Context, input ImportPromptsInput) (
 			s.logger.Infow("prompt import progress", "processed", idx+1, "total", total)
 		}
 	}
+	return result, nil
+}
+
+// SharePrompt 根据指定 Prompt 生成分享串，便于离线客户端复制导入。
+func (s *Service) SharePrompt(ctx context.Context, input SharePromptInput) (SharePromptOutput, error) {
+	var output SharePromptOutput
+	if input.UserID == 0 || input.PromptID == 0 {
+		return output, errors.New("user id and prompt id are required")
+	}
+	entity, err := s.prompts.FindByID(ctx, input.UserID, input.PromptID)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return output, ErrPromptNotFound
+		}
+		return output, fmt.Errorf("load prompt for share: %w", err)
+	}
+	record := s.buildShareRecord(entity)
+	envelope := promptShareEnvelope{
+		Version:     sharePayloadVersion,
+		GeneratedAt: time.Now().UTC(),
+		Prompt:      record,
+	}
+	encoded, err := json.Marshal(envelope)
+	if err != nil {
+		return output, fmt.Errorf("encode share envelope: %w", err)
+	}
+	compressed := base64.RawURLEncoding.EncodeToString(encoded)
+	if s.shareMaxEncodedLen > 0 && len(compressed) > s.shareMaxEncodedLen {
+		return output, ErrSharePayloadTooLarge
+	}
+	payload := fmt.Sprintf("%s-%s", s.sharePrefix, compressed)
+	output.Payload = payload
+	output.Topic = record.Topic
+	output.GeneratedAt = envelope.GeneratedAt
+	output.PayloadSize = len(payload)
+	return output, nil
+}
+
+// ImportSharedPrompt 解析分享串并为当前用户创建一份新的 Prompt 副本。
+func (s *Service) ImportSharedPrompt(ctx context.Context, input ImportSharedPromptInput) (ImportSharedPromptResult, error) {
+	var result ImportSharedPromptResult
+	if input.UserID == 0 {
+		return result, errors.New("user id is required")
+	}
+	encoded, err := s.extractShareEncodedSegment(input.Payload)
+	if err != nil {
+		return result, err
+	}
+	data, decodeErr := base64.RawURLEncoding.DecodeString(encoded)
+	if decodeErr != nil {
+		if fallback, fallbackErr := base64.StdEncoding.DecodeString(encoded); fallbackErr == nil {
+			data = fallback
+		} else {
+			return result, ErrSharePayloadInvalid
+		}
+	}
+	var envelope promptShareEnvelope
+	if err := json.Unmarshal(data, &envelope); err != nil {
+		return result, ErrSharePayloadInvalid
+	}
+	if envelope.Version != sharePayloadVersion {
+		return result, ErrSharePayloadInvalid
+	}
+	record := envelope.Prompt
+	topic := strings.TrimSpace(record.Topic)
+	if topic == "" {
+		return result, ErrSharePayloadInvalid
+	}
+	body := strings.TrimSpace(record.Body)
+	if body == "" {
+		return result, ErrSharePayloadInvalid
+	}
+	model := strings.TrimSpace(record.Model)
+	if model == "" {
+		return result, ErrSharePayloadInvalid
+	}
+	positive := exportKeywordsToKeywordItems(record.PositiveKeywords, promptdomain.KeywordPolarityPositive)
+	negative := exportKeywordsToKeywordItems(record.NegativeKeywords, promptdomain.KeywordPolarityNegative)
+	if limit := s.keywordLimit; limit > 0 {
+		if len(positive) > limit {
+			positive = positive[:limit]
+		}
+		if len(negative) > limit {
+			negative = negative[:limit]
+		}
+	}
+	tags := s.truncateTags(record.Tags)
+	profile := record.GenerationProfile
+	normalizedProfile := s.normalizeGenerationProfile(&profile)
+	saveInput := SaveInput{
+		UserID:           input.UserID,
+		PromptID:         0,
+		Topic:            topic,
+		Body:             body,
+		Instructions:     record.Instructions,
+		Model:            model,
+		Status:           promptdomain.PromptStatusDraft,
+		Publish:          false,
+		Tags:             tags,
+		PositiveKeywords: positive,
+		NegativeKeywords: negative,
+	}
+	saveInput.GenerationProfile = &normalizedProfile
+	saveResult, err := s.persistPrompt(ctx, saveInput, promptdomain.PromptStatusDraft, "")
+	if err != nil {
+		return result, err
+	}
+	result.PromptID = saveResult.PromptID
+	result.Topic = topic
+	result.Status = promptdomain.PromptStatusDraft
+	result.ImportedAt = time.Now().UTC()
 	return result, nil
 }
 
@@ -3311,6 +3489,97 @@ func decodeTags(raw string) []string {
 		}
 	}
 	return cleaned
+}
+
+// buildShareRecord 把 Prompt 实体转换为分享串使用的精简结构，去除用户偏好等个性化字段。
+func (s *Service) buildShareRecord(entity *promptdomain.Prompt) promptExportRecord {
+	if entity == nil {
+		return promptExportRecord{}
+	}
+	positive := keywordItemsToDomain(decodePromptKeywords(entity.PositiveKeywords))
+	negative := keywordItemsToDomain(decodePromptKeywords(entity.NegativeKeywords))
+	tags := s.truncateTags(decodeTags(entity.Tags))
+	status := strings.TrimSpace(entity.Status)
+	if status == "" {
+		status = promptdomain.PromptStatusDraft
+	}
+	return promptExportRecord{
+		Topic:             strings.TrimSpace(entity.Topic),
+		Body:              entity.Body,
+		Instructions:      entity.Instructions,
+		Model:             strings.TrimSpace(entity.Model),
+		Status:            status,
+		Tags:              tags,
+		PositiveKeywords:  positive,
+		NegativeKeywords:  negative,
+		IsFavorited:       false,
+		PublishedAt:       entity.PublishedAt,
+		CreatedAt:         entity.CreatedAt,
+		UpdatedAt:         entity.UpdatedAt,
+		LatestVersionNo:   entity.LatestVersionNo,
+		GenerationProfile: s.decodeGenerationProfile(entity.GenerationProfile),
+	}
+}
+
+// extractShareEncodedSegment 从分享串中提取 Base64 负载，兼容粘贴其它文案的情况。
+func (s *Service) extractShareEncodedSegment(raw string) (string, error) {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return "", ErrSharePayloadInvalid
+	}
+	prefix := strings.ToLower(strings.TrimSpace(s.sharePrefix))
+	if prefix == "" {
+		prefix = strings.ToLower(DefaultSharePrefix)
+	}
+	key := prefix + "-"
+	lowerPayload := strings.ToLower(trimmed)
+	idx := strings.Index(lowerPayload, key)
+	if idx < 0 {
+		return "", ErrSharePayloadInvalid
+	}
+	start := idx + len(key)
+	suffix := trimmed[start:]
+	suffix = strings.TrimLeftFunc(suffix, unicode.IsSpace)
+	var builder strings.Builder
+	for _, r := range suffix {
+		if unicode.IsSpace(r) && builder.Len() == 0 {
+			continue
+		}
+		if !isShareRune(r) {
+			break
+		}
+		builder.WriteRune(r)
+		if s.shareMaxEncodedLen > 0 && builder.Len() > s.shareMaxEncodedLen {
+			return "", ErrSharePayloadTooLarge
+		}
+	}
+	encoded := builder.String()
+	if encoded == "" {
+		return "", ErrSharePayloadInvalid
+	}
+	if s.shareMaxEncodedLen > 0 && len(encoded) > s.shareMaxEncodedLen {
+		return "", ErrSharePayloadTooLarge
+	}
+	return encoded, nil
+}
+
+// isShareRune 判断字符是否属于 Base64/URL 安全字符集，便于解析分享串。
+func isShareRune(r rune) bool {
+	if r >= 'a' && r <= 'z' {
+		return true
+	}
+	if r >= 'A' && r <= 'Z' {
+		return true
+	}
+	if r >= '0' && r <= '9' {
+		return true
+	}
+	switch r {
+	case '-', '_', '=', '+', '/':
+		return true
+	default:
+		return false
+	}
 }
 
 // clampFloat 将浮点值限制在 [min, max] 区间内，避免模型参数越界。

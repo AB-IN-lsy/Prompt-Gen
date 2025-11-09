@@ -13,6 +13,7 @@
 - **评论点赞体验**：公共 Prompt 评论区支持点赞与取消点赞，按钮会即时刷新点赞数与当前状态，未登录或离线模式会提示无法操作。
   - 列表渲染读取 `like_count` 与 `is_liked` 字段，调用 `POST/DELETE /api/prompts/comments/:id/like` 更新点赞态。
   - 未通过审核的评论不可点赞；离线模式、未登录用户点击会提示 `comments.likeLoginRequired`。
+- **Prompt 分享串**：Prompt 详情页新增“分享”按钮，调用 `POST /api/prompts/:id/share` 生成 `PGSHARE-*` 文本并复制；“我的 Prompt” 页签提供“导入分享串”对话框，粘贴 `PGSHARE-` 即可通过 `/api/prompts/share/import` 在当前账号下创建草稿。
 - **关键词配置**：根目录 `.env(.local)` 支持 `VITE_KEYWORD_ROW_LIMIT`（默认 3）与 `VITE_DEFAULT_KEYWORD_WEIGHT`（默认 5）等字段，可快速调节前端关键词与权重默认值。
 - **请求与生成等待**：
   - `VITE_API_REQUEST_TIMEOUT_MS`（默认 60000）用于控制 Axios 请求超时时间，AI 生成等耗时操作可按需放宽。

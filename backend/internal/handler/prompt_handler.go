@@ -205,6 +205,11 @@ type saveRequest struct {
 	GenerationProfile *generationProfilePayload `json:"generation_profile"`
 }
 
+// shareImportRequest 用于接收分享串导入的参数。
+type shareImportRequest struct {
+	Payload string `json:"payload" binding:"required"`
+}
+
 // favoriteRequest 用于切换收藏状态的请求体。
 type favoriteRequest struct {
 	Favorited bool `json:"favorited"`
@@ -349,6 +354,82 @@ func (h *PromptHandler) ImportPrompts(c *gin.Context) {
 		"imported_count": result.Imported,
 		"skipped_count":  result.Skipped,
 		"errors":         result.Errors,
+	}, nil)
+}
+
+// SharePrompt 返回指定 Prompt 的分享串，便于复制给其他离线客户端。
+func (h *PromptHandler) SharePrompt(c *gin.Context) {
+	log := h.scope("share_prompt")
+	userID, ok := extractUserID(c)
+	if !ok {
+		response.Fail(c, http.StatusUnauthorized, response.ErrUnauthorized, "missing user id", nil)
+		return
+	}
+	promptID, err := strconv.ParseUint(strings.TrimSpace(c.Param("id")), 10, 64)
+	if err != nil || promptID == 0 {
+		response.Fail(c, http.StatusBadRequest, response.ErrBadRequest, "invalid prompt id", nil)
+		return
+	}
+	result, err := h.service.SharePrompt(c.Request.Context(), promptsvc.SharePromptInput{
+		UserID:   userID,
+		PromptID: uint(promptID),
+	})
+	if err != nil {
+		if errors.Is(err, promptsvc.ErrPromptNotFound) {
+			response.Fail(c, http.StatusNotFound, response.ErrNotFound, "prompt not found", nil)
+			return
+		}
+		if errors.Is(err, promptsvc.ErrSharePayloadTooLarge) {
+			response.Fail(c, http.StatusBadRequest, response.ErrBadRequest, "分享内容超过允许长度", nil)
+			return
+		}
+		log.Errorw("share prompt failed", "error", err, "user_id", userID, "prompt_id", promptID)
+		response.Fail(c, http.StatusInternalServerError, response.ErrInternal, "生成分享串失败", nil)
+		return
+	}
+	response.Success(c, http.StatusOK, gin.H{
+		"payload":      result.Payload,
+		"topic":        result.Topic,
+		"generated_at": result.GeneratedAt,
+		"payload_size": result.PayloadSize,
+	}, nil)
+}
+
+// ImportSharedPrompt 接收分享串并在当前账户下创建一份 Prompt 副本。
+func (h *PromptHandler) ImportSharedPrompt(c *gin.Context) {
+	log := h.scope("share_import")
+	userID, ok := extractUserID(c)
+	if !ok {
+		response.Fail(c, http.StatusUnauthorized, response.ErrUnauthorized, "missing user id", nil)
+		return
+	}
+	var req shareImportRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Fail(c, http.StatusBadRequest, response.ErrBadRequest, "payload required", nil)
+		return
+	}
+	result, err := h.service.ImportSharedPrompt(c.Request.Context(), promptsvc.ImportSharedPromptInput{
+		UserID:  userID,
+		Payload: req.Payload,
+	})
+	if err != nil {
+		if errors.Is(err, promptsvc.ErrSharePayloadInvalid) {
+			response.Fail(c, http.StatusBadRequest, response.ErrBadRequest, "分享串格式不正确", nil)
+			return
+		}
+		if errors.Is(err, promptsvc.ErrSharePayloadTooLarge) {
+			response.Fail(c, http.StatusBadRequest, response.ErrBadRequest, "分享串超出长度限制", nil)
+			return
+		}
+		log.Errorw("import shared prompt failed", "error", err, "user_id", userID)
+		response.Fail(c, http.StatusInternalServerError, response.ErrInternal, "导入分享串失败", nil)
+		return
+	}
+	response.Success(c, http.StatusOK, gin.H{
+		"prompt_id":   result.PromptID,
+		"topic":       result.Topic,
+		"status":      result.Status,
+		"imported_at": result.ImportedAt,
 	}, nil)
 }
 

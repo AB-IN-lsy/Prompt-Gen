@@ -156,6 +156,8 @@ func NewRouter(opts RouterOptions) *gin.Engine {
 				prompts.GET("/:id/versions/:version", opts.PromptHandler.GetPromptVersion)
 				prompts.POST("/export", opts.PromptHandler.ExportPrompts)
 				prompts.POST("/import", opts.PromptHandler.ImportPrompts)
+				prompts.POST("/:id/share", opts.PromptHandler.SharePrompt)
+				prompts.POST("/share/import", opts.PromptHandler.ImportSharedPrompt)
 				prompts.POST("/interpret", opts.PromptHandler.Interpret)
 				prompts.POST("/keywords/augment", opts.PromptHandler.AugmentKeywords)
 				prompts.POST("/keywords/manual", opts.PromptHandler.AddManualKeyword)

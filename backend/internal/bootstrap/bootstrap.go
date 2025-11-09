@@ -612,6 +612,10 @@ func loadPromptConfig(logger *zap.SugaredLogger, isLocal bool) promptsvc.Config 
 			MaxMaxTokens:       parseIntEnv("PROMPT_GENERATE_MAX_OUTPUT_MAX", promptsvc.MaxGenerationMaxTokens, logger),
 			DefaultStepwise:    parseBoolEnv("PROMPT_GENERATE_STEPWISE_DEFAULT", false),
 		},
+		Share: promptsvc.ShareConfig{
+			Prefix:          strings.TrimSpace(os.Getenv("PROMPT_SHARE_PREFIX")),
+			MaxEncodedBytes: parseIntEnv("PROMPT_SHARE_MAX_BYTES", promptsvc.DefaultShareMaxEncodedLength, logger),
+		},
 	}
 }
 

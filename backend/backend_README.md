@@ -33,6 +33,7 @@
 - 邮件发送新增阿里云 DirectMail 发信器，优先使用 DirectMail，未配置时自动回退到 SMTP。
 - 新增 Prompt 导出能力，调用 `POST /api/prompts/export` 会生成包含全部 Prompt 的 JSON 文件，并在响应中返回本地保存路径，目录通过 `PROMPT_EXPORT_DIR` 配置。
 - 在线模式新增 DeepSeek 免费额度：未配置模型凭据的用户会自动使用内置密钥完成解析/生成，每日调用次数默认 10 次，可通过 `PROMPT_FREE_TIER_*` 环境变量调整，超过额度将返回 429 提示用户改用自有模型。
+- Prompt 分享串上线：`POST /api/prompts/:id/share` 生成以 `PGSHARE-` 开头的分享文本，可复制到任意 IM/邮件；`POST /api/prompts/share/import` 粘贴分享串即可在当前账户下创建草稿，相关长度与前缀分别由 `PROMPT_SHARE_MAX_BYTES`、`PROMPT_SHARE_PREFIX` 控制。
 - Prompt 历史版本接口可用：新增 `GET /api/prompts/:id/versions` 与 `GET /api/prompts/:id/versions/:version`，支持查看历史版本详情，保留数量由 `PROMPT_VERSION_KEEP_LIMIT` 控制。
 - 启动流程拆分为 `internal/app.InitResources`（负责连接/迁移）与 `internal/bootstrap.BuildApplication`（负责装配依赖），提升职责清晰度。
 - 新增 `/api/models` 系列接口，支持模型凭据的创建、查看、更新与删除，API Key 会在入库前加密。
@@ -416,6 +417,8 @@ go run ./backend/cmd/sendmail -to you@example.com -name "测试账号"
 | `DELETE` | `/api/prompts/:id/like` | 取消点赞 Prompt | 无 |
 | `POST` | `/api/prompts/export` | 导出当前用户的 Prompt 并返回本地保存路径 | 无 |
 | `POST` | `/api/prompts/import` | 导入导出的 Prompt JSON（支持合并/覆盖模式） | multipart：`file`（JSON 文件）、`mode`（可选，merge/overwrite）；或直接提交 JSON 正文 |
+| `POST` | `/api/prompts/:id/share` | 生成 `PGSHARE-` 分享串 | 路径参数 `id`；无需请求体 |
+| `POST` | `/api/prompts/share/import` | 粘贴分享串并创建草稿 | JSON：`payload`（`PGSHARE-` 文本） |
 | `GET` | `/api/prompts/:id` | 获取单条 Prompt 详情并返回最新工作区 token | 无 |
 | `GET` | `/api/prompts/:id/versions` | 列出指定 Prompt 的历史版本 | Query：`limit`（可选，默认保留配置中的数量） |
 | `GET` | `/api/prompts/:id/versions/:version` | 获取指定版本的完整内容 | 无 |
@@ -1035,6 +1038,60 @@ ALTER TABLE prompts
   - 正/负关键词、标签、正文等字段会走与 `POST /api/prompts` 相同的校验逻辑；不符合要求的条目会加入 `errors` 列表并跳过。
   - 导入批处理大小由 `PROMPT_IMPORT_BATCH_SIZE` 控制，默认每批 20 条，并会在日志中输出进度。
   - 历史版本无法完整恢复时，服务会创建一条最新版本快照，版本号沿用导出文件中的 `latest_version_no`。
+
+#### POST /api/prompts/:id/share
+
+- **用途**：生成以 `PGSHARE-` 开头的分享串，可粘贴到 IM/邮件中，由另一台离线客户端导入。
+- **请求体**：无，路径参数携带 Prompt ID。
+- **成功响应**：`200`
+
+  ```json
+  {
+    "success": true,
+    "data": {
+      "payload": "PGSHARE-QUJDREVGR0hJSktMTU4",
+      "topic": "React 面试官自检",
+      "payload_size": 64,
+      "generated_at": "2025-10-12T08:30:45Z"
+    }
+  }
+  ```
+
+- **说明**：分享串长度由 `PROMPT_SHARE_MAX_BYTES` 控制，超过阈值会返回 `400` 并提示“分享内容超过允许长度”。
+
+#### POST /api/prompts/share/import
+
+- **用途**：粘贴 `PGSHARE-` 分享串并为当前账号创建一份草稿副本。
+- **请求体**：`{ "payload": "PGSHARE-..." }`
+- **成功响应**：`200`
+
+  ```json
+  {
+    "success": true,
+    "data": {
+      "prompt_id": 128,
+      "topic": "React 面试官自检",
+      "status": "draft",
+      "imported_at": "2025-10-12T08:31:12Z"
+    }
+  }
+  ```
+
+- **常见错误**：分享串缺失或内容被修改 → `400`（`分享串格式不正确`）；分享文本超过 `PROMPT_SHARE_MAX_BYTES` → `400`（`分享串超出长度限制`）。
+
+### Prompt 分享串（PGSHARE）
+
+> 离线客户端无需服务器即可交换 Prompt：生成 `PGSHARE-` 文本 → 通过 IM/邮件传递 → 对方粘贴导入。
+
+- **数据结构**：分享串使用 `PGSHARE-` + Base64URL 的形式封装 `promptShareEnvelope`，内含 `version`、`generated_at` 与单条 Prompt 的正文、关键词、标签、生成配置等字段，不包含用户隐私字段或点赞/评论等派生数据。
+- **配置项**：
+  - `PROMPT_SHARE_PREFIX`：自定义分享前缀，默认 `PGSHARE`，允许企业独立区分不同产品线。
+  - `PROMPT_SHARE_MAX_BYTES`：控制 Base64 部分的最大长度（默认 16384），防止剪贴板写入超大文本；若提示“分享串超出长度限制”，可提示用户精简 Prompt 或调大配置。
+- **接口配合**：
+  - 生成：`POST /api/prompts/:id/share`。
+  - 导入：`POST /api/prompts/share/import`（总是创建草稿）。
+- **安全校验**：导入端会验证 Topic/Body/Model 是否为空、关键词数量是否超限、JSON 格式是否合法；若遭篡改会返回 `ErrSharePayloadInvalid`，同时避免恢复历史点赞/公共库状态。
+- **客户端建议**：Electron 端可在 Prompt 详情提供“分享”按钮并写入剪贴板，也可在“我的 Prompt”页监听剪贴板或提供“导入分享串”输入框，增强离线协作体验。
 
 #### DELETE /api/prompts/:id
 

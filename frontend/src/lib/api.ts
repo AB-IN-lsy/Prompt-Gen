@@ -400,6 +400,20 @@ export interface PromptImportResult {
   errors: PromptImportError[];
 }
 
+export interface SharePromptResponse {
+  payload: string;
+  topic: string;
+  payload_size?: number;
+  generated_at?: string;
+}
+
+export interface ImportSharedPromptResult {
+  prompt_id: number;
+  topic: string;
+  status: string;
+  imported_at?: string;
+}
+
 export interface PromptVersionSummary {
   versionNo: number;
   model: string;
@@ -1538,6 +1552,46 @@ export async function importPrompts(
           : 0,
       errors,
     };
+  } catch (error) {
+    throw normaliseError(error);
+  }
+}
+
+/** 生成指定 Prompt 的分享串。 */
+export async function sharePrompt(id: number): Promise<SharePromptResponse> {
+  if (!id) {
+    throw new ApiError({ message: "Prompt id is required" });
+  }
+  try {
+    const response: AxiosResponse<SharePromptResponse> = await http.post(
+      `/prompts/${id}/share`,
+    );
+    const data = response.data ?? {};
+    if (typeof data.payload !== "string" || data.payload.trim() === "") {
+      throw new ApiError({ message: "invalid share response" });
+    }
+    return {
+      payload: data.payload,
+      topic: data.topic ?? "",
+      payload_size: data.payload_size,
+      generated_at: data.generated_at,
+    };
+  } catch (error) {
+    throw normaliseError(error);
+  }
+}
+
+/** 通过分享串导入 Prompt。 */
+export async function importSharedPrompt(payload: string): Promise<ImportSharedPromptResult> {
+  if (!payload.trim()) {
+    throw new ApiError({ message: "Share payload is required" });
+  }
+  try {
+    const response: AxiosResponse<ImportSharedPromptResult> = await http.post(
+      "/prompts/share/import",
+      { payload },
+    );
+    return response.data ?? { prompt_id: 0, topic: "", status: "draft" };
   } catch (error) {
     throw normaliseError(error);
   }

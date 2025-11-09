@@ -14,9 +14,12 @@ import {
   Sparkles,
   Settings,
   Star,
+  UploadCloud,
 } from "lucide-react";
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
+import { GlassCard } from "../components/ui/glass-card";
+import { Textarea } from "../components/ui/textarea";
 import { SpotlightSearch } from "../components/ui/spotlight-search";
 import { PaginationControls } from "../components/ui/pagination-controls";
 import { ConfirmDialog } from "../components/ui/confirm-dialog";
@@ -36,6 +39,7 @@ import {
   fetchPromptDetail,
   savePrompt,
   updatePromptFavorite,
+  importSharedPrompt,
   normaliseKeywordSource,
   PromptDetailResponse,
   PromptListItem,
@@ -44,6 +48,7 @@ import {
   PromptListMeta,
   PromptKeywordInput,
   SavePromptRequest,
+  type ImportSharedPromptResult,
 } from "../lib/api";
 import { ApiError } from "../lib/errors";
 import { usePromptWorkbench } from "../hooks/usePromptWorkbench";
@@ -108,6 +113,8 @@ export default function MyPromptsPage(): JSX.Element {
   const [publishingId, setPublishingId] = useState<number | null>(null);
   const [favoritedOnly, setFavoritedOnly] = useState(false);
   const [favoritingId, setFavoritingId] = useState<number | null>(null);
+  const [shareImportOpen, setShareImportOpen] = useState(false);
+  const [sharePayloadInput, setSharePayloadInput] = useState("");
 
   const listQuery = useQuery<PromptListResponse>({
     queryKey: ["my-prompts", { status, page, committedSearch, favoritedOnly }],
@@ -156,6 +163,29 @@ export default function MyPromptsPage(): JSX.Element {
     onError: (error: unknown) => {
       toast.error(
         error instanceof Error ? error.message : t("errors.generic"),
+      );
+    },
+  });
+
+  const shareImportMutation = useMutation<
+    ImportSharedPromptResult,
+    unknown,
+    string
+  >({
+    mutationFn: (payload: string) => importSharedPrompt(payload),
+    onSuccess: (data) => {
+      toast.success(
+        t("myPrompts.shareImport.success", {
+          topic: data.topic || t("common.untitled"),
+        }),
+      );
+      setSharePayloadInput("");
+      setShareImportOpen(false);
+      void queryClient.invalidateQueries({ queryKey: ["my-prompts"] });
+    },
+    onError: (error: unknown) => {
+      toast.error(
+        error instanceof Error ? error.message : t("myPrompts.shareImport.error"),
       );
     },
   });
@@ -403,6 +433,18 @@ export default function MyPromptsPage(): JSX.Element {
     });
   };
 
+  const handleShareImport = () => {
+    const trimmed = sharePayloadInput.trim();
+    if (!trimmed) {
+      toast.error(t("myPrompts.shareImport.empty"));
+      return;
+    }
+    if (shareImportMutation.isPending) {
+      return;
+    }
+    shareImportMutation.mutate(trimmed);
+  };
+
   const handlePageChange = (nextPage: number) => {
     if (nextPage < 1) return;
     if (totalPages && nextPage > totalPages) return;
@@ -439,6 +481,16 @@ export default function MyPromptsPage(): JSX.Element {
               variant="outline"
               size="sm"
               className="shadow-sm dark:shadow-none"
+              onClick={() => setShareImportOpen(true)}
+              disabled={shareImportMutation.isPending}
+            >
+              <UploadCloud className="mr-2 h-4 w-4" />
+              {t("myPrompts.shareImport.button")}
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="shadow-sm dark:shadow-none"
               onClick={() => navigate("/settings?tab=app")}
             >
               <Settings className="mr-2 h-4 w-4" />
@@ -458,6 +510,18 @@ export default function MyPromptsPage(): JSX.Element {
             </Button>
           </div>
         }
+      />
+      <ShareImportDialog
+        open={shareImportOpen}
+        value={sharePayloadInput}
+        loading={shareImportMutation.isPending}
+        onChange={setSharePayloadInput}
+        onClose={() => {
+          if (!shareImportMutation.isPending) {
+            setShareImportOpen(false);
+          }
+        }}
+        onSubmit={handleShareImport}
       />
       <form
         className="flex flex-col gap-3 rounded-3xl border border-white/60 bg-white/80 p-4 shadow-sm transition-colors dark:border-slate-800 dark:bg-slate-900/70 md:flex-row md:items-center md:justify-between"
@@ -1035,6 +1099,106 @@ function SkeletonRow() {
       <div className="hidden h-3 w-24 rounded-full bg-slate-200/80 dark:bg-slate-700/60 md:block" />
       <div className="hidden h-3 w-32 rounded-full bg-slate-200/80 dark:bg-slate-700/60 md:block" />
       <div className="h-8 w-32 rounded-full bg-slate-200/80 dark:bg-slate-700/60" />
+    </div>
+  );
+}
+
+interface ShareImportDialogProps {
+  open: boolean;
+  value: string;
+  loading: boolean;
+  onChange: (next: string) => void;
+  onClose: () => void;
+  onSubmit: () => void;
+}
+
+function ShareImportDialog({
+  open,
+  value,
+  loading,
+  onChange,
+  onClose,
+  onSubmit,
+}: ShareImportDialogProps) {
+  const { t } = useTranslation();
+
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+    const handler = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && !loading) {
+        onClose();
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [open, loading, onClose]);
+
+  if (!open) {
+    return null;
+  }
+
+  return (
+    <div className="fixed inset-0 z-[125] flex items-center justify-center px-6 py-10">
+      <div
+        className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
+        onClick={() => {
+          if (!loading) {
+            onClose();
+          }
+        }}
+        role="presentation"
+      />
+      <GlassCard className="relative z-[126] w-full max-w-xl space-y-4 bg-white/95 text-slate-700 dark:bg-slate-900/80 dark:text-slate-100">
+        <div className="space-y-1">
+          <p className="text-xs font-semibold uppercase tracking-[0.28em] text-primary">
+            {t("myPrompts.shareImport.title")}
+          </p>
+          <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
+            {t("myPrompts.shareImport.dialogTitle")}
+          </h2>
+          <p className="text-sm text-slate-500 dark:text-slate-400">
+            {t("myPrompts.shareImport.dialogDescription")}
+          </p>
+        </div>
+        <Textarea
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+          placeholder={t("myPrompts.shareImport.placeholder")}
+          rows={4}
+          className="rounded-2xl border border-slate-200 bg-white/80 text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-100"
+        />
+        <p className="text-xs text-slate-500 dark:text-slate-400">
+          {t("myPrompts.shareImport.hint")}
+        </p>
+        <div className="flex items-center justify-end gap-3">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={onClose}
+            disabled={loading}
+            className="border-slate-200 text-slate-600 hover:border-primary/40 hover:bg-primary/10 hover:text-primary dark:border-slate-700 dark:text-slate-300"
+          >
+            {t("common.cancel")}
+          </Button>
+          <Button
+            type="button"
+            onClick={onSubmit}
+            disabled={loading}
+            className="bg-primary text-primary-foreground hover:bg-primary/90"
+          >
+            {loading ? (
+              <span className="flex items-center gap-2">
+                <LoaderCircle className="h-4 w-4 animate-spin" />
+                {t("myPrompts.shareImport.loading")}
+              </span>
+            ) : (
+              t("myPrompts.shareImport.confirm")
+            )}
+          </Button>
+        </div>
+      </GlassCard>
     </div>
   );
 }

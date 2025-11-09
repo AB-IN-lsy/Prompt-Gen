@@ -594,6 +594,19 @@
     "eyebrow": "Prompt 清单",
     "title": "我的 Prompt",
     "subtitle": "快速筛选、检索并继续编辑草稿或已发布的 Prompt。",
+    "shareImport": {
+      "title": "导入分享串",
+      "button": "导入分享串",
+      "dialogTitle": "粘贴 PGSHARE 分享串",
+      "dialogDescription": "在 Prompt 详情点击“分享”即可生成以 PGSHARE- 开头的文本，复制后粘贴到此处即可导入。",
+      "placeholder": "PGSHARE-...",
+      "hint": "分享串仅包含文本，请勿粘贴截图或其他附件。",
+      "confirm": "立即导入",
+      "loading": "正在导入",
+      "empty": "请先粘贴分享串",
+      "success": "已导入《{{topic}}》，可在列表中查看。",
+      "error": "导入分享串失败，请稍后再试。"
+    },
     "openWorkbench": "打开工作台",
     "manageBackups": "备份与导入设置",
     "export": {
@@ -879,10 +892,21 @@
     "actions": {
       "back": "返回上一页",
       "edit": "继续编辑",
+      "share": "分享",
       "viewGenerationProfile": "查看生成配置",
       "copyBody": "复制正文",
       "copyMarkdown": "复制 Markdown",
       "submitPublic": "投稿到公共库"
+    },
+    "share": {
+      "title": "分享此 Prompt",
+      "description": "复制下方分享串，粘贴到另一台 PromptGen 客户端即可导入。",
+      "copy": "复制分享串",
+      "copied": "分享串已复制",
+      "payloadLength": "字符数：{{count}}",
+      "generatedAt": "生成时间：{{time}}",
+      "success": "分享串已生成，可粘贴给好友。",
+      "error": "生成分享串失败，请稍后再试。"
     },
     "publicSubmit": {
       "title": "投稿至公共 Prompt 库",

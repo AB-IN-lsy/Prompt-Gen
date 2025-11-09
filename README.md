@@ -16,6 +16,7 @@ Prompt Gen Desktop 是一款专为内容创作者打造的桌面提示词管家�
 - **离线也能信任**：本地 SQLite 存储与 JSON 备份让数据牢牢掌握在自己手里，导入导出只需一键。
 - **公共 Prompt 透明**：公共 Prompt 的发布与审核记录都会同步展示，结合操作日志与导入导出明细，团队协作更放心。
 - **开箱体验额度**：在线模式内置 DeepSeek 免费体验模型，为未配置凭据的新用户提供每日有限的解析/生成次数，超出后可随时添加自有模型继续创作。
+- **离线快捷分享**：Prompt 详情页支持一键生成分享串（PGSHARE- 前缀），复制后即可在另一台离线客户端粘贴导入，彻底摆脱网络依赖。
 
 ### 界面预览
 
@@ -148,6 +149,7 @@ go test -tags=e2e ./backend/tests/e2e                   # 命中线上接口时�
 
 - `POST /api/prompts/export`：导出当前用户的 Prompt，Electron 客户端会在“我的 Prompt”页面提供按钮并显示导出路径。
 - `POST /api/prompts/import`：上传导出的 JSON 文件，可合并或覆盖现有 Prompt；前端会展示导入统计以及失败条目列表，便于逐项修复。
+- `POST /api/prompts/:id/share`：生成指定 Prompt 的分享串（PGSHARE-...），复制到剪贴板即可分享给同事；`POST /api/prompts/share/import` 可粘贴分享串并在当前账户下生成一份草稿副本。
 
 ### 离线预置数据更新
 
