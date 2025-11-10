@@ -13,6 +13,7 @@ import { Button } from "../components/ui/button";
 import { Badge } from "../components/ui/badge";
 import { Input } from "../components/ui/input";
 import { Textarea } from "../components/ui/textarea";
+import { Select } from "../components/ui/select";
 import {
   fetchPromptDetail,
   fetchPromptVersion,
@@ -910,7 +911,7 @@ const handleOpenSubmit = () => {
                 >
                   {t("promptDetail.versions.selectorLabel")}
                 </label>
-                <select
+                <Select
                   id="prompt-version-select"
                   value={versionSelectValue}
                   onChange={(event) => {
@@ -922,7 +923,6 @@ const handleOpenSubmit = () => {
                     const parsed = Number.parseInt(next, 10);
                     setSelectedVersion(Number.isNaN(parsed) ? null : parsed);
                   }}
-                  className="h-11 w-full rounded-xl border border-white/60 bg-white/80 px-3 text-sm text-slate-600 transition focus:outline-none focus:ring-2 focus:ring-primary/40 hover:border-primary/40 dark:border-slate-800 dark:bg-slate-900/70 dark:text-slate-200"
                 >
                   <option value="">
                     {t("promptDetail.versions.optionLatest")}
@@ -937,7 +937,7 @@ const handleOpenSubmit = () => {
                       })}
                     </option>
                   ))}
-                </select>
+                </Select>
               </div>
             )}
 

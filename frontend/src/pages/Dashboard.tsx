@@ -439,14 +439,14 @@ export default function DashboardPage(): JSX.Element {
         return (
             <div
                 key={item.id}
-                className="group flex items-start justify-between gap-3 rounded-2xl border border-white/60 bg-white/70 px-4 py-3 shadow-sm transition duration-200 hover:-translate-y-0.5 hover:border-primary/35 hover:bg-primary/5 hover:ring-2 hover:ring-primary/20 hover:ring-offset-2 hover:ring-offset-white dark:border-slate-800/60 dark:bg-slate-900/50 dark:hover:bg-primary/10 dark:hover:ring-offset-slate-900"
+                className="group flex items-start justify-between gap-3 rounded-2xl border border-white/60 bg-white/40 px-4 py-3 shadow-sm transition duration-200 hover:bg-gradient-to-r hover:from-primary/10 hover:via-white/80 hover:to-white hover:shadow-[0_18px_35px_-20px_rgba(67,56,202,0.45)] dark:border-slate-800/60 dark:bg-slate-900/40 dark:hover:from-primary/20 dark:hover:via-slate-900/70 dark:hover:to-slate-900/90"
             >
                 <div className="space-y-1">
                     <div className="flex flex-wrap items-center gap-2">
                         <button
                             type="button"
                             onClick={() => handleOpenPrompt(item.id)}
-                            className="bg-transparent text-left text-sm font-medium text-slate-900 transition-all duration-200 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 dark:text-slate-100 dark:hover:text-primary-200 group-hover:text-primary group-hover:translate-x-0.5 dark:group-hover:text-primary-200"
+                            className="bg-transparent text-left text-sm font-medium text-slate-900 transition-all duration-200 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 dark:text-slate-100 dark:hover:text-primary-200 group-hover:text-primary dark:group-hover:text-primary-200"
                         >
                             {item.topic}
                         </button>
@@ -668,7 +668,7 @@ export default function DashboardPage(): JSX.Element {
                         variant="ghost"
                         size="sm"
                         className="gap-2 text-xs"
-                        onClick={() => navigate("/prompts")}
+                        onClick={() => navigate("/prompts?status=draft")}
                     >
                         {t("dashboard.drafts.viewAll")}
                         <ArrowUpRight className="h-3 w-3" aria-hidden="true" />

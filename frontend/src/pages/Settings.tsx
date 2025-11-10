@@ -25,6 +25,7 @@ import { Input } from "../components/ui/input";
 import { Button } from "../components/ui/button";
 import { Badge } from "../components/ui/badge";
 import { Textarea } from "../components/ui/textarea";
+import { Select } from "../components/ui/select";
 import { AvatarUploader } from "../components/account/AvatarUploader";
 import { useAuth } from "../hooks/useAuth";
 import { PageHeader } from "../components/layout/PageHeader";
@@ -1600,10 +1601,9 @@ export default function SettingsPage() {
               <label className="text-xs font-medium text-slate-500 dark:text-slate-400">
                 {t("settings.modelCard.provider")}
               </label>
-              <select
+              <Select
                 value={modelForm.provider}
                 onChange={handleModelInputChange("provider")}
-                className="h-10 w-full rounded-xl border border-white/70 bg-white/80 px-3 text-sm text-slate-700 shadow-sm transition focus:border-primary focus:shadow-glow focus:outline-none dark:border-slate-800 dark:bg-slate-900/70 dark:text-slate-200 dark:focus:border-primary/60"
               >
                 <option value="deepseek">
                   {t("settings.modelCard.providerOptionDeepseek")}
@@ -1611,7 +1611,7 @@ export default function SettingsPage() {
                 <option value="volcengine">
                   {t("settings.modelCard.providerOptionVolcengine")}
                 </option>
-              </select>
+              </Select>
               <span className="text-xs text-slate-400 dark:text-slate-500">
                 {t("settings.modelCard.providerHint")}
               </span>
@@ -1742,27 +1742,27 @@ export default function SettingsPage() {
         </div>
         <div className="space-y-4">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-            <div className="flex items-center gap-2 rounded-full border border-white/60 bg-white/80 px-3 py-1 shadow-sm transition-colors dark:border-slate-800 dark:bg-slate-900/70">
+            <div className="flex flex-wrap items-center gap-3">
               <label
                 className="text-xs font-medium text-slate-500 dark:text-slate-400"
                 htmlFor="backup-import-mode"
               >
                 {t("settings.backupCard.importMode")}
               </label>
-              <select
+              <Select
                 id="backup-import-mode"
-                className="rounded-md border border-transparent bg-white/90 px-2 py-1 text-xs text-slate-700 shadow-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary/40 dark:border-slate-700 dark:bg-slate-900/80 dark:text-slate-200 dark:shadow-none"
                 value={importMode}
                 onChange={(event) =>
                   setImportMode(event.target.value as "merge" | "overwrite")
                 }
                 disabled={importMutation.isPending}
+                containerClassName="w-auto min-w-[180px]"
               >
                 <option value="merge">{t("settings.backupCard.modeMerge")}</option>
                 <option value="overwrite">
                   {t("settings.backupCard.modeOverwrite")}
                 </option>
-              </select>
+              </Select>
             </div>
             <div className="flex flex-wrap gap-2">
               <Button
@@ -1952,18 +1952,18 @@ export default function SettingsPage() {
           >
             {t("settings.languageSelectLabel")}
           </label>
-          <select
+          <Select
             id="language-select"
-            className="w-full rounded-xl border border-white/60 bg-white/80 px-3 py-2 text-sm text-slate-700 shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/40 sm:w-64 dark:border-slate-800 dark:bg-slate-900/70 dark:text-slate-200"
             value={language}
             onChange={handleLanguageChange}
+            containerClassName="w-full sm:w-64"
           >
             {LANGUAGE_OPTIONS.map((option) => (
               <option key={option.code} value={option.code}>
                 {option.label}
               </option>
             ))}
-          </select>
+          </Select>
         </div>
       </GlassCard>
       </>

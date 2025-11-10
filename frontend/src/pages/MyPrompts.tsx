@@ -3,7 +3,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { buildCardMotion } from "../lib/animationConfig";
 import { useTranslation } from "react-i18next";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import {
   LoaderCircle,
@@ -23,6 +23,7 @@ import { Textarea } from "../components/ui/textarea";
 import { SpotlightSearch } from "../components/ui/spotlight-search";
 import { PaginationControls } from "../components/ui/pagination-controls";
 import { ConfirmDialog } from "../components/ui/confirm-dialog";
+import { Select } from "../components/ui/select";
 import {
   PROMPT_KEYWORD_MAX_LENGTH,
   PROMPT_TAG_MAX_LENGTH,
@@ -59,6 +60,16 @@ import { PageHeader } from "../components/layout/PageHeader";
 
 type StatusFilter = "all" | "draft" | "published" | "archived";
 
+const parseStatusFilter = (value: string | null): StatusFilter => {
+  if (value === "draft" || value === "published" || value === "archived") {
+    return value;
+  }
+  if (value === "all") {
+    return "all";
+  }
+  return "all";
+};
+
 const clampWeight = (value?: number): number => {
   if (typeof value !== "number" || Number.isNaN(value)) {
     return DEFAULT_KEYWORD_WEIGHT;
@@ -91,6 +102,7 @@ export default function MyPromptsPage(): JSX.Element {
   const { t, i18n } = useTranslation();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const [searchParams, setSearchParams] = useSearchParams();
 
   const resetWorkbench = usePromptWorkbench((state) => state.reset);
   const setTopic = usePromptWorkbench((state) => state.setTopic);
@@ -105,7 +117,9 @@ export default function MyPromptsPage(): JSX.Element {
     (state) => state.overwriteGenerationProfile,
   );
 
-  const [status, setStatus] = useState<StatusFilter>("all");
+  const [status, setStatus] = useState<StatusFilter>(() =>
+    parseStatusFilter(searchParams.get("status")),
+  );
   const [page, setPage] = useState(1);
   const [searchInput, setSearchInput] = useState("");
   const [committedSearch, setCommittedSearch] = useState("");
@@ -420,9 +434,24 @@ export default function MyPromptsPage(): JSX.Element {
     setPage(1);
   };
 
+  useEffect(() => {
+    const next = parseStatusFilter(searchParams.get("status"));
+    if (next !== status) {
+      setStatus(next);
+      setPage(1);
+    }
+  }, [searchParams, status]);
+
   const handleStatusChange = (value: StatusFilter) => {
     setStatus(value);
     setPage(1);
+    const params = new URLSearchParams(searchParams);
+    if (value === "all") {
+      params.delete("status");
+    } else {
+      params.set("status", value);
+    }
+    setSearchParams(params, { replace: true });
   };
 
   const handleFavoriteFilterToggle = () => {
@@ -543,19 +572,20 @@ export default function MyPromptsPage(): JSX.Element {
             <label className="text-xs font-medium uppercase tracking-[0.22em] text-slate-400">
               {t("myPrompts.statusFilter.label")}
             </label>
-            <select
+            <Select
               value={status}
               onChange={(event) =>
                 handleStatusChange(event.target.value as StatusFilter)
               }
-              className="h-10 rounded-xl border border-white/60 bg-white/90 px-3 text-sm text-slate-600 transition focus:outline-none focus:ring-2 focus:ring-primary/40 dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-200"
+              containerClassName="w-auto min-w-[168px]"
+              aria-label={t("myPrompts.statusFilter.label")}
             >
               {statusOptions.map((option) => (
                 <option key={option.value} value={option.value}>
                   {option.label}
                 </option>
               ))}
-            </select>
+            </Select>
             <Button
               type="button"
               size="sm"
@@ -787,7 +817,7 @@ function PromptRow({
   const statusLabel = t(`myPrompts.statusBadge.${item.status}`);
   const formattedUpdatedAt = formatDateTime(item.updated_at, locale);
   return (
-    <tr className="group bg-white/40 transition duration-200 hover:-translate-y-0.5 hover:bg-primary/5 hover:shadow-[0_8px_20px_-10px_rgba(59,130,246,0.35)] hover:ring-2 hover:ring-primary/25 hover:ring-offset-2 hover:ring-offset-white dark:bg-slate-900/40 dark:hover:bg-primary/10 dark:hover:ring-offset-slate-900">
+    <tr className="group bg-white/40 transition duration-200 hover:bg-gradient-to-r hover:from-primary/10 hover:via-white/80 hover:to-white hover:shadow-[0_18px_35px_-20px_rgba(67,56,202,0.55)] dark:bg-slate-900/40 dark:hover:from-primary/20 dark:hover:via-slate-900/70 dark:hover:to-slate-900/90">
       <td className="px-6 py-4 align-top">
         <div className="flex items-start gap-3">
           <button
@@ -818,7 +848,7 @@ function PromptRow({
             <button
               type="button"
               onClick={onView}
-              className="bg-transparent text-left text-sm font-semibold text-slate-800 transition-all duration-200 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 dark:text-slate-100 dark:hover:text-primary-200 group-hover:text-primary group-hover:translate-x-1 dark:group-hover:text-primary-200"
+            className="bg-transparent text-left text-sm font-semibold text-slate-800 transition-all duration-200 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 dark:text-slate-100 dark:hover:text-primary-200 group-hover:text-primary dark:group-hover:text-primary-200"
             >
               {item.topic}
             </button>

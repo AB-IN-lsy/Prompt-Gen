@@ -21,6 +21,7 @@ import { Textarea } from "../components/ui/textarea";
 import { Badge } from "../components/ui/badge";
 import { PageHeader } from "../components/layout/PageHeader";
 import { ConfirmDialog } from "../components/ui/confirm-dialog";
+import { Select } from "../components/ui/select";
 import {
   createChangelogEntry,
   deleteChangelogEntry,
@@ -337,8 +338,7 @@ const updateMutation = useMutation<
               <label className="text-xs font-medium text-slate-600 dark:text-slate-300">
                 {t("logsPage.admin.locale")}
               </label>
-              <select
-                className="h-10 w-full rounded-xl border border-white/60 bg-white/80 px-3 text-sm text-slate-700 transition focus:outline-none focus:ring-2 focus:ring-primary dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-200"
+              <Select
                 value={editorState.locale}
                 onChange={(event) =>
                   dispatch({
@@ -350,7 +350,7 @@ const updateMutation = useMutation<
               >
                 <option value="en">English</option>
                 <option value="zh-CN">简体中文</option>
-              </select>
+              </Select>
             </div>
             <div className="space-y-2">
               <label className="text-xs font-medium text-slate-600 dark:text-slate-300">

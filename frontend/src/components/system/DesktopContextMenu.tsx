@@ -210,7 +210,8 @@ export function DesktopContextMenu(): JSX.Element | null {
             <div
                 className={cn(
                     "pointer-events-auto absolute min-w-[208px] rounded-2xl border p-2 text-xs shadow-2xl backdrop-blur",
-                    "border-black/5 bg-white/95 text-slate-800 dark:border-white/10 dark:bg-slate-900/95 dark:text-slate-100"
+                    "border-black/5 bg-white/95 text-slate-800 dark:border-white/10 dark:bg-slate-900/95 dark:text-slate-100",
+                    "context-menu-surface"
                 )}
                 ref={menuRef}
                 style={{ left: state.x, top: state.y }}
