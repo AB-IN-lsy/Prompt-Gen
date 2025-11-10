@@ -831,7 +831,7 @@ function PromptRow({
                 : t("myPrompts.actions.favorite")
             }
             className={cn(
-              "flex h-9 w-9 items-center justify-center rounded-full border transition-colors duration-200",
+              "flex h-9 w-9 min-w-[2.25rem] flex-shrink-0 items-center justify-center rounded-full border transition-colors duration-200",
               "border-transparent bg-white/70 text-slate-400 hover:border-amber-200 hover:text-amber-500 dark:bg-slate-900/50 dark:text-slate-500 dark:hover:text-amber-300",
               isFavorited
                 ? "border-amber-300 text-amber-500 dark:border-amber-400 dark:text-amber-200"

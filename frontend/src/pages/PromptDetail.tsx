@@ -536,60 +536,62 @@ const handleOpenSubmit = () => {
         title={detail ? detail.topic : t("promptDetail.title")}
         description={t("promptDetail.subtitle")}
         actions={
-          <div className="flex flex-wrap items-center gap-3">
-            <Button
-              variant="outline"
-              onClick={handleBack}
-              className="transition-transform hover:-translate-y-0.5"
-            >
-              {t("promptDetail.actions.back", { defaultValue: "返回上一页" })}
-            </Button>
+          <div className="flex w-full flex-wrap items-center gap-3">
+            <div className="flex flex-1 flex-wrap items-center gap-3">
+              <Button
+                variant="outline"
+                onClick={handleBack}
+                className="transition-transform hover:-translate-y-0.5"
+              >
+                {t("promptDetail.actions.back", { defaultValue: "返回上一页" })}
+              </Button>
+              <Button
+                variant="outline"
+                onClick={handleShare}
+                disabled={!detail || shareMutation.isPending}
+                className="transition-transform hover:-translate-y-0.5"
+              >
+                {shareMutation.isPending ? (
+                  <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <Share2 className="mr-2 h-4 w-4" />
+                )}
+                {t("promptDetail.actions.share", { defaultValue: "分享" })}
+              </Button>
+              {activeGenerationProfile ? (
+                <Button
+                  variant="outline"
+                  onClick={() => setProfileDialogOpen(true)}
+                  className="transition-transform hover:-translate-y-0.5"
+                >
+                  {t("promptDetail.actions.viewGenerationProfile", {
+                    defaultValue: "查看生成配置",
+                  })}
+                </Button>
+              ) : null}
+              {canSubmitPublic ? (
+                <Button
+                  onClick={handleOpenSubmit}
+                  disabled={!detail || submitMutation.isPending}
+                  className="transition-transform hover:-translate-y-0.5"
+                >
+                  {submitMutation.isPending ? (
+                    <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <UploadCloud className="mr-2 h-4 w-4" />
+                  )}
+                  {t("promptDetail.actions.submitPublic")}
+                </Button>
+              ) : null}
+            </div>
             <Button
               variant="secondary"
               onClick={handleEdit}
               disabled={!detail}
-              className="transition-transform hover:-translate-y-0.5"
+              className="ml-auto transition-transform hover:-translate-y-0.5"
             >
               {t("promptDetail.actions.edit", { defaultValue: "继续编辑" })}
             </Button>
-            <Button
-              variant="outline"
-              onClick={handleShare}
-              disabled={!detail || shareMutation.isPending}
-              className="transition-transform hover:-translate-y-0.5"
-            >
-              {shareMutation.isPending ? (
-                <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
-              ) : (
-                <Share2 className="mr-2 h-4 w-4" />
-              )}
-              {t("promptDetail.actions.share", { defaultValue: "分享" })}
-            </Button>
-            {activeGenerationProfile ? (
-              <Button
-                variant="outline"
-                onClick={() => setProfileDialogOpen(true)}
-                className="transition-transform hover:-translate-y-0.5"
-              >
-                {t("promptDetail.actions.viewGenerationProfile", {
-                  defaultValue: "查看生成配置",
-                })}
-              </Button>
-            ) : null}
-            {canSubmitPublic ? (
-              <Button
-                onClick={handleOpenSubmit}
-                disabled={!detail || submitMutation.isPending}
-                className="transition-transform hover:-translate-y-0.5"
-              >
-                {submitMutation.isPending ? (
-                  <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
-                ) : (
-                  <UploadCloud className="mr-2 h-4 w-4" />
-                )}
-                {t("promptDetail.actions.submitPublic")}
-              </Button>
-            ) : null}
           </div>
         }
       />

@@ -109,6 +109,7 @@ export function DesktopContextMenu(): JSX.Element | null {
     const { t } = useTranslation();
     const [state, setState] = useState<MenuState>(initialState);
     const menuRef = useRef<HTMLDivElement | null>(null);
+    const lastFocusedElementRef = useRef<HTMLElement | null>(null);
 
     useEffect(() => {
         if (typeof window === "undefined" || !window.desktop) {
@@ -125,6 +126,8 @@ export function DesktopContextMenu(): JSX.Element | null {
             const targetEditable = isEditableElement(event.target);
             const anchorX = event.clientX;
             const anchorY = event.clientY;
+            lastFocusedElementRef.current =
+                document.activeElement instanceof HTMLElement ? document.activeElement : null;
             setState({
                 visible: true,
                 x: anchorX,
@@ -197,6 +200,10 @@ export function DesktopContextMenu(): JSX.Element | null {
         if (!window.desktop) {
             return;
         }
+        const target = lastFocusedElementRef.current;
+        if (target && typeof target.focus === "function") {
+            target.focus({ preventScroll: true });
+        }
         await window.desktop.executeEditCommand(command);
         setState((prev) => ({ ...prev, visible: false }));
     };
@@ -233,6 +240,7 @@ export function DesktopContextMenu(): JSX.Element | null {
                             key={item.key}
                             type="button"
                             disabled={disabled}
+                            onMouseDown={(event) => event.preventDefault()}
                             onClick={() => handleCommand(item.key)}
                             className={cn(
                                 "flex w-full items-center justify-between rounded-xl px-3 py-2 text-left transition-colors",
