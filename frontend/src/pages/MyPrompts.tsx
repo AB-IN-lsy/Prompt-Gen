@@ -211,7 +211,13 @@ export default function MyPromptsPage(): JSX.Element {
   const ingestMutation = useMutation({
     mutationFn: (promptBody: string) =>
       ingestPrompt({ body: promptBody, language: i18n.language }),
+    onMutate: () => {
+      toast.loading(t("myPrompts.ingest.loadingToast"), {
+        id: "prompt-ingest",
+      });
+    },
     onSuccess: (detail) => {
+      toast.dismiss("prompt-ingest");
       toast.success(
         t("myPrompts.ingest.success", {
           topic: detail.topic || t("common.untitled"),
@@ -219,11 +225,10 @@ export default function MyPromptsPage(): JSX.Element {
       );
       setIngestPromptInput("");
       setIngestDialogOpen(false);
-      populateWorkbench(detail);
-      navigate("/prompt-workbench");
       void queryClient.invalidateQueries({ queryKey: ["my-prompts"] });
     },
     onError: (error: unknown) => {
+      toast.dismiss("prompt-ingest");
       toast.error(
         error instanceof Error ? error.message : t("myPrompts.ingest.error"),
       );

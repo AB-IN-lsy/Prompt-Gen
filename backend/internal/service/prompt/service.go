@@ -200,6 +200,8 @@ var (
 	ErrPositiveKeywordLimit = errors.New("positive keywords exceed limit")
 	// ErrNegativeKeywordLimit 表示负向关键词数量超出上限。
 	ErrNegativeKeywordLimit = errors.New("negative keywords exceed limit")
+	// ErrIngestMissingKeywords 表示解析成品 Prompt 时模型未能返回可用关键词。
+	ErrIngestMissingKeywords = errors.New("模型未能从 Prompt 中提取关键词，请补充更多上下文后再试")
 	// ErrDuplicateKeyword 表示同极性的关键词已存在。
 	ErrDuplicateKeyword = errors.New("keyword already exists")
 	// ErrPromptNotFound 表示指定 Prompt 不存在或无访问权限。
@@ -1800,9 +1802,6 @@ func (s *Service) IngestPrompt(ctx context.Context, input IngestPromptInput) (Pr
 			positive = append(positive, item)
 		}
 	}
-	if len(positive) == 0 {
-		return PromptDetail{}, errors.New("model did not return positive keywords")
-	}
 	negative := make([]KeywordItem, 0, len(payload.Negative))
 	for _, entry := range payload.Negative {
 		item := KeywordItem{
@@ -1814,6 +1813,38 @@ func (s *Service) IngestPrompt(ctx context.Context, input IngestPromptInput) (Pr
 		item.Word = s.clampKeywordWord(item.Word)
 		if normalized.add(item) {
 			negative = append(negative, item)
+		}
+	}
+	if len(positive) == 0 {
+		// fallback to interpret-style解析，尽量从 Prompt 中提取关键词
+		if fallback, ierr := s.Interpret(ctx, InterpretInput{
+			UserID:      input.UserID,
+			Description: body,
+			ModelKey:    modelKey,
+			Language:    input.Language,
+		}); ierr == nil {
+			if strings.TrimSpace(payload.Topic) == "" {
+				payload.Topic = fallback.Topic
+			}
+			if strings.TrimSpace(payload.Instructions) == "" {
+				payload.Instructions = fallback.Instructions
+			}
+			if len(cleanedTags) == 0 {
+				if tags, tagErr := s.normalizeTags(fallback.Tags); tagErr == nil {
+					cleanedTags = tags
+				} else {
+					cleanedTags = s.truncateTags(fallback.Tags)
+				}
+			}
+			positive = fallback.PositiveKeywords
+			if len(negative) == 0 {
+				negative = fallback.NegativeKeywords
+			}
+		} else if ierr != nil {
+			s.logger.Warnw("fallback interpret for ingest failed", "user_id", input.UserID, "error", ierr)
+		}
+		if len(positive) == 0 {
+			return PromptDetail{}, ErrIngestMissingKeywords
 		}
 	}
 	saveResult, err := s.Save(ctx, SaveInput{
@@ -3343,10 +3374,11 @@ func buildPromptIngestRequest(body, language string, positiveLimit, negativeLimi
 	}
 	system := "你是一名 Prompt 解析助手，需要阅读已经写好的 Prompt 正文并提炼可复用的结构化信息。"
 	builder := &strings.Builder{}
-	fmt.Fprintf(builder, "目标语言：%s\n请阅读以下 Prompt 正文，输出 JSON 对象，字段包含 topic、instructions、positive_keywords、negative_keywords、tags、confidence。\n", lang)
-	fmt.Fprintf(builder, "要求：\n1. 正向关键词不超过 %d 个，负向关键词不超过 %d 个，每个关键词附带 0~%d 的整数权重。\n", positiveLimit, negativeLimit, maxKeywordWeight)
-	fmt.Fprintf(builder, "2. 标签不超过 %d 个，遵循 Prompt 的主要场景或对象；补充要求需用 1~2 句中文概述 Prompt 的核心约束。\n", tagLimit)
-	fmt.Fprintf(builder, "3. 若正文未显式包含负向限制，可返回空数组；confidence 需取 0~1 的小数。\nPrompt 正文：\n%s", body)
+	fmt.Fprintf(builder, "目标语言：%s\n请阅读以下 Prompt 正文，务必输出 JSON，对象字段固定为 topic、instructions、positive_keywords、negative_keywords、tags、confidence。为了保证数据完整，请遵守以下严格规则：\n", lang)
+	fmt.Fprintf(builder, "1. 正向关键词至少 1 个且不超过 %d 个；若正文未显式列出，也要根据上下文推断主题相关的词，并附带 0~%d 的整数权重。\n", positiveLimit, maxKeywordWeight)
+	fmt.Fprintf(builder, "2. 负向关键词不超过 %d 个，可为空；给出的每个关键词都要附带 0~%d 的整数权重。\n", negativeLimit, maxKeywordWeight)
+	fmt.Fprintf(builder, "3. 标签不超过 %d 个，覆盖目标对象、场景或行业；补充要求 `instructions` 必须使用 1~2 句中文概述该 Prompt 的核心限制或注意事项。\n", tagLimit)
+	fmt.Fprintf(builder, "4. 如正文包含步骤、角色或语气偏好，请将其概括进 `instructions`；`confidence` 必须为 0~1 区间的小数。\nPrompt 正文：\n%s", body)
 	return modeldomain.ChatCompletionRequest{
 		Messages: []modeldomain.ChatMessage{
 			{Role: "system", Content: system},

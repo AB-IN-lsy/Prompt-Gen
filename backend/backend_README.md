@@ -872,6 +872,7 @@ ALTER TABLE prompts
 
 - **成功响应**：`200`，返回与 `GET /api/prompts/:id` 相同的结构（含 `id`、`topic`、`body`、`instructions`、`tags`、`positive_keywords[]`、`negative_keywords[]`、`workspace_token`、`generation_profile` 等），前端可直接填充工作台。
 - **常见错误**：正文为空或模型未配置 → `400`；触发内容审核 → `400`（`CONTENT_REJECTED`）。
+- **容错说明**：若初次解析未返回正向关键词，服务会自动使用 Interpret 流程再尝试一次，并回填缺失的主题、标签与补充要求；两次都解析不到关键词时，接口会提示“模型未能从 Prompt 中提取关键词，请补充更多上下文后再试”。
 - **限流**：默认 `5 req/min`，可通过 `PROMPT_INGEST_LIMIT` 与 `PROMPT_INGEST_WINDOW` 配置。调用会复用 Interpret/Generate 相同的模型选择逻辑：若请求未显式指定 `model_key`，将使用免费额度别名（`PROMPT_FREE_TIER_*`），因此也会计入模型配额。
 
 #### POST /api/prompts/keywords/augment
