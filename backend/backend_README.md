@@ -12,6 +12,7 @@
 - 管理员用户总览上线：新增 `internal/service/adminuser` 聚合用户、Prompt 统计与最近活动，配置项通过 `ADMIN_USER_*` 控制分页、近况条数与在线阈值；`GET /api/admin/users` 返回在线状态、Prompt 数量分布及最近更新的 Prompt 摘要，便于后台巡检。
 - 解析 & 生成统一接入内容审核：新增 `Service.auditContent`，在解析前和生成后复用用户配置的模型执行违规检测，若命中策略会返回 `CONTENT_REJECTED` 错误码与可读提示，前端直接用于 toast。
 - 新增 `POST /api/prompts/import`，可上传导出的 JSON 文件并选择“合并/覆盖”模式批量回灌 Prompt，导入批大小由 `PROMPT_IMPORT_BATCH_SIZE` 控制。
+- “自动解析 Prompt” 上线：`POST /api/prompts/ingest` 支持粘贴完整 Prompt 正文并自动拆解主题、标签与关键词，随后立刻创建草稿；限流阈值由 `PROMPT_INGEST_LIMIT` / `PROMPT_INGEST_WINDOW` 控制。
 - 本地离线模式下会自动关闭邮箱验证、Prompt 生成与公共库的限流器，避免开发或演示环境频繁操作触发限流提示。
 - `/api/users/me` 响应新增 `runtime_mode` 字段，标记后端当前运行在本地（`local`）还是在线（`online`）模式，供前端自动切换离线特性。
 - 评论互动增强：
@@ -407,6 +408,7 @@ go run ./backend/cmd/sendmail -to you@example.com -name "测试账号"
 | `PUT` | `/api/models/:id` | 更新模型凭据（可替换 API Key） | JSON：`label`、`api_key`、`metadata` |
 | `DELETE` | `/api/models/:id` | 删除模型凭据 | 无 |
 | `POST` | `/api/prompts/interpret` | 自然语言解析主题与关键词 | JSON：`description`、`model_key`、`language` |
+| `POST` | `/api/prompts/ingest` | 粘贴成品 Prompt 并生成草稿 | JSON：`body`、`model_key`（可选）、`language`（可选） |
 | `POST` | `/api/prompts/keywords/augment` | 补充关键词并去重 | JSON：`topic`、`model_key`、`existing_positive[]`、`existing_negative[]`、`workspace_token`（可选） |
 | `POST` | `/api/prompts/keywords/manual` | 手动新增关键词并落库 | JSON：`topic`、`word`、`polarity`、`weight`（可选，默认 5）、`prompt_id`（可选）、`workspace_token`（可选） |
 | `POST` | `/api/prompts/keywords/remove` | 从工作区移除关键词 | JSON：`word`、`polarity`、`workspace_token` |
@@ -853,6 +855,24 @@ ALTER TABLE prompts
 
 - **成功响应**：`200`，返回 `topic`、`positive_keywords[]`、`negative_keywords[]`（每项包含 `word`、`weight`、`source`）、`confidence`、`instructions` 以及 `workspace_token`。`weight` 为 0~5 的整数，数值越大表示与主题越相关，前端会优先展示权重高的关键词。
 - **常见错误**：描述为空或模型未配置 → `400`。
+- **限流**：默认 `8 req/min`，可通过 `PROMPT_INTERPRET_LIMIT` 与 `PROMPT_INTERPRET_WINDOW` 调整。
+
+#### POST /api/prompts/ingest
+
+- **用途**：粘贴已经写好的 Prompt 正文，自动拆解主题、补充要求、正/负关键词与标签，并立即创建一条草稿（状态 `draft`）。常见于“我的 Prompt → 自动解析 Prompt”入口。
+- **请求体**
+
+  ```json
+  {
+    "body": "完整的 Prompt 正文",
+    "model_key": "deepseek-chat",
+    "language": "zh-CN"
+  }
+  ```
+
+- **成功响应**：`200`，返回与 `GET /api/prompts/:id` 相同的结构（含 `id`、`topic`、`body`、`instructions`、`tags`、`positive_keywords[]`、`negative_keywords[]`、`workspace_token`、`generation_profile` 等），前端可直接填充工作台。
+- **常见错误**：正文为空或模型未配置 → `400`；触发内容审核 → `400`（`CONTENT_REJECTED`）。
+- **限流**：默认 `5 req/min`，可通过 `PROMPT_INGEST_LIMIT` 与 `PROMPT_INGEST_WINDOW` 配置。调用会复用 Interpret/Generate 相同的模型选择逻辑：若请求未显式指定 `model_key`，将使用免费额度别名（`PROMPT_FREE_TIER_*`），因此也会计入模型配额。
 
 #### POST /api/prompts/keywords/augment
 

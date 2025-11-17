@@ -604,11 +604,27 @@
       "confirm": "Import now",
       "loading": "Importing...",
       "empty": "Paste the share string first",
-      "success": "Imported \"{{topic}}\". Check your list for the new draft.",
-      "error": "Failed to import the share string. Please try again later."
+    "success": "Imported \"{{topic}}\". Check your list for the new draft.",
+    "error": "Failed to import the share string. Please try again later."
+    },
+    "ingest": {
+      "title": "Auto parse prompt",
+      "button": "Auto parse prompt",
+      "dialogTitle": "Paste an existing prompt",
+      "dialogDescription": "Paste the full prompt text below so we can extract its topic, keywords and tags, then create a draft for further editing.",
+      "placeholder": "Paste the full prompt here...",
+      "hint": "Tip: include steps, requirements and constraints for better accuracy. This action consumes your current default model quota.",
+      "confirm": "Parse prompt",
+      "loading": "Parsing...",
+      "empty": "Please paste a prompt before running auto-parse.",
+      "success": "Draft \"{{topic}}\" created. Opening the workbench...",
+      "error": "Failed to parse the prompt. Please try again later."
     },
     "openWorkbench": "Workbench",
     "manageBackups": "Backups",
+    "moreActions": {
+      "label": "More actions"
+    },
     "export": {
       "button": "Export prompts",
       "loading": "Exporting...",

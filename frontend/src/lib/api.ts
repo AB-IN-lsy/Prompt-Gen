@@ -414,6 +414,12 @@ export interface ImportSharedPromptResult {
   imported_at?: string;
 }
 
+export interface IngestPromptPayload {
+  body: string;
+  model_key?: string;
+  language?: string;
+}
+
 export interface PromptVersionSummary {
   versionNo: number;
   model: string;
@@ -1592,6 +1598,40 @@ export async function importSharedPrompt(payload: string): Promise<ImportSharedP
       { payload },
     );
     return response.data ?? { prompt_id: 0, topic: "", status: "draft" };
+  } catch (error) {
+    throw normaliseError(error);
+  }
+}
+
+/** 自动解析成品 Prompt 并生成草稿。 */
+export async function ingestPrompt(params: IngestPromptPayload): Promise<PromptDetailResponse> {
+  const body = params.body?.trim();
+  if (!body) {
+    throw new ApiError({ message: "Prompt body is required" });
+  }
+  const payload: Record<string, string> = { body };
+  if (params.model_key && params.model_key.trim()) {
+    payload.model_key = params.model_key.trim();
+  }
+  if (params.language && params.language.trim()) {
+    payload.language = params.language.trim();
+  }
+  try {
+    const response: AxiosResponse<PromptDetailResponse> = await http.post(
+      "/prompts/ingest",
+      payload,
+    );
+    const data = response.data ?? {};
+    return {
+      ...data,
+      tags: Array.isArray(data?.tags) ? (data.tags as string[]) : [],
+      is_favorited: Boolean(data?.is_favorited),
+      is_liked: Boolean(data?.is_liked),
+      like_count:
+        typeof data?.like_count === "number" && Number.isFinite(data.like_count)
+          ? data.like_count
+          : 0,
+    };
   } catch (error) {
     throw normaliseError(error);
   }

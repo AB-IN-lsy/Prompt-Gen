@@ -15,6 +15,7 @@ import {
   Settings,
   Star,
   UploadCloud,
+  MoreHorizontal,
 } from "lucide-react";
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
@@ -41,6 +42,7 @@ import {
   savePrompt,
   updatePromptFavorite,
   importSharedPrompt,
+  ingestPrompt,
   normaliseKeywordSource,
   PromptDetailResponse,
   PromptListItem,
@@ -129,6 +131,8 @@ export default function MyPromptsPage(): JSX.Element {
   const [favoritingId, setFavoritingId] = useState<number | null>(null);
   const [shareImportOpen, setShareImportOpen] = useState(false);
   const [sharePayloadInput, setSharePayloadInput] = useState("");
+  const [ingestDialogOpen, setIngestDialogOpen] = useState(false);
+  const [ingestPromptInput, setIngestPromptInput] = useState("");
 
   const listQuery = useQuery<PromptListResponse>({
     queryKey: ["my-prompts", { status, page, committedSearch, favoritedOnly }],
@@ -200,6 +204,28 @@ export default function MyPromptsPage(): JSX.Element {
     onError: (error: unknown) => {
       toast.error(
         error instanceof Error ? error.message : t("myPrompts.shareImport.error"),
+      );
+    },
+  });
+
+  const ingestMutation = useMutation({
+    mutationFn: (promptBody: string) =>
+      ingestPrompt({ body: promptBody, language: i18n.language }),
+    onSuccess: (detail) => {
+      toast.success(
+        t("myPrompts.ingest.success", {
+          topic: detail.topic || t("common.untitled"),
+        }),
+      );
+      setIngestPromptInput("");
+      setIngestDialogOpen(false);
+      populateWorkbench(detail);
+      navigate("/prompt-workbench");
+      void queryClient.invalidateQueries({ queryKey: ["my-prompts"] });
+    },
+    onError: (error: unknown) => {
+      toast.error(
+        error instanceof Error ? error.message : t("myPrompts.ingest.error"),
       );
     },
   });
@@ -474,6 +500,18 @@ export default function MyPromptsPage(): JSX.Element {
     shareImportMutation.mutate(trimmed);
   };
 
+  const handleIngestSubmit = () => {
+    const trimmed = ingestPromptInput.trim();
+    if (!trimmed) {
+      toast.error(t("myPrompts.ingest.empty"));
+      return;
+    }
+    if (ingestMutation.isPending) {
+      return;
+    }
+    ingestMutation.mutate(trimmed);
+  };
+
   const handlePageChange = (nextPage: number) => {
     if (nextPage < 1) return;
     if (totalPages && nextPage > totalPages) return;
@@ -507,25 +545,6 @@ export default function MyPromptsPage(): JSX.Element {
         actions={
           <div className="flex flex-wrap items-center gap-2">
             <Button
-              variant="outline"
-              size="sm"
-              className="shadow-sm dark:shadow-none"
-              onClick={() => setShareImportOpen(true)}
-              disabled={shareImportMutation.isPending}
-            >
-              <UploadCloud className="mr-2 h-4 w-4" />
-              {t("myPrompts.shareImport.button")}
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              className="shadow-sm dark:shadow-none"
-              onClick={() => navigate("/settings?tab=app")}
-            >
-              <Settings className="mr-2 h-4 w-4" />
-              {t("myPrompts.manageBackups")}
-            </Button>
-            <Button
               variant="secondary"
               size="sm"
               className="shadow-sm dark:shadow-none"
@@ -537,6 +556,12 @@ export default function MyPromptsPage(): JSX.Element {
               <RefreshCcw className="mr-2 h-4 w-4" />
               {t("myPrompts.openWorkbench")}
             </Button>
+            <MoreActionsMenu
+              disabled={shareImportMutation.isPending || ingestMutation.isPending}
+              onShareImport={() => setShareImportOpen(true)}
+              onIngest={() => setIngestDialogOpen(true)}
+              onManageBackups={() => navigate("/settings?tab=app")}
+            />
           </div>
         }
       />
@@ -551,6 +576,18 @@ export default function MyPromptsPage(): JSX.Element {
           }
         }}
         onSubmit={handleShareImport}
+      />
+      <IngestPromptDialog
+        open={ingestDialogOpen}
+        value={ingestPromptInput}
+        loading={ingestMutation.isPending}
+        onChange={setIngestPromptInput}
+        onClose={() => {
+          if (!ingestMutation.isPending) {
+            setIngestDialogOpen(false);
+          }
+        }}
+        onSubmit={handleIngestSubmit}
       />
       <form
         className="flex flex-col gap-3 rounded-3xl border border-white/60 bg-white/80 p-4 shadow-sm transition-colors dark:border-slate-800 dark:bg-slate-900/70 md:flex-row md:items-center md:justify-between"
@@ -1225,6 +1262,208 @@ function ShareImportDialog({
               </span>
             ) : (
               t("myPrompts.shareImport.confirm")
+            )}
+          </Button>
+        </div>
+      </GlassCard>
+    </div>
+  );
+}
+
+interface MoreActionsMenuProps {
+  disabled?: boolean;
+  onShareImport: () => void;
+  onIngest: () => void;
+  onManageBackups: () => void;
+}
+
+function MoreActionsMenu({
+  disabled,
+  onShareImport,
+  onIngest,
+  onManageBackups,
+}: MoreActionsMenuProps) {
+  const { t } = useTranslation();
+  const [open, setOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+    const handleClick = (event: MouseEvent) => {
+      if (
+        containerRef.current &&
+        !containerRef.current.contains(event.target as Node)
+      ) {
+        setOpen(false);
+      }
+    };
+    const handleKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClick);
+    document.addEventListener("keydown", handleKey);
+    return () => {
+      document.removeEventListener("mousedown", handleClick);
+      document.removeEventListener("keydown", handleKey);
+    };
+  }, [open]);
+
+  return (
+    <div className="relative" ref={containerRef}>
+      <Button
+        variant="outline"
+        size="sm"
+        className="shadow-sm dark:shadow-none"
+        disabled={disabled}
+        onClick={() => {
+          if (!disabled) {
+            setOpen((prev) => !prev);
+          }
+        }}
+        aria-haspopup="menu"
+        aria-expanded={open}
+      >
+        <MoreHorizontal className="mr-2 h-4 w-4" />
+        {t("myPrompts.moreActions.label")}
+      </Button>
+      {open ? (
+        <div className="absolute right-0 z-40 mt-2 w-60 rounded-2xl border border-slate-200 bg-white/95 p-2 shadow-xl backdrop-blur-lg dark:border-slate-700 dark:bg-slate-900/95">
+          <button
+            type="button"
+            className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-sm font-medium text-slate-600 transition hover:bg-primary/10 hover:text-primary dark:text-slate-200 dark:hover:bg-primary/20"
+            onClick={() => {
+              setOpen(false);
+              onIngest();
+            }}
+          >
+            <Sparkles className="h-4 w-4 text-primary" />
+            {t("myPrompts.ingest.button")}
+          </button>
+          <button
+            type="button"
+            className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-sm font-medium text-slate-600 transition hover:bg-primary/10 hover:text-primary dark:text-slate-200 dark:hover:bg-primary/20"
+            onClick={() => {
+              setOpen(false);
+              onShareImport();
+            }}
+          >
+            <UploadCloud className="h-4 w-4" />
+            {t("myPrompts.shareImport.button")}
+          </button>
+          <button
+            type="button"
+            className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-sm font-medium text-slate-600 transition hover:bg-primary/10 hover:text-primary dark:text-slate-200 dark:hover:bg-primary/20"
+            onClick={() => {
+              setOpen(false);
+              onManageBackups();
+            }}
+          >
+            <Settings className="h-4 w-4" />
+            {t("myPrompts.manageBackups")}
+          </button>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+interface IngestPromptDialogProps {
+  open: boolean;
+  value: string;
+  loading: boolean;
+  onChange: (next: string) => void;
+  onClose: () => void;
+  onSubmit: () => void;
+}
+
+function IngestPromptDialog({
+  open,
+  value,
+  loading,
+  onChange,
+  onClose,
+  onSubmit,
+}: IngestPromptDialogProps) {
+  const { t } = useTranslation();
+
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+    const handler = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && !loading) {
+        onClose();
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [open, loading, onClose]);
+
+  if (!open) {
+    return null;
+  }
+
+  return (
+    <div className="fixed inset-0 z-[126] flex items-center justify-center px-6 py-10">
+      <div
+        className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
+        onClick={() => {
+          if (!loading) {
+            onClose();
+          }
+        }}
+        role="presentation"
+      />
+      <GlassCard className="relative z-[127] w-full max-w-2xl space-y-4 bg-white/95 text-slate-700 dark:bg-slate-900/85 dark:text-slate-100">
+        <div className="space-y-1">
+          <p className="text-xs font-semibold uppercase tracking-[0.28em] text-primary">
+            {t("myPrompts.ingest.title")}
+          </p>
+          <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
+            {t("myPrompts.ingest.dialogTitle")}
+          </h2>
+          <p className="text-sm text-slate-500 dark:text-slate-400">
+            {t("myPrompts.ingest.dialogDescription")}
+          </p>
+        </div>
+        <Textarea
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+          placeholder={t("myPrompts.ingest.placeholder")}
+          rows={8}
+          disabled={loading}
+          className="rounded-2xl border border-slate-200 bg-white/80 text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-100"
+        />
+        <p className="text-xs text-slate-500 dark:text-slate-400">
+          {t("myPrompts.ingest.hint")}
+        </p>
+        <div className="flex items-center justify-end gap-3">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={onClose}
+            disabled={loading}
+            className="border-slate-200 text-slate-600 hover:border-primary/40 hover:bg-primary/10 hover:text-primary dark:border-slate-700 dark:text-slate-300"
+          >
+            {t("common.cancel")}
+          </Button>
+          <Button
+            type="button"
+            onClick={onSubmit}
+            disabled={loading}
+            className="bg-primary text-primary-foreground hover:bg-primary/90"
+          >
+            {loading ? (
+              <span className="flex items-center gap-2">
+                <LoaderCircle className="h-4 w-4 animate-spin" />
+                {t("myPrompts.ingest.loading")}
+              </span>
+            ) : (
+              t("myPrompts.ingest.confirm")
             )}
           </Button>
         </div>

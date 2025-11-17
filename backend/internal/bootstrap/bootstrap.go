@@ -405,6 +405,8 @@ func loadEmailVerificationRateConfig(logger *zap.SugaredLogger) (int, time.Durat
 func loadPromptRateLimit(logger *zap.SugaredLogger) handler.PromptRateLimit {
 	interpretLimit := parseIntEnv("PROMPT_INTERPRET_LIMIT", handler.DefaultInterpretLimit, logger)
 	interpretWindow := parseDurationEnv("PROMPT_INTERPRET_WINDOW", handler.DefaultInterpretWindow, logger)
+	ingestLimit := parseIntEnv("PROMPT_INGEST_LIMIT", handler.DefaultIngestLimit, logger)
+	ingestWindow := parseDurationEnv("PROMPT_INGEST_WINDOW", handler.DefaultIngestWindow, logger)
 	generateLimit := parseIntEnv("PROMPT_GENERATE_LIMIT", handler.DefaultGenerateLimit, logger)
 	generateWindow := parseDurationEnv("PROMPT_GENERATE_WINDOW", handler.DefaultGenerateWindow, logger)
 	saveLimit := parseIntEnv("PROMPT_SAVE_LIMIT", handler.DefaultSaveLimit, logger)
@@ -414,6 +416,8 @@ func loadPromptRateLimit(logger *zap.SugaredLogger) handler.PromptRateLimit {
 	return handler.PromptRateLimit{
 		InterpretLimit:  interpretLimit,
 		InterpretWindow: interpretWindow,
+		IngestLimit:     ingestLimit,
+		IngestWindow:    ingestWindow,
 		GenerateLimit:   generateLimit,
 		GenerateWindow:  generateWindow,
 		SaveLimit:       saveLimit,

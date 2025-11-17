@@ -594,21 +594,37 @@
     "eyebrow": "Prompt 清单",
     "title": "我的 Prompt",
     "subtitle": "快速筛选、检索并继续编辑草稿或已发布的 Prompt。",
-    "shareImport": {
-      "title": "导入分享串",
-      "button": "导入分享串",
-      "dialogTitle": "粘贴 PGSHARE 分享串",
-      "dialogDescription": "在 Prompt 详情点击“分享”即可生成以 PGSHARE- 开头的文本，复制后粘贴到此处即可导入。",
-      "placeholder": "PGSHARE-...",
-      "hint": "分享串仅包含文本，请勿粘贴截图或其他附件。",
-      "confirm": "立即导入",
-      "loading": "正在导入",
-      "empty": "请先粘贴分享串",
-      "success": "已导入《{{topic}}》，可在列表中查看。",
-      "error": "导入分享串失败，请稍后再试。"
-    },
-    "openWorkbench": "打开工作台",
-    "manageBackups": "备份与导入设置",
+  "shareImport": {
+    "title": "导入分享串",
+    "button": "导入分享串",
+    "dialogTitle": "粘贴 PGSHARE 分享串",
+    "dialogDescription": "在 Prompt 详情点击“分享”即可生成以 PGSHARE- 开头的文本，复制后粘贴到此处即可导入。",
+    "placeholder": "PGSHARE-...",
+    "hint": "分享串仅包含文本，请勿粘贴截图或其他附件。",
+    "confirm": "立即导入",
+    "loading": "正在导入",
+    "empty": "请先粘贴分享串",
+    "success": "已导入《{{topic}}》，可在列表中查看。",
+    "error": "导入分享串失败，请稍后再试。"
+  },
+  "ingest": {
+    "title": "自动解析 Prompt",
+    "button": "自动解析 Prompt",
+    "dialogTitle": "粘贴现有 Prompt",
+    "dialogDescription": "将你已经写好的 Prompt 正文粘贴到下方，系统会自动提取主题、关键词与标签，并生成一条可编辑的草稿。",
+    "placeholder": "在此粘贴完整 Prompt 正文……",
+    "hint": "提示：包含步骤、约束或标准越完整，解析出的关键词和标签就越准确；该操作会消耗当前默认模型的调用额度。",
+    "confirm": "立即解析",
+    "loading": "正在解析",
+    "empty": "请先粘贴 Prompt，再尝试自动解析。",
+    "success": "已生成草稿《{{topic}}》，正在打开工作台。",
+    "error": "解析 Prompt 失败，请稍后再试。"
+  },
+  "openWorkbench": "打开工作台",
+  "manageBackups": "备份与导入设置",
+  "moreActions": {
+    "label": "更多操作"
+  },
     "export": {
       "button": "导出 Prompt",
       "loading": "正在导出",

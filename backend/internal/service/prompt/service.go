@@ -192,6 +192,7 @@ const (
 	auditStageInterpretInput auditStage = "interpret_input"
 	auditStageGenerateOutput auditStage = "generate_output"
 	auditStageCommentBody    auditStage = "comment_body"
+	auditStagePromptIngest   auditStage = "prompt_ingest"
 )
 
 var (
@@ -1414,6 +1415,14 @@ type InterpretOutput struct {
 	Tags             []string
 }
 
+// IngestPromptInput 描述解析成品 Prompt 所需的参数。
+type IngestPromptInput struct {
+	UserID   uint
+	Body     string
+	ModelKey string
+	Language string
+}
+
 // AugmentInput 描述补充关键词的请求参数。
 type AugmentInput struct {
 	UserID            uint
@@ -1723,6 +1732,112 @@ func (s *Service) Interpret(ctx context.Context, input InterpretInput) (Interpre
 	}
 
 	return output, nil
+}
+
+// IngestPrompt 负责解析用户粘贴的成品 Prompt，并直接生成一条可编辑的草稿记录。
+func (s *Service) IngestPrompt(ctx context.Context, input IngestPromptInput) (PromptDetail, error) {
+	body := strings.TrimSpace(input.Body)
+	if body == "" {
+		return PromptDetail{}, errors.New("prompt body is empty")
+	}
+	modelKey := strings.TrimSpace(input.ModelKey)
+	if modelKey == "" {
+		if alias := s.freeTier.defaultAlias(); alias != "" {
+			modelKey = alias
+		} else {
+			return PromptDetail{}, errors.New("model key is empty")
+		}
+	}
+	if err := s.auditContent(ctx, input.UserID, modelKey, body, auditStagePromptIngest); err != nil {
+		return PromptDetail{}, err
+	}
+	positiveLimit := s.keywordLimit
+	if positiveLimit <= 0 {
+		positiveLimit = DefaultKeywordLimit
+	}
+	negativeLimit := positiveLimit / 2
+	if negativeLimit <= 0 {
+		negativeLimit = 1
+	}
+	tagLimit := s.tagLimit
+	if tagLimit <= 0 {
+		tagLimit = DefaultTagLimit
+	}
+	req := buildPromptIngestRequest(body, input.Language, positiveLimit, negativeLimit, tagLimit)
+	req.Model = modelKey
+	modelCtx, cancel := s.modelInvocationContext(ctx)
+	defer cancel()
+	invokeRes, err := s.invokeModelWithFallback(modelCtx, input.UserID, modelKey, req)
+	if err != nil {
+		return PromptDetail{}, err
+	}
+	payload, err := parseInterpretationPayload(invokeRes.Response)
+	if err != nil {
+		return PromptDetail{}, err
+	}
+	if strings.TrimSpace(payload.Topic) == "" {
+		return PromptDetail{}, errors.New("model did not return topic")
+	}
+	cleanedTags := []string{}
+	if len(payload.Tags) > 0 {
+		if tags, tagErr := s.normalizeTags(payload.Tags); tagErr == nil {
+			cleanedTags = tags
+		} else {
+			cleanedTags = s.truncateTags(payload.Tags)
+		}
+	}
+	normalized := newKeywordSet()
+	positive := make([]KeywordItem, 0, len(payload.Positive))
+	for _, entry := range payload.Positive {
+		item := KeywordItem{
+			Word:     entry.Word,
+			Source:   promptdomain.KeywordSourceModel,
+			Polarity: promptdomain.KeywordPolarityPositive,
+			Weight:   clampWeight(entry.Weight),
+		}
+		item.Word = s.clampKeywordWord(item.Word)
+		if normalized.add(item) {
+			positive = append(positive, item)
+		}
+	}
+	if len(positive) == 0 {
+		return PromptDetail{}, errors.New("model did not return positive keywords")
+	}
+	negative := make([]KeywordItem, 0, len(payload.Negative))
+	for _, entry := range payload.Negative {
+		item := KeywordItem{
+			Word:     entry.Word,
+			Source:   promptdomain.KeywordSourceModel,
+			Polarity: promptdomain.KeywordPolarityNegative,
+			Weight:   clampWeight(entry.Weight),
+		}
+		item.Word = s.clampKeywordWord(item.Word)
+		if normalized.add(item) {
+			negative = append(negative, item)
+		}
+	}
+	saveResult, err := s.Save(ctx, SaveInput{
+		UserID:           input.UserID,
+		Topic:            payload.Topic,
+		Body:             body,
+		Instructions:     payload.Instructions,
+		Model:            modelKey,
+		Status:           promptdomain.PromptStatusDraft,
+		PositiveKeywords: positive,
+		NegativeKeywords: negative,
+		Tags:             cleanedTags,
+	})
+	if err != nil {
+		return PromptDetail{}, err
+	}
+	detail, err := s.GetPrompt(ctx, GetPromptInput{
+		UserID:   input.UserID,
+		PromptID: saveResult.PromptID,
+	})
+	if err != nil {
+		return PromptDetail{}, err
+	}
+	return detail, nil
 }
 
 // AugmentKeywords 调用模型补充关键词，并返回真正新增的词条，同时维持去重与上限控制。
@@ -3209,6 +3324,33 @@ func buildInterpretationRequest(description, language string) modeldomain.ChatCo
 		Messages: []modeldomain.ChatMessage{
 			{Role: "system", Content: system},
 			{Role: "user", Content: user},
+		},
+		ResponseFormat: map[string]any{"type": "json_object"},
+	}
+}
+
+// buildPromptIngestRequest 构建解析成品 Prompt 所需的模型请求体，提炼基础属性。
+func buildPromptIngestRequest(body, language string, positiveLimit, negativeLimit, tagLimit int) modeldomain.ChatCompletionRequest {
+	lang := languageOrDefault(language)
+	if positiveLimit <= 0 {
+		positiveLimit = DefaultKeywordLimit
+	}
+	if negativeLimit <= 0 {
+		negativeLimit = 1
+	}
+	if tagLimit <= 0 {
+		tagLimit = DefaultTagLimit
+	}
+	system := "你是一名 Prompt 解析助手，需要阅读已经写好的 Prompt 正文并提炼可复用的结构化信息。"
+	builder := &strings.Builder{}
+	fmt.Fprintf(builder, "目标语言：%s\n请阅读以下 Prompt 正文，输出 JSON 对象，字段包含 topic、instructions、positive_keywords、negative_keywords、tags、confidence。\n", lang)
+	fmt.Fprintf(builder, "要求：\n1. 正向关键词不超过 %d 个，负向关键词不超过 %d 个，每个关键词附带 0~%d 的整数权重。\n", positiveLimit, negativeLimit, maxKeywordWeight)
+	fmt.Fprintf(builder, "2. 标签不超过 %d 个，遵循 Prompt 的主要场景或对象；补充要求需用 1~2 句中文概述 Prompt 的核心约束。\n", tagLimit)
+	fmt.Fprintf(builder, "3. 若正文未显式包含负向限制，可返回空数组；confidence 需取 0~1 的小数。\nPrompt 正文：\n%s", body)
+	return modeldomain.ChatCompletionRequest{
+		Messages: []modeldomain.ChatMessage{
+			{Role: "system", Content: system},
+			{Role: "user", Content: builder.String()},
 		},
 		ResponseFormat: map[string]any{"type": "json_object"},
 	}

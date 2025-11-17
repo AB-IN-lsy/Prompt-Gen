@@ -26,6 +26,8 @@ type PromptHandler struct {
 	logger          *zap.SugaredLogger
 	interpretLimit  int
 	interpretWindow time.Duration
+	ingestLimit     int
+	ingestWindow    time.Duration
 	generateLimit   int
 	generateWindow  time.Duration
 	saveLimit       int
@@ -38,6 +40,8 @@ type PromptHandler struct {
 type PromptRateLimit struct {
 	InterpretLimit  int
 	InterpretWindow time.Duration
+	IngestLimit     int
+	IngestWindow    time.Duration
 	GenerateLimit   int
 	GenerateWindow  time.Duration
 	SaveLimit       int
@@ -49,10 +53,14 @@ type PromptRateLimit struct {
 const (
 	// DefaultInterpretLimit 控制解析接口默认限额（次/窗口）。
 	DefaultInterpretLimit = 8
+	// DefaultIngestLimit 控制成品 Prompt 解析接口默认限额。
+	DefaultIngestLimit = 5
 	// DefaultGenerateLimit 控制生成接口默认限额（次/窗口）。
 	DefaultGenerateLimit = 5
 	// DefaultInterpretWindow 控制解析接口限流窗口长度。
 	DefaultInterpretWindow = time.Minute
+	// DefaultIngestWindow 控制成品 Prompt 解析的限流窗口长度。
+	DefaultIngestWindow = time.Minute
 	// DefaultGenerateWindow 控制生成接口限流窗口长度。
 	DefaultGenerateWindow = time.Minute
 	// DefaultSaveLimit 控制保存接口默认限额。
@@ -73,6 +81,12 @@ func NewPromptHandler(service *promptsvc.Service, limiter ratelimit.Limiter, cfg
 	}
 	if cfg.InterpretWindow <= 0 {
 		cfg.InterpretWindow = DefaultInterpretWindow
+	}
+	if cfg.IngestLimit <= 0 {
+		cfg.IngestLimit = DefaultIngestLimit
+	}
+	if cfg.IngestWindow <= 0 {
+		cfg.IngestWindow = DefaultIngestWindow
 	}
 	if cfg.GenerateLimit <= 0 {
 		cfg.GenerateLimit = DefaultGenerateLimit
@@ -98,6 +112,8 @@ func NewPromptHandler(service *promptsvc.Service, limiter ratelimit.Limiter, cfg
 		logger:          base,
 		interpretLimit:  cfg.InterpretLimit,
 		interpretWindow: cfg.InterpretWindow,
+		ingestLimit:     cfg.IngestLimit,
+		ingestWindow:    cfg.IngestWindow,
 		generateLimit:   cfg.GenerateLimit,
 		generateWindow:  cfg.GenerateWindow,
 		saveLimit:       cfg.SaveLimit,
@@ -112,6 +128,13 @@ type interpretRequest struct {
 	Description string `json:"description" binding:"required"`
 	ModelKey    string `json:"model_key" binding:"required"`
 	Language    string `json:"language"`
+}
+
+// ingestPromptRequest 描述成品 Prompt 自动解析的请求体。
+type ingestPromptRequest struct {
+	Body     string `json:"body" binding:"required"`
+	ModelKey string `json:"model_key"`
+	Language string `json:"language"`
 }
 
 // KeywordPayload 复用前端传递的关键词结构。
@@ -758,6 +781,75 @@ func (h *PromptHandler) Interpret(c *gin.Context) {
 		"workspace_token":   result.WorkspaceToken,
 		"instructions":      result.Instructions,
 		"tags":              result.Tags,
+	}, nil)
+}
+
+// IngestPrompt 解析成品 Prompt 并创建一条草稿，方便在工作台继续编辑。
+func (h *PromptHandler) IngestPrompt(c *gin.Context) {
+	log := h.scope("ingest")
+	userID, ok := extractUserID(c)
+	if !ok {
+		response.Fail(c, http.StatusUnauthorized, response.ErrUnauthorized, "missing user id", nil)
+		return
+	}
+	if !h.allow(c, fmt.Sprintf("ingest:%d", userID), h.ingestLimit, h.ingestWindow) {
+		return
+	}
+	var req ingestPromptRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Fail(c, http.StatusBadRequest, response.ErrBadRequest, err.Error(), nil)
+		return
+	}
+	detail, err := h.service.IngestPrompt(c.Request.Context(), promptsvc.IngestPromptInput{
+		UserID:   userID,
+		Body:     req.Body,
+		ModelKey: req.ModelKey,
+		Language: req.Language,
+	})
+	if err != nil {
+		if errors.Is(err, promptsvc.ErrContentRejected) {
+			reason := extractContentRejectReason(err)
+			response.Fail(c, http.StatusBadRequest, response.ErrContentRejected, reason, gin.H{"reason": reason})
+			return
+		}
+		var quotaErr *promptsvc.FreeTierQuotaExceededError
+		if errors.As(err, &quotaErr) {
+			retry := int(quotaErr.RetryAfter.Seconds())
+			if retry < 0 {
+				retry = 0
+			}
+			response.Fail(c, http.StatusTooManyRequests, response.ErrTooManyRequests, "今日免费额度已用尽，请配置模型凭据或等待额度重置。", gin.H{
+				"retry_after_seconds": retry,
+				"remaining":           quotaErr.Remaining,
+			})
+			return
+		}
+		log.Errorw("ingest prompt failed", "error", err, "user_id", userID)
+		if errors.Is(err, promptsvc.ErrModelInvocationFailed) {
+			response.Fail(c, http.StatusServiceUnavailable, response.ErrInternal, "调用模型失败，请检查网络连接或模型凭据。", nil)
+			return
+		}
+		response.Fail(c, http.StatusBadRequest, response.ErrBadRequest, err.Error(), nil)
+		return
+	}
+	response.Success(c, http.StatusOK, gin.H{
+		"id":                 detail.ID,
+		"topic":              detail.Topic,
+		"body":               detail.Body,
+		"instructions":       detail.Instructions,
+		"model":              detail.Model,
+		"status":             detail.Status,
+		"tags":               detail.Tags,
+		"positive_keywords":  toKeywordResponse(detail.PositiveKeywords),
+		"negative_keywords":  toKeywordResponse(detail.NegativeKeywords),
+		"workspace_token":    detail.WorkspaceToken,
+		"is_favorited":       detail.IsFavorited,
+		"is_liked":           detail.IsLiked,
+		"like_count":         detail.LikeCount,
+		"created_at":         detail.CreatedAt,
+		"updated_at":         detail.UpdatedAt,
+		"published_at":       detail.PublishedAt,
+		"generation_profile": detail.Generation,
 	}, nil)
 }
 
