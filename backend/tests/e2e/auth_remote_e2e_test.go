@@ -20,7 +20,7 @@ import (
 
 	domain "electron-go-app/backend/internal/domain/user"
 	"electron-go-app/backend/internal/handler"
-	"electron-go-app/backend/internal/infra/client"
+	client "electron-go-app/backend/internal/infra/client"
 	response "electron-go-app/backend/internal/infra/common"
 	"electron-go-app/backend/internal/infra/ratelimit"
 	"electron-go-app/backend/internal/infra/token"

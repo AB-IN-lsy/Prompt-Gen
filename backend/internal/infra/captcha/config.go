@@ -14,8 +14,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-
-	client "electron-go-app/backend/internal/infra/client"
 )
 
 // 环境变量字段名称常量，避免散落的硬编码。
@@ -30,12 +28,7 @@ const (
 	envCaptchaDotCount        = "CAPTCHA_DOT_COUNT"
 	envCaptchaRateLimit       = "CAPTCHA_RATE_LIMIT_PER_MIN"
 	envCaptchaRateLimitWindow = "CAPTCHA_RATE_LIMIT_WINDOW"
-
-	envCaptchaConfigDataID = "CAPTCHA_CONFIG_DATA_ID"
-	envCaptchaConfigGroup  = "CAPTCHA_CONFIG_GROUP"
 )
-
-const defaultCaptchaGroup = "DEFAULT_GROUP"
 
 type nacosCaptchaConfig struct {
 	Enabled         bool    `json:"enabled"`
@@ -50,62 +43,8 @@ type nacosCaptchaConfig struct {
 	RateLimitWindow string  `json:"rate_limit_window"`
 }
 
-// LoadOptions 优先从 Nacos 读取验证码配置，未指定时退回环境变量。
-func LoadOptions(ctx context.Context) (Options, bool, *WatchConfig, error) {
-	dataID := strings.TrimSpace(os.Getenv(envCaptchaConfigDataID))
-	if dataID != "" {
-		group := strings.TrimSpace(os.Getenv(envCaptchaConfigGroup))
-		if group == "" {
-			group = defaultCaptchaGroup
-		}
-
-		opts, err := client.NewDefaultNacosOptions()
-		if err != nil {
-			return Options{}, false, nil, fmt.Errorf("build nacos options: %w", err)
-		}
-
-		content, err := client.FetchNacosConfig(ctx, opts, dataID, group)
-		if err != nil {
-			return Options{}, false, nil, fmt.Errorf("fetch captcha config: %w", err)
-		}
-
-		cfg, err := parseCaptchaConfigJSON(content)
-		if err != nil {
-			return Options{}, false, nil, err
-		}
-
-		interval := defaultCaptchaPollInterval
-		if raw := strings.TrimSpace(os.Getenv(envCaptchaPollInterval)); raw != "" {
-			parsedInterval, parseErr := time.ParseDuration(raw)
-			if parseErr != nil {
-				return Options{}, false, nil, fmt.Errorf("parse %s: %w", envCaptchaPollInterval, parseErr)
-			}
-			if parsedInterval <= 0 {
-				return Options{}, false, nil, fmt.Errorf("%s must be greater than zero", envCaptchaPollInterval)
-			}
-			interval = parsedInterval
-		}
-
-		watch := &WatchConfig{
-			Nacos:        opts,
-			DataID:       dataID,
-			Group:        group,
-			PollInterval: interval,
-			LastRaw:      content,
-		}
-
-		if !cfg.Enabled {
-			return Options{}, false, watch, nil
-		}
-
-		parsed, err := buildOptionsFromPayload(cfg)
-		if err != nil {
-			return Options{}, false, nil, err
-		}
-
-		return parsed, true, watch, nil
-	}
-
+// LoadOptions 仅从环境变量读取验证码配置。
+func LoadOptions(_ context.Context) (Options, bool, *WatchConfig, error) {
 	opts, enabled, err := LoadOptionsFromEnv()
 	return opts, enabled, nil, err
 }

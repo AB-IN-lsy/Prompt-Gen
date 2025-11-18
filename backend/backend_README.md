@@ -215,10 +215,8 @@
 | `CAPTCHA_MAX_SKEW` / `CAPTCHA_DOT_COUNT` | 图片扭曲、噪点参数 |
 | `CAPTCHA_RATE_LIMIT_PER_MIN` | 每个 IP 在窗口内允许请求次数 |
 | `CAPTCHA_RATE_LIMIT_WINDOW` | 限流窗口时长，例如 `1m` |
-| `CAPTCHA_CONFIG_DATA_ID` / `CAPTCHA_CONFIG_GROUP` | （可选）若填则从 Nacos 拉取验证码配置 JSON，未填时使用环境变量 |
-| `CAPTCHA_CONFIG_POLL_INTERVAL` | 拉取 Nacos 配置的轮询间隔，默认 `30s` |
 
-> 当设置 `CAPTCHA_CONFIG_DATA_ID` 时，服务启动后会按 `CAPTCHA_CONFIG_POLL_INTERVAL` 轮询 Nacos，实时应用修改；配置 JSON 中的 `enabled` 字段用于动态开关验证码功能。
+> 验证码配置全部从 `.env(.local)` 读取，取消了对 Nacos 的依赖；若需修改行为，请直接调整环境变量并重启服务即可生效。
 
 ### 邮箱验证与邮件发送
 

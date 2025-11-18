@@ -7,7 +7,6 @@
 package infra
 
 import (
-	"context"
 	"database/sql"
 	"encoding/json"
 	"fmt"
@@ -24,23 +23,21 @@ import (
 )
 
 const (
-	mysqlConfigDataIDEnv = "MYSQL_CONFIG_DATA_ID"
-	envMySQLHost         = "MYSQL_HOST"
-	envMySQLPort         = "MYSQL_PORT"
-	envMySQLUsername     = "MYSQL_USERNAME"
-	envMySQLPassword     = "MYSQL_PASSWORD"
-	envMySQLDatabase     = "MYSQL_DATABASE"
-	envMySQLParams       = "MYSQL_PARAMS"
+	envMySQLHost     = "MYSQL_HOST"
+	envMySQLPort     = "MYSQL_PORT"
+	envMySQLUsername = "MYSQL_USERNAME"
+	envMySQLPassword = "MYSQL_PASSWORD"
+	envMySQLDatabase = "MYSQL_DATABASE"
+	envMySQLParams   = "MYSQL_PARAMS"
 )
 
 const (
-	defaultMySQLDataID   = "mysql-config.properties"
 	defaultMySQLPort     = 3306
 	defaultMySQLDatabase = "prompt"
 	defaultMySQLParams   = "charset=utf8mb4&parseTime=true&loc=Local"
 )
 
-// MySQLConfig 描述从 Nacos 下发的数据库连接配置项。
+// MySQLConfig MySQL 配置结构体。
 type MySQLConfig struct {
 	Host     string `json:"mysql.host"`
 	Port     int    `json:"mysql.port"`
@@ -48,28 +45,6 @@ type MySQLConfig struct {
 	Password string `json:"mysql.password"`
 	Database string `json:"mysql.database"`
 	Params   string `json:"mysql.params"`
-}
-
-// LoadMySQLConfig 从 Nacos 拉取指定 group 的 MySQL 配置并解析。
-func LoadMySQLConfig(ctx context.Context, opts NacosOptions, group string) (MySQLConfig, error) {
-	config.LoadEnvFiles()
-
-	dataID := os.Getenv(mysqlConfigDataIDEnv)
-	if dataID == "" {
-		dataID = defaultMySQLDataID
-	}
-
-	content, err := FetchNacosConfig(ctx, opts, dataID, group)
-	if err != nil {
-		return MySQLConfig{}, err
-	}
-
-	cfg, err := ParseMySQLConfig([]byte(content))
-	if err != nil {
-		return MySQLConfig{}, err
-	}
-
-	return cfg, nil
 }
 
 // LoadMySQLConfigFromEnv 从环境变量读取 MySQL 配置。

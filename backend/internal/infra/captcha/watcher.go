@@ -11,7 +11,6 @@ import (
 
 const (
 	defaultCaptchaPollInterval = 30 * time.Second
-	envCaptchaPollInterval     = "CAPTCHA_CONFIG_POLL_INTERVAL"
 )
 
 // WatchConfig 描述从 Nacos 拉取配置所需的信息。
