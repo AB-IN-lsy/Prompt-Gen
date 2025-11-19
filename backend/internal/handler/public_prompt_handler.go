@@ -160,14 +160,19 @@ func (h *PublicPromptHandler) List(c *gin.Context) {
 		SortOrder:    sortOrder,
 	}
 	statusParam := strings.TrimSpace(c.Query("status"))
+	authorParam := strings.TrimSpace(c.Query("author_id"))
+	var requestedAuthorID uint
+	if authorParam != "" {
+		if authorID, convErr := strconv.Atoi(authorParam); convErr == nil && authorID > 0 {
+			requestedAuthorID = uint(authorID)
+		}
+	}
 	if isAdmin(c) {
 		if statusParam != "" && statusParam != "all" {
 			filter.Status = statusParam
 		}
-		if author := strings.TrimSpace(c.Query("author_id")); author != "" {
-			if authorID, convErr := strconv.Atoi(author); convErr == nil && authorID > 0 {
-				filter.AuthorUserID = uint(authorID)
-			}
+		if requestedAuthorID > 0 {
+			filter.AuthorUserID = requestedAuthorID
 		}
 	} else {
 		switch statusParam {
@@ -177,6 +182,11 @@ func (h *PublicPromptHandler) List(c *gin.Context) {
 			filter.Status = statusParam
 			filter.AuthorUserID = userID
 		default:
+			filter.OnlyApproved = true
+		}
+		if requestedAuthorID > 0 {
+			filter.AuthorUserID = requestedAuthorID
+			filter.Status = ""
 			filter.OnlyApproved = true
 		}
 	}
@@ -208,6 +218,7 @@ func (h *PublicPromptHandler) List(c *gin.Context) {
 			"updated_at":     item.UpdatedAt,
 			"review_reason":  reviewReason,
 			"author_user_id": item.AuthorUserID,
+			"author":         publicPromptAuthorPayload(item.Author),
 			"reviewer_user_id": func() *uint {
 				if item.ReviewerUserID == nil {
 					return nil
@@ -290,6 +301,7 @@ func (h *PublicPromptHandler) Get(c *gin.Context) {
 		"updated_at":        entity.UpdatedAt,
 		"review_reason":     reviewReason,
 		"author_user_id":    entity.AuthorUserID,
+		"author":            publicPromptAuthorPayload(entity.Author),
 		"like_count":        entity.LikeCount,
 		"is_liked":          entity.IsLiked,
 		"visit_count":       entity.VisitCount,
@@ -543,4 +555,21 @@ func (h *PublicPromptHandler) Delete(c *gin.Context) {
 	}
 
 	response.NoContent(c)
+}
+
+// publicPromptAuthorPayload 将创作者信息转换为响应体，避免泄露敏感字段。
+func publicPromptAuthorPayload(brief *promptdomain.UserBrief) gin.H {
+	if brief == nil {
+		return nil
+	}
+	return gin.H{
+		"id":         brief.ID,
+		"username":   brief.Username,
+		"avatar_url": brief.AvatarURL,
+		"headline":   brief.Headline,
+		"bio":        brief.Bio,
+		"location":   brief.Location,
+		"website":    brief.Website,
+		"banner_url": brief.BannerURL,
+	}
 }

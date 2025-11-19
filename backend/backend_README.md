@@ -24,6 +24,8 @@
 - 新增 `POST /api/uploads/avatar` 接口，可接收 multipart 头像并返回可访问的静态地址（支持匿名访问，便于注册阶段上传头像）。
 - 默认开放 `/static/**` 路由映射到 `backend/public` 目录，供头像等资源直接访问。
 - 用户资料更新接口现会在保存前检查用户名、邮箱冲突，并返回更明确的错误。
+- 用户资料新增 `profile_headline`、`profile_bio`、`profile_location`、`profile_website`、`profile_banner_url` 字段，`PUT /api/users/me` 可直接更新公开主页文案。
+- 新增创作者主页接口 `GET /api/creators/:id`，返回投稿者公开资料、统计指标与最近发布的公共 Prompt，供前端跳转显示。
 - 注册接口在邮箱、用户名同时冲突时会通过 `error.details.fields` 返回完整字段列表，方便前端逐项提示。
 - `PUT /api/users/me` 支持显式传入空字符串清空头像，便于用户撤销已上传的头像图片。
 - 单元测试覆盖 `UserService.UpdateProfile`，确保资料更新逻辑稳定。
@@ -1316,6 +1318,19 @@ ALTER TABLE prompts
 
 - **用途**：查询公共 Prompt 详情，返回正文、说明及关键词快照。普通用户访问未审核（`pending`/`rejected`）条目会得到 `403`。
 - **返回字段**：除基础信息外，响应包含 `visit_count`、`like_count` 与 `quality_score`，方便前端展示实时人气指标。
+- **新增字段**：`author_user_id` 与 `author`。其中 `author` 按下表返回投稿者的公开资料，用于前端展示：
+
+  | 字段 | 说明 |
+  | --- | --- |
+  | `author.id` | 投稿者用户 ID |
+  | `author.username` | 投稿者展示名 |
+  | `author.avatar_url` | 头像地址（可为空） |
+  | `author.headline` | 公开主页标语 |
+  | `author.bio` | 个人简介（可为空） |
+  | `author.location` | 位置信息或标签 |
+  | `author.website` | 对外链接 |
+  | `author.banner_url` | 主页横幅背景链接 |
+
 - **成功响应**：`200`
 
   ```json
@@ -1376,6 +1391,50 @@ ALTER TABLE prompts
 - **请求体**：`title`、`topic`、`summary`、`body`、`instructions`、`model`、`language`、`tags[]` 以及 `positive_keywords`/`negative_keywords`（支持字符串数组或对象数组）；可选 `source_prompt_id` 指向原始私有 Prompt。
 - **校验规则**：当携带 `source_prompt_id` 时，必须引用当前用户名下且状态为 `published` 的 Prompt，否则返回 `400`。
 - **重投逻辑**：若作者此前的同主题投稿处于 `pending`/`rejected` 状态，将复用原记录并重置为 `pending`，同时清空驳回信息，避免唯一约束冲突；已通过的条目仍视为只读。
+
+#### GET /api/creators/:id
+
+- **用途**：返回投稿者的公开主页数据，供前端构建创作者页面。
+- **前置条件**：需要登录；若 `id` 不存在或创作者尚未公开资料，则返回 `404`。
+- **成功响应**：`200`
+
+  ```json
+  {
+    "success": true,
+    "data": {
+      "creator": {
+        "id": 3,
+        "username": "alice",
+        "avatar_url": "/static/avatars/alice.png",
+        "headline": "AI 面试官 | Prompt Builder",
+        "bio": "专注于面试场景的 Prompt 调优。",
+        "location": "北京",
+        "website": "https://alice.dev",
+        "banner_url": "https://cdn.example.com/banners/alice.png"
+      },
+      "stats": {
+        "prompt_count": 12,
+        "total_downloads": 420,
+        "total_likes": 180,
+        "total_visits": 1880
+      },
+      "recent_prompts": [
+        {
+          "id": 18,
+          "title": "React 面试宝典",
+          "summary": "整理常见行为与技术面试题",
+          "download_count": 32,
+          "like_count": 12,
+          "visit_count": 87,
+          "quality_score": 7.6,
+          "author": { "...": "same as creator" }
+        }
+      ]
+    }
+  }
+  ```
+
+- **统计说明**：`stats` 仅统计 `status=approved` 的公共 Prompt；`recent_prompts` 默认返回最近 6 条，按照 `updated_at` 倒序排序。
 - **成功响应**：`201`，返回新建公共 Prompt 的 `id` 与 `status`。
 - **限流说明**：受 `PUBLIC_PROMPT_SUBMIT_LIMIT` / `PUBLIC_PROMPT_SUBMIT_WINDOW` 约束，默认 30 分钟内最多 5 次投稿。
 

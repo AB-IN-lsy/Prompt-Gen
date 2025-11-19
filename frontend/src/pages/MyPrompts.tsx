@@ -15,7 +15,6 @@ import {
   Settings,
   Star,
   UploadCloud,
-  MoreHorizontal,
 } from "lucide-react";
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
@@ -25,6 +24,7 @@ import { SpotlightSearch } from "../components/ui/spotlight-search";
 import { PaginationControls } from "../components/ui/pagination-controls";
 import { ConfirmDialog } from "../components/ui/confirm-dialog";
 import { Select } from "../components/ui/select";
+import { MoreActionsMenu } from "../components/ui/more-actions-menu";
 import {
   PROMPT_KEYWORD_MAX_LENGTH,
   PROMPT_TAG_MAX_LENGTH,
@@ -541,6 +541,29 @@ export default function MyPromptsPage(): JSX.Element {
     [t],
   );
 
+  const moreActionsItems = [
+    {
+      key: "ingest",
+      label: t("myPrompts.ingest.button"),
+      icon: <Sparkles className="h-4 w-4 text-primary" />,
+      onSelect: () => setIngestDialogOpen(true),
+      disabled: ingestMutation.isPending,
+    },
+    {
+      key: "shareImport",
+      label: t("myPrompts.shareImport.button"),
+      icon: <UploadCloud className="h-4 w-4" />,
+      onSelect: () => setShareImportOpen(true),
+      disabled: shareImportMutation.isPending,
+    },
+    {
+      key: "manageBackups",
+      label: t("myPrompts.manageBackups"),
+      icon: <Settings className="h-4 w-4" />,
+      onSelect: () => navigate("/settings?tab=app"),
+    },
+  ];
+
   return (
     <div className="flex h-full flex-col gap-6">
       <PageHeader
@@ -562,10 +585,8 @@ export default function MyPromptsPage(): JSX.Element {
               {t("myPrompts.openWorkbench")}
             </Button>
             <MoreActionsMenu
-              disabled={shareImportMutation.isPending || ingestMutation.isPending}
-              onShareImport={() => setShareImportOpen(true)}
-              onIngest={() => setIngestDialogOpen(true)}
-              onManageBackups={() => navigate("/settings?tab=app")}
+              triggerLabel={t("myPrompts.moreActions.label")}
+              items={moreActionsItems}
             />
           </div>
         }
@@ -1271,107 +1292,6 @@ function ShareImportDialog({
           </Button>
         </div>
       </GlassCard>
-    </div>
-  );
-}
-
-interface MoreActionsMenuProps {
-  disabled?: boolean;
-  onShareImport: () => void;
-  onIngest: () => void;
-  onManageBackups: () => void;
-}
-
-function MoreActionsMenu({
-  disabled,
-  onShareImport,
-  onIngest,
-  onManageBackups,
-}: MoreActionsMenuProps) {
-  const { t } = useTranslation();
-  const [open, setOpen] = useState(false);
-  const containerRef = useRef<HTMLDivElement | null>(null);
-
-  useEffect(() => {
-    if (!open) {
-      return;
-    }
-    const handleClick = (event: MouseEvent) => {
-      if (
-        containerRef.current &&
-        !containerRef.current.contains(event.target as Node)
-      ) {
-        setOpen(false);
-      }
-    };
-    const handleKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        setOpen(false);
-      }
-    };
-    document.addEventListener("mousedown", handleClick);
-    document.addEventListener("keydown", handleKey);
-    return () => {
-      document.removeEventListener("mousedown", handleClick);
-      document.removeEventListener("keydown", handleKey);
-    };
-  }, [open]);
-
-  return (
-    <div className="relative" ref={containerRef}>
-      <Button
-        variant="outline"
-        size="sm"
-        className="shadow-sm dark:shadow-none"
-        disabled={disabled}
-        onClick={() => {
-          if (!disabled) {
-            setOpen((prev) => !prev);
-          }
-        }}
-        aria-haspopup="menu"
-        aria-expanded={open}
-      >
-        <MoreHorizontal className="mr-2 h-4 w-4" />
-        {t("myPrompts.moreActions.label")}
-      </Button>
-      {open ? (
-        <div className="absolute right-0 z-40 mt-2 w-60 rounded-2xl border border-slate-200 bg-white/95 p-2 shadow-xl backdrop-blur-lg dark:border-slate-700 dark:bg-slate-900/95">
-          <button
-            type="button"
-            className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-sm font-medium text-slate-600 transition hover:bg-primary/10 hover:text-primary dark:text-slate-200 dark:hover:bg-primary/20"
-            onClick={() => {
-              setOpen(false);
-              onIngest();
-            }}
-          >
-            <Sparkles className="h-4 w-4 text-primary" />
-            {t("myPrompts.ingest.button")}
-          </button>
-          <button
-            type="button"
-            className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-sm font-medium text-slate-600 transition hover:bg-primary/10 hover:text-primary dark:text-slate-200 dark:hover:bg-primary/20"
-            onClick={() => {
-              setOpen(false);
-              onShareImport();
-            }}
-          >
-            <UploadCloud className="h-4 w-4" />
-            {t("myPrompts.shareImport.button")}
-          </button>
-          <button
-            type="button"
-            className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-sm font-medium text-slate-600 transition hover:bg-primary/10 hover:text-primary dark:text-slate-200 dark:hover:bg-primary/20"
-            onClick={() => {
-              setOpen(false);
-              onManageBackups();
-            }}
-          >
-            <Settings className="h-4 w-4" />
-            {t("myPrompts.manageBackups")}
-          </button>
-        </div>
-      ) : null}
     </div>
   );
 }

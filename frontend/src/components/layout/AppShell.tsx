@@ -38,7 +38,8 @@ import {
     Menu,
     X,
     PanelLeftClose,
-    PanelRightOpen
+    PanelRightOpen,
+    UserCircle
 } from "lucide-react";
 import { Button } from "../ui/button";
 import { useAuth } from "../../hooks/useAuth";
@@ -80,7 +81,20 @@ export function AppShell({ children, rightSlot }: AppShellProps) {
     const location = useLocation();
     const scrollContainerRef = useRef<HTMLDivElement>(null);
     const localMode = isLocalMode();
-    const primaryNavItems = baseNavItems;
+    const primaryNavItems = useMemo(() => {
+        const items = [...baseNavItems];
+        if (profile?.user?.id) {
+            const creatorPath = `/creators/${profile.user.id}`;
+            const workbenchIndex = items.findIndex((item) => item.to === "/prompt-workbench");
+            const insertIndex = workbenchIndex >= 0 ? workbenchIndex + 1 : items.length;
+            items.splice(insertIndex, 0, {
+                labelKey: "nav.creatorProfile",
+                icon: UserCircle,
+                to: creatorPath
+            });
+        }
+        return items;
+    }, [profile?.user?.id]);
     const adminNavList = useMemo(() => (localMode ? [] : adminNavItems), [localMode]);
     const [showScrollTop, setShowScrollTop] = useState(false);
     const [fading, setFading] = useState(false);

@@ -17,6 +17,7 @@ import (
 type RouterOptions struct {
 	AuthHandler          *handler.AuthHandler
 	UserHandler          *handler.UserHandler
+	CreatorHandler       *handler.CreatorHandler
 	UploadHandler        *handler.UploadHandler
 	ModelHandler         *handler.ModelHandler
 	ChangelogHandler     *handler.ChangelogHandler
@@ -194,6 +195,14 @@ func NewRouter(opts RouterOptions) *gin.Engine {
 			publicPrompts.DELETE("/:id", opts.PublicPromptHandler.Delete)
 			publicPrompts.POST("", opts.PublicPromptHandler.Submit)
 			publicPrompts.POST("/:id/review", opts.PublicPromptHandler.Review)
+		}
+
+		if opts.CreatorHandler != nil {
+			creators := api.Group("/creators")
+			if opts.AuthMW != nil {
+				creators.Use(opts.AuthMW.Handle())
+			}
+			creators.GET("/:id", opts.CreatorHandler.GetProfile)
 		}
 
 		if opts.IPGuardHandler != nil {

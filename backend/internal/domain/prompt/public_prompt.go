@@ -56,4 +56,9 @@ type UserBrief struct {
 	Username  string `json:"username"`   // 显示名称
 	Email     string `json:"email"`      // 邮箱（仅内部使用）
 	AvatarURL string `json:"avatar_url"` // 头像链接
+	Headline  string `json:"headline"`   // 主页口号
+	Bio       string `json:"bio"`        // 个人简介
+	Location  string `json:"location"`   // 地理位置/标签
+	Website   string `json:"website"`    // 个人链接
+	BannerURL string `json:"banner_url"` // 展示横幅
 }

@@ -444,6 +444,11 @@ func (s *Service) attachAuthors(ctx context.Context, comments []*promptdomain.Pr
 				Username:  user.Username,
 				Email:     user.Email,
 				AvatarURL: user.AvatarURL,
+				Headline:  user.ProfileHeadline,
+				Bio:       user.ProfileBio,
+				Location:  user.ProfileLocation,
+				Website:   user.ProfileWebsite,
+				BannerURL: user.ProfileBannerURL,
 			}
 		}
 	}

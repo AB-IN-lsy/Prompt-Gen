@@ -23,6 +23,7 @@ import IpGuardPage from "./pages/IpGuard";
 import ChangelogAdminPage from "./pages/ChangelogAdmin";
 import PromptDetailPage from "./pages/PromptDetail";
 import PublicPromptsPage from "./pages/PublicPrompts";
+import CreatorProfilePage from "./pages/CreatorProfile";
 import AdminPublicPromptsPage from "./pages/AdminPublicPrompts";
 import AdminMetricsPage from "./pages/AdminMetrics";
 import AdminUsersPage from "./pages/AdminUsers";
@@ -191,6 +192,7 @@ export default function App() {
                 <Route path="/" element={<DashboardPage />} />
                 <Route path="/prompts" element={<MyPromptsPage />} />
                 <Route path="/public-prompts" element={<PublicPromptsPage />} />
+                <Route path="/creators/:id" element={<CreatorProfilePage />} />
                 <Route path="/prompt-workbench" element={<PromptWorkbenchPage />} />
                 <Route path="/prompts/:id" element={<PromptDetailPage />} />
                 <Route path="/settings" element={<SettingsPage />} />

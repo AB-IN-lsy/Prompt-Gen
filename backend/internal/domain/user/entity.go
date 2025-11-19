@@ -13,17 +13,22 @@ import (
 
 // User represents the persisted user entity in the system.
 type User struct {
-	ID              uint       `gorm:"primaryKey" json:"id"`                // 自增主键
-	Username        string     `gorm:"size:64;uniqueIndex" json:"username"` // 登录/展示用的唯一用户名
-	Email           string     `gorm:"size:255;uniqueIndex" json:"email"`   // 登录邮箱（唯一）
-	AvatarURL       string     `gorm:"size:512" json:"avatar_url"`          // 用户头像的公开访问地址
-	PasswordHash    string     `gorm:"size:255" json:"-"`                   // Bcrypt 等算法生成的密码哈希
-	IsAdmin         bool       `gorm:"default:false" json:"is_admin"`       // 管理员标记，仅限内部控制面
-	Settings        string     `gorm:"type:text" json:"settings"`           // JSON 字符串，存放偏好设置
-	LastLoginAt     *time.Time `json:"last_login_at"`                       // 上次登录时间，可为空
-	EmailVerifiedAt *time.Time `json:"email_verified_at"`                   // 邮箱通过验证的时间，可为空
-	CreatedAt       time.Time  `json:"created_at"`                          // 创建时间戳（gorm 自动维护）
-	UpdatedAt       time.Time  `json:"updated_at"`                          // 更新时间戳（gorm 自动维护）
+	ID               uint       `gorm:"primaryKey" json:"id"`                // 自增主键
+	Username         string     `gorm:"size:64;uniqueIndex" json:"username"` // 登录/展示用的唯一用户名
+	Email            string     `gorm:"size:255;uniqueIndex" json:"email"`   // 登录邮箱（唯一）
+	AvatarURL        string     `gorm:"size:512" json:"avatar_url"`          // 用户头像的公开访问地址
+	ProfileHeadline  string     `gorm:"size:128" json:"profile_headline"`    // 个人主页短语
+	ProfileBio       string     `gorm:"type:text" json:"profile_bio"`        // 个人简介
+	ProfileLocation  string     `gorm:"size:128" json:"profile_location"`    // 所在地/标签
+	ProfileWebsite   string     `gorm:"size:255" json:"profile_website"`     // 个人链接
+	ProfileBannerURL string     `gorm:"size:512" json:"profile_banner_url"`  // 主页横幅背景
+	PasswordHash     string     `gorm:"size:255" json:"-"`                   // Bcrypt 等算法生成的密码哈希
+	IsAdmin          bool       `gorm:"default:false" json:"is_admin"`       // 管理员标记，仅限内部控制面
+	Settings         string     `gorm:"type:text" json:"settings"`           // JSON 字符串，存放偏好设置
+	LastLoginAt      *time.Time `json:"last_login_at"`                       // 上次登录时间，可为空
+	EmailVerifiedAt  *time.Time `json:"email_verified_at"`                   // 邮箱通过验证的时间，可为空
+	CreatedAt        time.Time  `json:"created_at"`                          // 创建时间戳（gorm 自动维护）
+	UpdatedAt        time.Time  `json:"updated_at"`                          // 更新时间戳（gorm 自动维护）
 }
 
 // EmailVerificationToken 记录邮箱验证所需的一次性令牌。

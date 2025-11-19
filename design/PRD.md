@@ -216,6 +216,11 @@
 - **详情权限**：公共 Prompt 详情在未通过审核前仅向作者与管理员开放，其余用户访问返回权限受限提示。
 - **治理操作**：管理后台需提供“删除公共 Prompt”能力，可在审核前后移除不合规内容，同时刷新公共库列表与个人下载缓存。
 - **驳回再投稿**：当投稿被驳回后，作者可在原主题下重新提交；系统复用原记录并把状态置回 `pending`、清空驳回原因，避免唯一索引冲突，并在界面明显展示驳回说明。
+- **创作者主页（新增）**：
+  - 为投稿人自动生成 `/creators/:id` 公开页面，展示头像、Headline、Bio、所在地 / 网站链接以及累计指标（投稿数、总下载、总点赞、总浏览），并突出最近 6 条精选作品。
+  - 公共 Prompt 详情抽屉与评论头像点击即可跳转创作者主页；`GET /api/public-prompts` 与 `GET /api/public-prompts/:id` 同步返回 `author` 对象，供前端渲染投稿名片。
+  - 用户资料新增 `profile_headline`、`profile_bio`、`profile_location`、`profile_website`、`profile_banner_url` 字段，通过 `PUT /api/users/me` 更新后即可反映在创作者主页及投稿名片中，默认使用“精选创作者”文案作为占位。
+  - 新接口 `GET /api/creators/:id` 返回 `creator` 资料、`stats` 聚合指标与 `recent_prompts` 精选列表，供前端构建炫酷主页；未登录或 ID 不存在时返回 `401/404`。
 
 ### 4.11 管理员指标面板（新增）
 

@@ -70,6 +70,11 @@ type UpdateMeRequest struct {
 	AvatarURL        *string `json:"avatar_url"`
 	PreferredModel   string  `json:"preferred_model" binding:"omitempty,min=1"`
 	EnableAnimations *bool   `json:"enable_animations"`
+	ProfileHeadline  *string `json:"profile_headline"`
+	ProfileBio       *string `json:"profile_bio"`
+	ProfileLocation  *string `json:"profile_location"`
+	ProfileWebsite   *string `json:"profile_website"`
+	ProfileBannerURL *string `json:"profile_banner_url"`
 }
 
 // UpdateMe 更新当前用户的资料、偏好模型及同步开关。
@@ -141,6 +146,26 @@ func (h *UserHandler) UpdateMe(c *gin.Context) {
 	if req.AvatarURL != nil {
 		avatar := strings.TrimSpace(*req.AvatarURL)
 		profileUpdates.AvatarURL = &avatar
+	}
+	if req.ProfileHeadline != nil {
+		headline := strings.TrimSpace(*req.ProfileHeadline)
+		profileUpdates.ProfileHeadline = &headline
+	}
+	if req.ProfileBio != nil {
+		bio := strings.TrimSpace(*req.ProfileBio)
+		profileUpdates.ProfileBio = &bio
+	}
+	if req.ProfileLocation != nil {
+		location := strings.TrimSpace(*req.ProfileLocation)
+		profileUpdates.ProfileLocation = &location
+	}
+	if req.ProfileWebsite != nil {
+		website := strings.TrimSpace(*req.ProfileWebsite)
+		profileUpdates.ProfileWebsite = &website
+	}
+	if req.ProfileBannerURL != nil {
+		banner := strings.TrimSpace(*req.ProfileBannerURL)
+		profileUpdates.ProfileBannerURL = &banner
 	}
 
 	if profileUpdates.Username != nil || profileUpdates.Email != nil || profileUpdates.AvatarURL != nil {

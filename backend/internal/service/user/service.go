@@ -46,9 +46,14 @@ type Profile struct {
 
 // UpdateProfileParams 封装可以更新的基础信息字段。
 type UpdateProfileParams struct {
-	Username  *string
-	Email     *string
-	AvatarURL *string
+	Username         *string
+	Email            *string
+	AvatarURL        *string
+	ProfileHeadline  *string
+	ProfileBio       *string
+	ProfileLocation  *string
+	ProfileWebsite   *string
+	ProfileBannerURL *string
 }
 
 // GetProfile 返回指定用户的资料与设置。
@@ -137,6 +142,26 @@ func (s *Service) UpdateProfile(ctx context.Context, userID uint, params UpdateP
 	if params.AvatarURL != nil {
 		avatar := strings.TrimSpace(*params.AvatarURL)
 		updates["avatar_url"] = avatar
+	}
+	if params.ProfileHeadline != nil {
+		headline := strings.TrimSpace(*params.ProfileHeadline)
+		updates["profile_headline"] = headline
+	}
+	if params.ProfileBio != nil {
+		bio := strings.TrimSpace(*params.ProfileBio)
+		updates["profile_bio"] = bio
+	}
+	if params.ProfileLocation != nil {
+		location := strings.TrimSpace(*params.ProfileLocation)
+		updates["profile_location"] = location
+	}
+	if params.ProfileWebsite != nil {
+		website := strings.TrimSpace(*params.ProfileWebsite)
+		updates["profile_website"] = website
+	}
+	if params.ProfileBannerURL != nil {
+		banner := strings.TrimSpace(*params.ProfileBannerURL)
+		updates["profile_banner_url"] = banner
 	}
 
 	if err := s.users.UpdateProfileFields(ctx, userID, updates); err != nil {

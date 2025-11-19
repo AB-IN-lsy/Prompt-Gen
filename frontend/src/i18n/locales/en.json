@@ -23,6 +23,7 @@
   "nav": {
     "dashboard": "Dashboard",
     "myPrompts": "My Prompts",
+    "creatorProfile": "Creator profile",
     "publicPrompts": "Public Prompt Library",
     "workbench": "Prompt Workbench",
     "settings": "Settings",
@@ -221,11 +222,64 @@
     "qualityScoreLabel": "Quality score {{score}}",
     "downloadShort": "Save to Mine",
     "deleteShort": "Delete",
+    "detail": {
+      "tagsLabel": "Tags"
+    },
     "detailHeader": {
       "eyebrow": "Prompt Detail",
       "subtitle": "No summary provided yet."
     },
-    "subtitleFallback": "No summary provided yet."
+    "subtitleFallback": "No summary provided yet.",
+    "authorCard": {
+      "title": "Submitted by",
+      "viewProfile": "View profile",
+      "fallback": "This creator hasn't shared a headline yet."
+    }
+  },
+  "creatorPage": {
+    "backToList": "Back to public prompts",
+    "invalid": "Creator not found",
+    "loadError": "Failed to load creator profile.",
+    "retry": "Retry",
+    "unknownName": "Anonymous creator",
+    "fallbackHeadline": "Crafting high-impact prompt flows",
+    "emptyBio": "This creator hasn't written a bio yet.",
+    "location": "Based in {{location}}",
+    "website": "Visit site",
+    "allPromptsCta": "Explore all prompts",
+    "stats": {
+      "prompts": "Public prompts",
+      "downloads": "Downloads",
+      "likes": "Likes",
+      "visits": "Views"
+    },
+    "recentPrompts": {
+      "title": "Featured work",
+      "subtitle": "Latest published prompts",
+      "empty": "No featured prompts yet."
+    },
+    "allPromptsTitle": "All public prompts",
+    "allPromptsSubtitle": "Sorted by most recently updated",
+    "listError": "Failed to load public prompts. Try again later.",
+    "gridEmpty": "No public prompts to display.",
+    "promptCard": {
+      "tapHint": "Tap to preview"
+    },
+    "detail": {
+      "eyebrow": "Prompt preview",
+      "summaryFallback": "This prompt has no summary yet.",
+      "loading": "Loading prompt…",
+      "loadError": "Failed to load prompt detail.",
+      "retry": "Retry",
+      "close": "Close",
+      "tagsLabel": "Tags",
+      "keywordsLabel": "Keywords",
+      "positiveLabel": "Positive",
+      "negativeLabel": "Negative",
+      "emptyKeywords": "No keywords provided.",
+      "instructionsLabel": "Instructions",
+      "bodyLabel": "Prompt body"
+    }
   },
   "comments": {
     "title": "Comments",
@@ -233,6 +287,8 @@
     "placeholder": "Share your thoughts…",
     "replyPlaceholder": "Write a reply…",
     "submit": "Post Comment",
+    "submitReply": "Submit Reply",
+    "reset": "Reset",
     "reply": "Reply",
     "cancelReply": "Cancel",
     "empty": "No comments yet. Be the first to start the discussion!",
@@ -250,9 +306,11 @@
     "rejectedBadge": "Rejected",
     "actions": {
       "approve": "Approve",
-      "reject": "Reject"
+      "reject": "Reject",
+      "reply": "Reply"
     },
     "pagination": "Page {{page}} / {{totalPages}}, {{totalItems}} comments total",
+    "paginationCount": "{{count}} comments on this page",
     "total": "{{count}} comments in total",
     "replyCount": "{{count}} replies",
     "anonymous": "Anonymous",
@@ -915,6 +973,7 @@
       "copyMarkdown": "Copy Markdown",
       "submitPublic": "Submit to library"
     },
+    "moreActionsLabel": "More actions",
     "share": {
       "title": "Share this prompt",
       "description": "Copy the share string below and paste it into another PromptGen client to import offline.",
@@ -1041,9 +1100,22 @@
     },
     "profileCard": {
       "title": "Profile",
-      "description": "Update your username, email and prompt preferences.",
+      "description": "Update your username, email, creator profile copy and prompt preferences.",
       "username": "Username",
       "email": "Email",
+      "headline": "Profile headline",
+      "headlinePlaceholder": "Displayed under your name on the creator page.",
+      "headlineHint": "Use a short tagline (40 characters max) to describe your style.",
+      "location": "Location",
+      "locationPlaceholder": "e.g. Shanghai, Remote",
+      "bio": "Bio",
+      "bioPlaceholder": "Share your background, focus areas or achievements.",
+      "bioHint": "Supports line breaks; leave blank if you prefer to hide this section.",
+      "website": "Website",
+      "websitePlaceholder": "https://example.com",
+      "banner": "Banner image URL",
+      "bannerPlaceholder": "https://cdn.example.com/banner.png",
+      "bannerHint": "Optional 16:9 image displayed behind your hero panel.",
       "preferredModel": "Preferred model",
       "preferredModelPlaceholder": "e.g. deepseek, volcengine",
       "preferredModelReadonlyHint": "The preferred model is managed from model credentials or the workbench and is read-only here.",

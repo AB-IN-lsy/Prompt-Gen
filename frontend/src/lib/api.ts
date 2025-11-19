@@ -252,6 +252,17 @@ export interface PromptListResponse {
   meta: PromptListMeta;
 }
 
+export interface PublicPromptAuthor {
+  id: number;
+  username: string;
+  avatar_url?: string;
+  headline?: string;
+  bio?: string;
+  location?: string;
+  website?: string;
+  banner_url?: string;
+}
+
 export interface PublicPromptListItem {
   id: number;
   title: string;
@@ -271,6 +282,7 @@ export interface PublicPromptListItem {
   review_reason?: string | null;
   is_liked: boolean;
   like_count: number;
+  author?: PublicPromptAuthor | null;
 }
 
 export interface PublicPromptListMeta {
@@ -292,6 +304,19 @@ export interface PublicPromptDetail extends PublicPromptListItem {
   positive_keywords: PublicPromptKeywordItem[];
   negative_keywords: PublicPromptKeywordItem[];
   source_prompt_id?: number | null;
+}
+
+export interface CreatorStats {
+  prompt_count: number;
+  total_downloads: number;
+  total_likes: number;
+  total_visits: number;
+}
+
+export interface CreatorProfileResponse {
+  creator: PublicPromptAuthor | null;
+  stats: CreatorStats;
+  recent_prompts: PublicPromptListItem[];
 }
 
 export interface PromptCommentAuthor {
@@ -469,6 +494,11 @@ export interface AuthUser {
   username: string;
   email: string;
   avatar_url?: string | null;
+  profile_headline?: string;
+  profile_bio?: string;
+  profile_location?: string;
+  profile_website?: string;
+  profile_banner_url?: string;
   is_admin: boolean;
   email_verified_at?: string | null;
   last_login_at?: string | null;
@@ -698,6 +728,11 @@ export interface UpdateCurrentUserRequest {
   avatar_url?: string | null;
   preferred_model?: string;
   enable_animations?: boolean;
+  profile_headline?: string | null;
+  profile_bio?: string | null;
+  profile_location?: string | null;
+  profile_website?: string | null;
+  profile_banner_url?: string | null;
 }
 
 export interface EmailVerificationRequestResult {
@@ -1220,6 +1255,7 @@ export async function fetchPublicPrompts(params: {
           typeof item?.quality_score === "number" && Number.isFinite(item.quality_score)
             ? item.quality_score
             : 0,
+        author: parsePublicPromptAuthor(item?.author),
       } as PublicPromptListItem;
     });
     const effectivePageSize = params.pageSize ?? PUBLIC_PROMPT_LIST_PAGE_SIZE;
@@ -1291,6 +1327,7 @@ export async function fetchPublicPromptDetail(
         typeof data?.like_count === "number" && Number.isFinite(data.like_count)
           ? data.like_count
           : 0,
+      author: parsePublicPromptAuthor(data.author),
       body: String(data.body ?? ""),
       instructions: String(data.instructions ?? ""),
       positive_keywords: positive,
@@ -1409,6 +1446,70 @@ export async function submitPublicPrompt(
       id: Number(response.data?.id ?? 0),
       status: String(response.data?.status ?? "pending"),
       created: String(response.data?.created ?? ""),
+    };
+  } catch (error) {
+    throw normaliseError(error);
+  }
+}
+
+export async function fetchCreatorProfile(id: number): Promise<CreatorProfileResponse> {
+  try {
+    const response: AxiosResponse<{
+      creator?: unknown;
+      stats?: {
+        prompt_count?: number;
+        total_downloads?: number;
+        total_likes?: number;
+        total_visits?: number;
+      };
+      recent_prompts?: any[];
+    }> = await http.get(`/creators/${id}`);
+    const creator = parsePublicPromptAuthor(response.data?.creator);
+    const statsPayload = response.data?.stats ?? {};
+    const stats: CreatorStats = {
+      prompt_count: Number(statsPayload.prompt_count ?? 0),
+      total_downloads: Number(statsPayload.total_downloads ?? 0),
+      total_likes: Number(statsPayload.total_likes ?? 0),
+      total_visits: Number(statsPayload.total_visits ?? 0),
+    };
+    const recentItems = (response.data?.recent_prompts ?? []).map((item) => {
+      const tags = parseStringArray(item?.tags);
+      return {
+        id: Number(item?.id ?? 0),
+        title: String(item?.title ?? item?.topic ?? ""),
+        topic: String(item?.topic ?? ""),
+        summary: String(item?.summary ?? ""),
+        model: String(item?.model ?? ""),
+        language: String(item?.language ?? "zh-CN"),
+        status: String(item?.status ?? "approved"),
+        tags,
+        download_count: Number(item?.download_count ?? 0),
+        visit_count: Number(item?.visit_count ?? 0),
+        quality_score:
+          typeof item?.quality_score === "number" && Number.isFinite(item.quality_score)
+            ? item.quality_score
+            : 0,
+        created_at: String(item?.created_at ?? ""),
+        updated_at: String(item?.updated_at ?? ""),
+        author_user_id: Number(item?.author_user_id ?? creator?.id ?? 0),
+        reviewer_user_id:
+          item?.reviewer_user_id === null || item?.reviewer_user_id === undefined
+            ? undefined
+            : Number(item.reviewer_user_id),
+        review_reason:
+          typeof item?.review_reason === "string" ? item.review_reason : undefined,
+        is_liked: Boolean(item?.is_liked),
+        like_count:
+          typeof item?.like_count === "number" && Number.isFinite(item.like_count)
+            ? item.like_count
+            : 0,
+        author: parsePublicPromptAuthor(item?.author ?? response.data?.creator),
+      } as PublicPromptListItem;
+    });
+    return {
+      creator,
+      stats,
+      recent_prompts: recentItems,
     };
   } catch (error) {
     throw normaliseError(error);
@@ -2205,5 +2306,33 @@ function parsePromptCommentAuthor(value: unknown): PromptCommentAuthor | null {
       typeof record.avatar_url === "string" && record.avatar_url !== ""
         ? record.avatar_url
         : undefined,
+  };
+}
+
+function parsePublicPromptAuthor(value: unknown): PublicPromptAuthor | null {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+  const record = value as Record<string, unknown>;
+  const id = Number(record.id ?? 0);
+  if (!Number.isFinite(id) || id <= 0) {
+    return null;
+  }
+  return {
+    id,
+    username: String(record.username ?? ""),
+    avatar_url:
+      typeof record.avatar_url === "string" && record.avatar_url.length > 0
+        ? String(record.avatar_url)
+        : undefined,
+    headline:
+      typeof record.headline === "string" ? record.headline : undefined,
+    bio: typeof record.bio === "string" ? record.bio : undefined,
+    location:
+      typeof record.location === "string" ? record.location : undefined,
+    website:
+      typeof record.website === "string" ? record.website : undefined,
+    banner_url:
+      typeof record.banner_url === "string" ? record.banner_url : undefined,
   };
 }

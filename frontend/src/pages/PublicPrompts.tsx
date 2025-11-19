@@ -5,7 +5,7 @@
  * @LastEditTime: 2025-10-20 02:12:17
  */
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
@@ -19,14 +19,14 @@ import {
   CircleCheck,
   AlertCircle,
   Copy,
-  X,
+  ArrowUpRight,
   Heart,
   Eye,
 } from "lucide-react";
 import { GlassCard } from "../components/ui/glass-card";
+import { PromptDetailModal } from "../components/public-prompts/PromptDetailModal";
 import { SpotlightSearch } from "../components/ui/spotlight-search";
 import { Badge } from "../components/ui/badge";
-import { MagneticButton } from "../components/ui/magnetic-button";
 import { ConfirmDialog } from "../components/ui/confirm-dialog";
 import { PaginationControls } from "../components/ui/pagination-controls";
 import {
@@ -252,8 +252,6 @@ export default function PublicPromptsPage(): JSX.Element {
   }, [isAdmin]);
 
   const selectedDetail: PublicPromptDetail | undefined = detailQuery.data;
-  const isDownloadingSelected =
-    downloadMutation.isPending && downloadMutation.variables === selectedDetail?.id;
   const sourcePromptId = selectedDetail?.source_prompt_id ?? null;
 
   useEffect(() => {
@@ -564,8 +562,6 @@ export default function PublicPromptsPage(): JSX.Element {
     setSelectedId(null);
     setConfirmDeleteId(null);
   };
-  const isDeletingSelected =
-    deleteMutation.isPending && deleteMutation.variables === selectedDetail?.id;
 
   const handleStatusChange = (value: StatusFilter) => {
     setStatusFilter(value);
@@ -594,12 +590,12 @@ export default function PublicPromptsPage(): JSX.Element {
 
   const allowDelete = isAdmin || offlineMode;
 
-  const handleCopyBody = async () => {
-    if (!selectedDetail?.body) {
+  const handleCopyBody = async (body?: string | null) => {
+    const textToCopy = body ?? selectedDetail?.body ?? "";
+    if (!textToCopy) {
       toast.error(t("publicPrompts.copyBodyEmpty"));
       return;
     }
-    const textToCopy = selectedDetail.body;
     try {
       if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
         await navigator.clipboard.writeText(textToCopy);
@@ -695,8 +691,14 @@ export default function PublicPromptsPage(): JSX.Element {
     };
   };
 
+  const detailStatusMeta = selectedDetail ? statusBadge(selectedDetail.status) : null;
+  const detailUpdatedAt = selectedDetail
+    ? formatDateTime(selectedDetail.updated_at, i18n.language)
+    : null;
+
   const isLoadingList = listQuery.isLoading || listQuery.isFetching;
   const isLoadingDetail = detailQuery.isLoading;
+  const detailError = detailQuery.isError;
 
   return (
     <div className="flex flex-col gap-8">
@@ -844,12 +846,20 @@ export default function PublicPromptsPage(): JSX.Element {
             : "0.0";
           return (
             <GlassCard
+              role="button"
+              tabIndex={0}
               key={item.id}
               className={cn(
-                "group relative flex flex-col gap-4 border border-white/60 bg-white/70 transition hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-[0_25px_45px_-20px_rgba(59,130,246,0.35)] dark:border-slate-800/60 dark:bg-slate-900/60 dark:hover:border-primary/30",
+                "group relative flex cursor-pointer flex-col gap-4 border border-white/60 bg-white/70 transition hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-[0_25px_45px_-20px_rgba(59,130,246,0.35)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 dark:border-slate-800/60 dark:bg-slate-900/60 dark:hover:border-primary/30",
                 detailActive ? "border-primary/40 shadow-[0_25px_45px_-20px_rgba(59,130,246,0.45)] dark:border-primary/50" : "",
               )}
               onClick={() => setSelectedId((prev) => (prev === item.id ? null : item.id))}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  setSelectedId((prev) => (prev === item.id ? null : item.id));
+                }
+              }}
             >
               <div className="flex items-start justify-between gap-3">
               <div className="flex flex-col gap-1">
@@ -982,599 +992,455 @@ export default function PublicPromptsPage(): JSX.Element {
         {t("publicPrompts.scoreRefreshHint")}
       </p>
 
-      {selectedId && selectedDetail ? (
-        (() => {
-          const statusMeta = statusBadge(selectedDetail.status);
-          const detailLiked = Boolean(selectedDetail.is_liked);
+      <PromptDetailModal
+        open={selectedId != null}
+        detail={selectedDetail ?? null}
+        isLoading={isLoadingDetail}
+        isError={detailError}
+        statusMeta={detailStatusMeta}
+        updatedAt={detailUpdatedAt}
+        onClose={handleCloseDetail}
+        onRetry={() => detailQuery.refetch()}
+        onCopyBody={handleCopyBody}
+        headerActions={(detail) => {
+          const detailLiked = Boolean(detail.is_liked);
           const detailLikePending =
-            likeMutation.isPending && likeMutation.variables?.id === selectedDetail.id;
+            likeMutation.isPending && likeMutation.variables?.id === detail.id;
+          const isDownloadingCurrent =
+            downloadMutation.isPending && downloadMutation.variables === detail.id;
+          const isDeletingCurrent =
+            deleteMutation.isPending && deleteMutation.variables === detail.id;
           return (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 px-4 py-8 backdrop-blur-sm"
-          onClick={handleCloseDetail}
-        >
-          <GlassCard
-            className="relative w-full max-w-4xl overflow-hidden border-primary/40 bg-white/95 p-0 shadow-[0_45px_75px_-35px_rgba(59,130,246,0.7)] dark:border-primary/50 dark:bg-slate-900/95"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <button
-              type="button"
-              className="absolute right-5 top-5 inline-flex h-12 w-12 items-center justify-center rounded-full bg-white/95 text-primary shadow-[0_18px_45px_-20px_rgba(59,130,246,0.55)] ring-1 ring-slate-200/70 backdrop-blur-md transition hover:scale-105 hover:bg-white hover:ring-primary/40 dark:bg-slate-900/90 dark:text-primary dark:ring-slate-700/60"
-              onClick={handleCloseDetail}
-              aria-label={t("common.close")}
-            >
-              <X className="h-8 w-8" strokeWidth={2.4} />
-            </button>
-            <div className="flex max-h-[80vh] flex-col overflow-y-auto">
-              <div className="border-b border-white/70 bg-white/90 px-6 pb-5 pt-7 dark:border-slate-800/60 dark:bg-slate-900/85">
-                <div className="flex flex-col gap-4">
-                  <div>
-                    <span className="text-xs font-semibold uppercase tracking-[0.35em] text-slate-400">
-                      {t("publicPrompts.detailHeader.eyebrow")}
-                    </span>
-                    <h2 className="mt-2 text-2xl font-semibold leading-tight text-slate-900 dark:text-white">
-                      {selectedDetail.title || selectedDetail.topic}
-                    </h2>
-                    <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">
-                      {selectedDetail.summary || t("publicPrompts.detailHeader.subtitle")}
-                    </p>
-                  </div>
-                  <div className="flex flex-wrap items-center gap-2 text-xs text-slate-400 dark:text-slate-500">
-                    <CircleCheck className="h-4 w-4 text-emerald-500" />
-                    <span>
-                      {t("publicPrompts.detailMeta.model", {
-                        model: selectedDetail.model,
-                      })}
-                    </span>
-                    <span>·</span>
-                    <span>
-                      {t("publicPrompts.detailMeta.updatedAt", {
-                        date: formatDateTime(selectedDetail.updated_at, i18n.language).date,
-                        time: formatDateTime(selectedDetail.updated_at, i18n.language).time,
-                      })}
-                    </span>
-                  </div>
-                  <div className="flex flex-wrap items-center gap-3 pt-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Badge className={statusMeta.className}>
-                        {statusMeta.label}
-                      </Badge>
-                      <Badge variant="outline" className="border-slate-200 text-slate-500 dark:border-slate-700 dark:text-slate-300">
-                        {selectedDetail.language.toUpperCase()}
-                      </Badge>
-                    </div>
-                    <div className="ml-auto flex flex-wrap items-center gap-2">
-                      <button
-                        type="button"
-                        className={cn(
-                          "inline-flex h-10 items-center gap-2 rounded-full border px-4 text-sm font-medium transition",
-                          detailLiked
-                            ? "border-rose-300 bg-rose-50 text-rose-500 shadow-sm dark:border-rose-500/40 dark:bg-rose-500/10 dark:text-rose-200"
-                            : "border-slate-200 text-slate-500 hover:border-primary/30 hover:text-primary dark:border-slate-700 dark:text-slate-400 dark:hover:border-primary/30",
-                        )}
-                        onClick={() => handleToggleLike(selectedDetail.id, detailLiked)}
-                        disabled={detailLikePending}
-                        aria-pressed={detailLiked}
-                        aria-label={detailLiked
-                          ? t("publicPrompts.unlikeAction")
-                          : t("publicPrompts.likeAction")}
-                        title={detailLiked
-                          ? t("publicPrompts.unlikeAction")
-                          : t("publicPrompts.likeAction")}
-                      >
-                        {detailLikePending ? (
-                          <LoaderCircle className="h-4 w-4 animate-spin" />
-                        ) : (
-                          <Heart
-                            className="h-4 w-4 transition"
-                            fill={detailLiked ? "currentColor" : "none"}
-                            strokeWidth={detailLiked ? 1.5 : 2}
-                          />
-                        )}
-                        <span className="font-semibold text-slate-700 dark:text-slate-200">
-                          {selectedDetail.like_count}
-                        </span>
-                      </button>
-                      <div
-                        className="inline-flex h-10 items-center gap-2 rounded-full border border-slate-200 px-4 text-sm text-slate-500 dark:border-slate-700 dark:text-slate-400"
-                        aria-label={t("publicPrompts.visitCountLabel", { count: selectedDetail.visit_count })}
-                        title={t("publicPrompts.visitCountLabel", { count: selectedDetail.visit_count })}
-                      >
-                        <Eye className="h-4 w-4" />
-                        <span className="font-semibold text-slate-700 dark:text-slate-200">
-                          {selectedDetail.visit_count}
-                        </span>
-                      </div>
-                      <MagneticButton
-                        type="button"
-                        className="px-6 py-3 text-sm"
-                        disabled={isDownloadingSelected || isDeletingSelected}
-                        onClick={() => handleDownload(selectedDetail.id)}
-                      >
-                        {isDownloadingSelected ? (
-                          <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
-                        ) : (
-                          <Download className="mr-2 h-4 w-4" />
-                        )}
-                        {t("publicPrompts.downloadShort")}
-                      </MagneticButton>
-                      {allowDelete ? (
-                        <Button
-                          type="button"
-                          variant="outline"
-                          className="h-10 rounded-full border-rose-300 px-4 text-rose-600 hover:bg-rose-50 dark:border-rose-500/40 dark:text-rose-300 dark:hover:bg-rose-500/10"
-                          disabled={isDeletingSelected || isDownloadingSelected}
-                          onClick={() => setConfirmDeleteId(selectedDetail.id)}
-                        >
-                          {isDeletingSelected ? (
-                            <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
-                          ) : (
-                            <AlertCircle className="mr-2 h-4 w-4" />
-                          )}
-                          {t("publicPrompts.deleteShort")}
-                        </Button>
-                      ) : null}
-                    </div>
-                  </div>
-                </div>
-                {selectedDetail.review_reason ? (
-                  <div className="mt-5 rounded-xl border border-amber-200 bg-amber-50/80 p-3 text-xs text-amber-700 dark:border-amber-400/40 dark:bg-amber-400/10 dark:text-amber-200">
-                    <p className="font-semibold uppercase tracking-[0.3em]">
-                      {t("publicPrompts.reviewReasonTitle")}
-                    </p>
-                    <p className="mt-1 whitespace-pre-wrap leading-relaxed">
-                      {selectedDetail.review_reason}
-                    </p>
-                  </div>
-                ) : null}
-              </div>
-
-              <div className="flex flex-col gap-5 px-6 pb-6 pt-5">
-              <div className="grid gap-4 md:grid-cols-2">
-                <GlassCard className="bg-white/85 dark:bg-slate-900/70">
-                  <div className="flex items-center gap-2 text-xs uppercase tracking-[0.25em] text-slate-400">
-                    <Sparkles className="h-4 w-4" />
-                    {t("publicPrompts.keywords.positive")}
-                  </div>
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    {selectedDetail.positive_keywords.length > 0 ? (
-                      selectedDetail.positive_keywords.map((keyword, idx) => (
-                        <Badge
-                          key={`positive-${keyword.word}-${idx}`}
-                          variant="outline"
-                          className="border-emerald-300/60 text-emerald-600 dark:border-emerald-400/30 dark:text-emerald-300"
-                        >
-                          {keyword.word}
-                        </Badge>
-                      ))
-                    ) : (
-                      <span className="text-xs text-slate-400 dark:text-slate-500">
-                        {t("publicPrompts.keywords.empty")}
-                      </span>
-                    )}
-                  </div>
-                </GlassCard>
-
-                <GlassCard className="bg-white/85 dark:bg-slate-900/70">
-                  <div className="flex items-center gap-2 text-xs uppercase tracking-[0.25em] text-slate-400">
-                    <Tags className="h-4 w-4" />
-                    {t("publicPrompts.keywords.negative")}
-                  </div>
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    {selectedDetail.negative_keywords.length > 0 ? (
-                      selectedDetail.negative_keywords.map((keyword, idx) => (
-                        <Badge
-                          key={`negative-${keyword.word}-${idx}`}
-                          variant="outline"
-                          className="border-rose-300/60 text-rose-600 dark:border-rose-400/30 dark:text-rose-300"
-                        >
-                          {keyword.word}
-                        </Badge>
-                      ))
-                    ) : (
-                      <span className="text-xs text-slate-400 dark:text-slate-500">
-                        {t("publicPrompts.keywords.empty")}
-                      </span>
-                    )}
-                  </div>
-                </GlassCard>
-              </div>
-
-              <GlassCard className="bg-white/85 dark:bg-slate-900/70">
-                <div className="flex items-center gap-2 text-xs uppercase tracking-[0.25em] text-slate-400">
-                  <Clock3 className="h-4 w-4" />
-                  {t("publicPrompts.instructions")}
-                </div>
-                <div className="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-slate-600 dark:text-slate-300">
-                  {selectedDetail.instructions
-                    ? selectedDetail.instructions
-                    : t("publicPrompts.noInstructions")}
-                </div>
-              </GlassCard>
-
-              <GlassCard className="bg-white/85 dark:bg-slate-900/70 md:col-span-2">
-                <div className="flex items-center justify-between text-xs uppercase tracking-[0.25em] text-slate-400">
-                  <span>{t("publicPrompts.body")}</span>
-                  <button
-                    type="button"
-                    className="inline-flex items-center gap-2 rounded-full bg-primary/5 px-3 py-1 text-[0.75rem] font-medium text-primary transition hover:bg-primary/10 hover:text-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 dark:bg-primary/10 dark:text-primary-200 dark:hover:bg-primary/20"
-                    onClick={() => {
-                      void handleCopyBody();
-                    }}
-                  >
-                    <Copy className="h-4 w-4" />
-                    {t("publicPrompts.copyBody")}
-                  </button>
-                </div>
-                <pre className="mt-3 max-h-[40vh] overflow-y-auto whitespace-pre-wrap break-words rounded-2xl bg-slate-900/5 p-4 text-sm leading-relaxed text-slate-600 dark:bg-slate-900/80 dark:text-slate-200">
-                  {selectedDetail.body}
-                </pre>
-              </GlassCard>        <GlassCard className="bg-white/85 dark:bg-slate-900/70 md:col-span-2">
-          <div className="flex flex-col gap-4">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div>
-                <span className="text-xs font-semibold uppercase tracking-[0.3em] text-slate-400">
-                  {t("comments.title")}
+            <>
+              <button
+                type="button"
+                className={cn(
+                  "inline-flex h-10 items-center gap-2 rounded-full border px-4 text-sm font-medium transition",
+                  detailLiked
+                    ? "border-rose-300 bg-rose-50 text-rose-500 shadow-sm dark:border-rose-500/40 dark:bg-rose-500/10 dark:text-rose-200"
+                    : "border-slate-200 text-slate-500 hover:border-primary/30 hover:text-primary dark:border-slate-700 dark:text-slate-400 dark:hover:border-primary/30",
+                )}
+                onClick={() => handleToggleLike(detail.id, detailLiked)}
+                disabled={detailLikePending}
+                aria-pressed={detailLiked}
+                aria-label={detailLiked ? t("publicPrompts.unlikeAction") : t("publicPrompts.likeAction")}
+                title={detailLiked ? t("publicPrompts.unlikeAction") : t("publicPrompts.likeAction")}
+              >
+                {detailLikePending ? (
+                  <LoaderCircle className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Heart className="h-4 w-4 transition" fill={detailLiked ? "currentColor" : "none"} strokeWidth={detailLiked ? 1.5 : 2} />
+                )}
+                <span className="font-semibold text-slate-700 dark:text-slate-200">
+                  {detail.like_count}
                 </span>
-                <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                  {t("comments.subtitle")}
-                </p>
+              </button>
+              <div
+                className="inline-flex h-10 items-center gap-2 rounded-full border border-slate-200 px-4 text-sm text-slate-500 dark:border-slate-700 dark:text-slate-400"
+                aria-label={t("publicPrompts.visitCountLabel", { count: detail.visit_count })}
+                title={t("publicPrompts.visitCountLabel", { count: detail.visit_count })}
+              >
+                <Eye className="h-4 w-4" />
+                <span className="font-semibold text-slate-700 dark:text-slate-200">{detail.visit_count}</span>
               </div>
-              <div className="flex flex-wrap items-center gap-2">
-                <Badge className="border-transparent bg-primary/10 text-primary dark:bg-primary/20">
-                  {t("comments.total", { count: commentMeta?.total_items ?? commentItems.length })}
-                </Badge>
-                {isAdmin ? (
-                  <div className="flex items-center gap-2">
-                    {commentStatusOptions.map((option) => (
-                      <button
-                        key={`comment-status-${option}`}
-                        type="button"
-                        onClick={() => handleCommentStatusChange(option)}
-                        className={cn(
-                          "rounded-full border px-3 py-1 text-xs font-medium transition-colors",
-                          commentStatusFilter === option
-                            ? "border-primary/40 bg-primary/10 text-primary dark:border-primary/30 dark:bg-primary/20"
-                            : "border-slate-200 text-slate-500 hover:border-primary/30 hover:text-primary dark:border-slate-700 dark:text-slate-400 dark:hover:border-primary/30",
-                        )}
-                      >
-                        {option === "all"
-                          ? t("comments.status.all")
-                          : t(`comments.status.${option}`)}
-                      </button>
-                    ))}
-                  </div>
-                ) : null}
-              </div>
-            </div>
-
-            <div className="flex flex-col gap-3">
-              <Textarea
-                rows={3}
-                value={commentBody}
-                onChange={(event) => setCommentBody(event.target.value)}
-                placeholder={t("comments.placeholder")}
-                disabled={commentMutation.isPending || sourcePromptId == null}
-              />
-              <div className="flex justify-end">
+              <Button
+                type="button"
+                className="inline-flex h-10 items-center gap-2 rounded-full px-5 text-sm font-medium"
+                disabled={isDownloadingCurrent || isDeletingCurrent}
+                onClick={() => handleDownload(detail.id)}
+              >
+                {isDownloadingCurrent ? (
+                  <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <Download className="mr-2 h-4 w-4" />
+                )}
+                {t("publicPrompts.downloadShort")}
+              </Button>
+              {allowDelete ? (
                 <Button
                   type="button"
-                  className="inline-flex items-center gap-2"
-                  onClick={handleSubmitComment}
-                  disabled={commentMutation.isPending || sourcePromptId == null || isCommentBodyEmpty || offlineMode}
+                  variant="outline"
+                  className="h-10 rounded-full border-rose-300 px-4 text-rose-600 hover:bg-rose-50 dark:border-rose-500/40 dark:text-rose-300 dark:hover:bg-rose-500/10"
+                  disabled={isDeletingCurrent || isDownloadingCurrent}
+                  onClick={() => setConfirmDeleteId(detail.id)}
                 >
-                  {commentMutation.isPending ? <LoaderCircle className="h-4 w-4 animate-spin" /> : null}
-                  {t("comments.submit")}
+                  {isDeletingCurrent ? (
+                    <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <AlertCircle className="mr-2 h-4 w-4" />
+                  )}
+                  {t("publicPrompts.deleteShort")}
                 </Button>
-              </div>
-            </div>
-
-            {commentErrorMessage ? (
-              <p className="text-sm text-rose-500 dark:text-rose-300">{commentErrorMessage}</p>
-            ) : null}
-
-            {offlineMode ? (
-              <p className="text-xs text-slate-400 dark:text-slate-500">
-                {t("comments.offlineDisabled")}
+              ) : null}
+            </>
+          );
+        }}
+        beforeSections={(detail) =>
+          detail.author ? (
+            <GlassCard className="flex flex-col gap-3 rounded-3xl border border-white/70 bg-white/90 px-6 py-4 dark:border-slate-800/60 dark:bg-slate-900/80">
+              <p className="text-xs font-semibold uppercase tracking-[0.28em] text-slate-400">
+                {t("publicPrompts.authorCard.title")}
               </p>
-            ) : null}
-
-            {isLoadingComments ? (
-              <div className="flex flex-col gap-3">
-                {Array.from({ length: 3 }).map((_, index) => (
-                  <div
-                    key={`comment-skeleton-${index}`}
-                    className="animate-pulse rounded-2xl border border-slate-200/60 bg-white/60 p-4 dark:border-slate-800/60 dark:bg-slate-900/40"
-                  >
-                    <div className="h-4 w-32 rounded bg-slate-200 dark:bg-slate-700" />
-                    <div className="mt-3 h-3 w-full rounded bg-slate-200 dark:bg-slate-700" />
-                    <div className="mt-2 h-3 w-3/4 rounded bg-slate-200 dark:bg-slate-700" />
-                  </div>
-                ))}
+              <div className="flex flex-wrap items-center gap-4">
+                <Link to={`/creators/${detail.author.id}`} className="shrink-0">
+                  {renderAvatar(detail.author.username, detail.author.avatar_url ?? null, "md")}
+                </Link>
+                <div className="flex flex-1 flex-col">
+                  <p className="text-sm font-semibold text-slate-900 dark:text-white">
+                    {detail.author.username}
+                  </p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    {detail.author.headline ? detail.author.headline : t("publicPrompts.authorCard.fallback")}
+                  </p>
+                </div>
+                <Link to={`/creators/${detail.author.id}`}>
+                  <Button variant="secondary" size="sm" className="inline-flex items-center gap-1">
+                    {t("publicPrompts.authorCard.viewProfile")}
+                    <ArrowUpRight className="h-4 w-4" />
+                  </Button>
+                </Link>
               </div>
-            ) : commentItems.length === 0 ? (
-              <p className="text-sm text-slate-400 dark:text-slate-500">
-                {t("comments.empty")}
-              </p>
-            ) : (
-              <div className="flex flex-col gap-4">
-                {commentItems.map((item) => {
-                  const statusMeta = commentStatusBadge(item.status);
-                  const replyDraftValue = replyDrafts[item.id] ?? "";
-                  const commentDisplayName =
-                    item.author?.username && item.author.username.trim().length > 0
-                      ? item.author.username
-                      : t("comments.anonymous");
-                  const commentCreatedAt = formatDateTime(item.created_at, i18n.language);
-                  const commentLikePending =
-                    commentLikeMutation.isPending && commentLikeMutation.variables?.commentId === item.id;
-                  const commentLiked = Boolean(item.is_liked);
-                  return (
-                    <div
-                      key={`comment-${item.id}`}
-                      className="flex flex-col gap-4 rounded-2xl border border-slate-200/60 bg-white/60 p-4 dark:border-slate-800/60 dark:bg-slate-900/40"
-                    >
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="flex flex-1 items-start gap-3">
-                          {renderAvatar(commentDisplayName, item.author?.avatar_url ?? null, "md")}
-                          <div className="flex flex-1 flex-col gap-1">
-                            <span className="text-sm font-semibold text-slate-700 dark:text-slate-200">
-                              {commentDisplayName}
-                            </span>
-                            <span className="text-xs text-slate-400 dark:text-slate-500">
-                              {commentCreatedAt.date} · {commentCreatedAt.time}
-                            </span>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          {item.status !== "approved" ? (
-                            <Badge className={statusMeta.className}>{statusMeta.label}</Badge>
-                          ) : null}
-                          {isAdmin ? (
-                            <div className="flex items-center gap-2">
-                              <Button
-                                type="button"
-                                variant="outline"
-                                className="h-8 px-3 text-xs transition hover:bg-primary/10 hover:text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary/50"
-                                disabled={commentReviewMutation.isPending || item.status === "approved"}
-                                onClick={() => handleReviewComment(item.id, "approved")}
-                              >
-                                {t("comments.actions.approve")}
-                              </Button>
-                              <Button
-                                type="button"
-                                variant="outline"
-                                className="h-8 px-3 text-xs text-rose-500 border-rose-300 hover:bg-rose-50 dark:border-rose-500/40 dark:text-rose-200 dark:hover:bg-rose-500/10"
-                                disabled={commentReviewMutation.isPending || item.status === "rejected"}
-                                onClick={() => handleReviewComment(item.id, "rejected", item.review_note ?? "")}
-                              >
-                                {t("comments.actions.reject")}
-                              </Button>
-                            </div>
-                          ) : null}
-                        </div>
-                      </div>
-                      <p className="whitespace-pre-wrap text-sm leading-relaxed text-slate-600 dark:text-slate-300">{item.body}</p>
-                      {item.review_note && isAdmin ? (
-                        <p className="text-xs text-slate-500 dark:text-slate-400">{item.review_note}</p>
-                      ) : null}
-                      <div className="flex flex-wrap items-center gap-3 text-xs text-slate-400 dark:text-slate-500">
+            </GlassCard>
+          ) : null
+        }
+        afterSections={() => (
+          <GlassCard className="bg-white/85 dark:bg-slate-900/70">
+            <div className="flex flex-col gap-4">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <span className="text-xs font-semibold uppercase tracking-[0.3em] text-slate-400">
+                    {t("comments.title")}
+                  </span>
+                  <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                    {t("comments.subtitle")}
+                  </p>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge className="border-transparent bg-primary/10 text-primary dark:bg-primary/20">
+                    {t("comments.total", { count: commentMeta?.total_items ?? commentItems.length })}
+                  </Badge>
+                  {isAdmin ? (
+                    <div className="flex items-center gap-2">
+                      {commentStatusOptions.map((option) => (
                         <button
+                          key={`comment-status-${option}`}
                           type="button"
+                          onClick={() => handleCommentStatusChange(option)}
                           className={cn(
-                            "inline-flex items-center gap-1 rounded-full border px-3 py-1 text-xs font-medium transition",
-                            commentLiked
-                              ? "border-transparent bg-primary/10 text-primary dark:bg-primary/20"
-                              : "border-slate-200 text-slate-500 hover:border-primary/30 hover:bg-primary/10 hover:text-primary dark:border-slate-700 dark:text-slate-400 dark:hover:border-primary/30 dark:hover:bg-primary/15",
-                            "focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary/50 focus-visible:-outline-offset-2",
-                            commentLikePending ? "opacity-70" : "",
+                            "rounded-full border px-3 py-1 text-xs font-medium transition-colors",
+                            commentStatusFilter === option
+                              ? "border-primary/40 bg-primary/10 text-primary dark:border-primary/30 dark:bg-primary/20"
+                              : "border-slate-200 text-slate-500 hover:border-primary/30 hover:text-primary dark:border-slate-700 dark:text-slate-400 dark:hover:border-primary/30",
                           )}
-                          onClick={() => handleToggleCommentLike(item.id, commentLiked, item.status)}
-                          disabled={commentLikePending}
-                          aria-label={commentLiked ? t("comments.liked") : t("comments.like")}
-                          title={commentLiked ? t("comments.liked") : t("comments.like")}
                         >
-                          {commentLikePending ? (
-                            <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
-                          ) : (
-                            <Heart
-                              className="h-3.5 w-3.5"
-                              fill={commentLiked ? "currentColor" : "none"}
-                            />
-                          )}
-                          <span>{item.like_count}</span>
+                          {option === "all"
+                            ? t("comments.status.all")
+                            : t(`comments.status.${option}`)}
                         </button>
-                        <button
-                          type="button"
-                          className="inline-flex items-center gap-1 rounded-full border border-slate-200 px-3 py-1 text-xs font-medium transition hover:border-primary/30 hover:bg-primary/10 hover:text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary/50 focus-visible:-outline-offset-2 dark:border-slate-700 dark:text-slate-400 dark:hover:border-primary/30 dark:hover:bg-primary/15"
-                          onClick={() => handleStartReply(item.id)}
-                          disabled={commentMutation.isPending || sourcePromptId == null || item.status !== "approved" || offlineMode}
-                        >
-                          {t("comments.reply")}
-                        </button>
-                        <span>{t("comments.replyCount", { count: item.reply_count })}</span>
-                      </div>
-                      {replyTarget === item.id ? (
-                        <div className="flex flex-col gap-2 rounded-xl border border-slate-200/60 bg-white/70 p-3 dark:border-slate-800/60 dark:bg-slate-900/30">
-                          <Textarea
-                            rows={3}
-                            value={replyDraftValue}
-                            onChange={(event) => handleReplyDraftChange(item.id, event.target.value)}
-                            placeholder={t("comments.replyPlaceholder")}
-                            disabled={commentMutation.isPending || offlineMode}
-                          />
-                          <div className="flex items-center justify-end gap-2">
-                            <Button
-                              type="button"
-                              variant="outline"
-                              className="h-8 px-3 text-xs"
-                              onClick={handleCancelReply}
-                              disabled={commentMutation.isPending}
-                            >
-                              {t("comments.cancelReply")}
-                            </Button>
-                            <Button
-                              type="button"
-                              className="h-8 px-3 text-xs"
-                              onClick={() => handleSubmitReply(item.id)}
-                              disabled={commentMutation.isPending}
-                            >
-                              {commentMutation.isPending ? (
-                                <LoaderCircle className="mr-1 h-3.5 w-3.5 animate-spin" />
-                              ) : null}
-                              {t("comments.reply")}
-                            </Button>
-                          </div>
-                        </div>
-                      ) : null}
-                      {item.replies && item.replies.length > 0 ? (
-                        <div className="flex flex-col gap-3 border-l border-slate-200/60 pl-4 dark:border-slate-800/60">
-                          {item.replies.map((reply) => {
-                            const replyMeta = commentStatusBadge(reply.status);
-                            const replyDisplayName =
-                              reply.author?.username && reply.author.username.trim().length > 0
-                                ? reply.author.username
-                                : t("comments.anonymous");
-                            const replyCreatedAt = formatDateTime(reply.created_at, i18n.language);
-                            const replyLikePending =
-                              commentLikeMutation.isPending && commentLikeMutation.variables?.commentId === reply.id;
-                            const replyLiked = Boolean(reply.is_liked);
-                            return (
-                              <div
-                                key={`reply-${item.id}-${reply.id}`}
-                                className="flex flex-col gap-2 rounded-2xl border border-slate-200/60 bg-white/60 p-3 dark:border-slate-800/60 dark:bg-slate-900/40"
-                              >
-                                <div className="flex items-start justify-between gap-3">
-                                  <div className="flex flex-1 items-start gap-3">
-                                    {renderAvatar(replyDisplayName, reply.author?.avatar_url ?? null, "sm")}
-                                    <div className="flex flex-1 flex-col gap-1">
-                                      <span className="text-sm font-medium text-slate-700 dark:text-slate-200">
-                                        {replyDisplayName}
-                                      </span>
-                                      <span className="text-xs text-slate-400 dark:text-slate-500">
-                                        {replyCreatedAt.date} · {replyCreatedAt.time}
-                                      </span>
-                                    </div>
-                                  </div>
-                                  <div className="flex items-center gap-2">
-                                    {reply.status !== "approved" ? (
-                                      <Badge className={replyMeta.className}>{replyMeta.label}</Badge>
-                                    ) : null}
-                                    {isAdmin ? (
-                                      <div className="flex items-center gap-1">
-                                        <Button
-                                          type="button"
-                                          variant="ghost"
-                                          className="h-8 px-2 text-xs transition hover:bg-primary/10 hover:text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary/50"
-                                          disabled={commentReviewMutation.isPending || reply.status === "approved"}
-                                          onClick={() => handleReviewComment(reply.id, "approved")}
-                                        >
-                                          {t("comments.actions.approve")}
-                                        </Button>
-                                        <Button
-                                          type="button"
-                                          variant="ghost"
-                                          className="h-8 px-2 text-xs text-rose-500 transition hover:bg-rose-50 hover:text-rose-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-rose-400 dark:text-rose-200 dark:hover:bg-rose-500/10 dark:hover:text-rose-100"
-                                          disabled={commentReviewMutation.isPending || reply.status === "rejected"}
-                                          onClick={() => handleReviewComment(reply.id, "rejected", reply.review_note ?? "")}
-                                        >
-                                          {t("comments.actions.reject")}
-                                        </Button>
-                                      </div>
-                                    ) : null}
-                                  </div>
-                                </div>
-                                <p className="whitespace-pre-wrap text-sm leading-relaxed text-slate-600 dark:text-slate-300">
-                                  {reply.body}
-                                </p>
-                                {reply.review_note && isAdmin ? (
-                                  <p className="text-xs text-slate-500 dark:text-slate-400">{reply.review_note}</p>
-                                ) : null}
-                                <div className="flex items-center gap-2 text-xs text-slate-400 dark:text-slate-500">
-                                  <button
-                                    type="button"
-                                    className={cn(
-                                      "inline-flex items-center gap-1 rounded-full border px-2 py-1 text-[11px] font-medium transition",
-                                      replyLiked
-                                        ? "border-transparent bg-primary/10 text-primary dark:bg-primary/20"
-                                        : "border-slate-200 text-slate-500 hover:border-primary/30 hover:text-primary dark:border-slate-700 dark:text-slate-400 dark:hover:border-primary/30",
-                                      replyLikePending ? "opacity-70" : "",
-                                    )}
-                                    onClick={() => handleToggleCommentLike(reply.id, replyLiked, reply.status)}
-                                    disabled={replyLikePending}
-                                    aria-label={replyLiked ? t("comments.liked") : t("comments.like")}
-                                    title={replyLiked ? t("comments.liked") : t("comments.like")}
-                                  >
-                                    {replyLikePending ? (
-                                      <LoaderCircle className="h-3 w-3 animate-spin" />
-                                    ) : (
-                                      <Heart
-                                        className="h-3 w-3"
-                                        fill={replyLiked ? "currentColor" : "none"}
-                                      />
-                                    )}
-                                    <span>{reply.like_count}</span>
-                                  </button>
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      ) : null}
+                      ))}
                     </div>
-                  );
-                })}
-              </div>
-            )}
-
-            {commentMeta ? (
-              <div className="flex flex-col gap-2 pt-2 text-xs text-slate-400 dark:text-slate-500 md:flex-row md:items-center md:justify-between">
-                <span>{t("comments.pagination", { page: commentMeta.page, totalPages: commentMeta.total_pages, totalItems: commentMeta.total_items })}</span>
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    className="rounded-full border border-slate-200 px-3 py-1 text-xs text-slate-500 transition hover:border-primary/30 hover:text-primary disabled:cursor-not-allowed disabled:opacity-40 dark:border-slate-700 dark:text-slate-400 dark:hover:border-primary/30"
-                    onClick={() => setCommentPage((prev) => Math.max(prev - 1, 1))}
-                    disabled={commentPage <= 1}
-                  >
-                    {t("publicPrompts.prevPage")}
-                  </button>
-                  <button
-                    type="button"
-                    className="rounded-full border border-slate-200 px-3 py-1 text-xs text-slate-500 transition hover:border-primary/30 hover:text-primary disabled:cursor-not-allowed disabled:opacity-40 dark:border-slate-700 dark:text-slate-400 dark:hover:border-primary/30"
-                    onClick={() =>
-                      setCommentPage((prev) =>
-                        commentMeta ? Math.min(prev + 1, commentMeta.total_pages) : prev + 1,
-                      )
-                    }
-                    disabled={commentMeta ? commentPage >= commentMeta.total_pages : true}
-                  >
-                    {t("publicPrompts.nextPage")}
-                  </button>
+                  ) : null}
                 </div>
               </div>
-            ) : null}
-          </div>
-        </GlassCard>
 
+              <div className="flex flex-col gap-3">
+                <Textarea
+                  rows={3}
+                  value={commentBody}
+                  onChange={(event) => setCommentBody(event.target.value)}
+                  placeholder={t("comments.placeholder")}
+                  disabled={commentMutation.isPending}
+                />
+                <div className="flex flex-wrap items-center gap-3">
+                  <Button
+                    type="button"
+                    size="sm"
+                    className="inline-flex items-center gap-2"
+                    disabled={commentMutation.isPending || isCommentBodyEmpty}
+                    onClick={handleSubmitComment}
+                  >
+                    {commentMutation.isPending ? (
+                      <LoaderCircle className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Sparkles className="h-4 w-4" />
+                    )}
+                    {t("comments.submit")}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="text-slate-500 dark:text-slate-400"
+                    onClick={() => setCommentBody("")}
+                    disabled={commentMutation.isPending || commentBody.length === 0}
+                  >
+                    {t("comments.reset")}
+                  </Button>
+                </div>
+              </div>
 
-            </div>
+              <div className="flex flex-col gap-4">
+                {commentItems.length === 0 ? (
+                  <div className="rounded-2xl border border-dashed border-slate-200 p-6 text-center text-sm text-slate-500 dark:border-slate-800 dark:text-slate-400">
+                    {t("comments.empty")}
+                  </div>
+                ) : (
+                  commentItems.map((item) => {
+                    const commentMeta = commentStatusBadge(item.status);
+                    const commentDisplayName = item.author?.username ?? t("comments.anonymous");
+                    const commentCreatedAt = formatDateTime(item.created_at, i18n.language);
+                    const commentLiked = Boolean(item.is_liked);
+                    const likeCount = item.like_count ?? 0;
+                    const commentAuthorId = item.author?.id ?? null;
+                    const commentAvatar = renderAvatar(
+                      commentDisplayName,
+                      item.author?.avatar_url ?? null,
+                      "md",
+                    );
+                    const commentAvatarNode = commentAuthorId ? (
+                      <Link to={`/creators/${commentAuthorId}`} className="shrink-0">
+                        {commentAvatar}
+                      </Link>
+                    ) : (
+                      commentAvatar
+                    );
+                    const commentNameNode = (
+                      <span className="text-sm font-semibold text-slate-700 dark:text-slate-200">
+                        {commentDisplayName}
+                      </span>
+                    );
+                    return (
+                      <div
+                        key={`comment-${item.id}`}
+                        className="flex flex-col gap-4 rounded-2xl border border-slate-200/60 bg-white/60 p-4 dark:border-slate-800/60 dark:bg-slate-900/40"
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="flex flex-1 items-start gap-3">
+                            {commentAvatarNode}
+                            <div className="flex flex-1 flex-col gap-1">
+                              {commentNameNode}
+                              <span className="text-xs text-slate-400 dark:text-slate-500">
+                                {commentCreatedAt.date} · {commentCreatedAt.time}
+                              </span>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            {item.status !== "approved" ? (
+                              <Badge className={commentMeta.className}>{commentMeta.label}</Badge>
+                            ) : null}
+                            {isAdmin ? (
+                              <div className="flex items-center gap-2">
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  className="h-8 px-3 text-xs transition hover:bg-primary/10 hover:text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary/50"
+                                  disabled={commentReviewMutation.isPending || item.status === "approved"}
+                                  onClick={() => handleReviewComment(item.id, "approved")}
+                                >
+                                  {t("comments.actions.approve")}
+                                </Button>
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  className="h-8 px-3 text-xs text-rose-500 border-rose-300 hover:bg-rose-50 dark:border-rose-500/40 dark:text-rose-200 dark:hover:bg-rose-500/10"
+                                  disabled={commentReviewMutation.isPending || item.status === "rejected"}
+                                  onClick={() => handleReviewComment(item.id, "rejected", item.review_note ?? "")}
+                                >
+                                  {t("comments.actions.reject")}
+                                </Button>
+                              </div>
+                            ) : null}
+                          </div>
+                        </div>
+                        <p className="whitespace-pre-wrap text-sm leading-relaxed text-slate-600 dark:text-slate-300">{item.body}</p>
+                        {item.review_note && isAdmin ? (
+                          <p className="text-xs text-slate-500 dark:text-slate-400">{item.review_note}</p>
+                        ) : null}
+                        <div className="flex flex-wrap items-center gap-3 text-xs text-slate-400 dark:text-slate-500">
+                          <button
+                            type="button"
+                            className={cn(
+                              "inline-flex items-center gap-1 rounded-full border px-3 py-1 text-xs font-medium transition",
+                              commentLiked
+                                ? "border-transparent bg-primary/10 text-primary dark:bg-primary/20"
+                                : "border-slate-200 text-slate-500 hover:border-primary/30 hover:bg-primary/10 hover:text-primary dark:border-slate-700 dark:text-slate-400 dark:hover:border-primary/30 dark:hover:bg-primary/15",
+                              "focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary/40",
+                            )}
+                            disabled={commentLikeMutation.isPending && commentLikeMutation.variables?.commentId === item.id}
+                            onClick={() => handleToggleCommentLike(item.id, commentLiked, item.status)}
+                          >
+                            <Heart className="h-3.5 w-3.5" fill={commentLiked ? "currentColor" : "none"} strokeWidth={commentLiked ? 1.5 : 2} />
+                            <span>{likeCount}</span>
+                          </button>
+                          <button
+                            type="button"
+                            className="inline-flex items-center gap-1 rounded-full border border-slate-200 px-3 py-1 text-xs font-medium text-slate-500 transition hover:border-primary/30 hover:text-primary dark:border-slate-700 dark:text-slate-400"
+                            onClick={() => handleStartReply(item.id)}
+                          >
+                            <ArrowDownUp className="h-3.5 w-3.5" />
+                            {t("comments.actions.reply")}
+                          </button>
+                        </div>
+                        {replyTarget === item.id ? (
+                          <div className="flex flex-col gap-3 rounded-2xl border border-slate-200/60 bg-white/60 p-3 dark:border-slate-800/60 dark:bg-slate-900/40">
+                            <Textarea
+                              rows={2}
+                              value={replyDrafts[item.id] ?? ""}
+                              onChange={(event) =>
+                                setReplyDrafts((prev) => ({ ...prev, [item.id]: event.target.value }))
+                              }
+                              placeholder={t("comments.replyPlaceholder")}
+                              disabled={commentMutation.isPending}
+                            />
+                            <div className="flex flex-wrap items-center gap-2">
+                              <Button
+                                type="button"
+                                size="sm"
+                                className="inline-flex items-center gap-2"
+                                disabled={commentMutation.isPending}
+                                onClick={() => handleSubmitReply(item.id)}
+                              >
+                                {commentMutation.isPending ? (
+                                  <LoaderCircle className="h-4 w-4 animate-spin" />
+                                ) : (
+                                  <Sparkles className="h-4 w-4" />
+                                )}
+                                {t("comments.submitReply")}
+                              </Button>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                className="text-slate-500 dark:text-slate-400"
+                                disabled={commentMutation.isPending}
+                                onClick={handleCancelReply}
+                              >
+                                {t("common.cancel")}
+                              </Button>
+                            </div>
+                          </div>
+                        ) : null}
+                        {item.replies?.length ? (
+                          <div className="flex flex-col gap-3 rounded-2xl border border-slate-200/60 bg-white/50 p-3 dark:border-slate-800/60 dark:bg-slate-900/30">
+                            {item.replies.map((reply) => {
+                              const replyMeta = commentStatusBadge(reply.status);
+                              const replyDisplayName = reply.author?.username ?? t("comments.anonymous");
+                              const replyCreatedAt = formatDateTime(reply.created_at, i18n.language);
+                              const replyAuthorId = reply.author?.id ?? null;
+                              const replyAvatar = renderAvatar(
+                                replyDisplayName,
+                                reply.author?.avatar_url ?? null,
+                                "sm",
+                              );
+                              const replyAvatarNode = replyAuthorId ? (
+                                <Link to={`/creators/${replyAuthorId}`} className="shrink-0">
+                                  {replyAvatar}
+                                </Link>
+                              ) : (
+                                replyAvatar
+                              );
+                              const replyNameNode = (
+                                <span className="text-sm font-medium text-slate-700 dark:text-slate-200">
+                                  {replyDisplayName}
+                                </span>
+                              );
+                              return (
+                                <div
+                                  key={`reply-${item.id}-${reply.id}`}
+                                  className="flex flex-col gap-2 rounded-2xl border border-slate-200/60 bg-white/60 p-3 dark:border-slate-800/60 dark:bg-slate-900/40"
+                                >
+                                  <div className="flex items-start justify-between gap-3">
+                                    <div className="flex flex-1 items-start gap-3">
+                                      {replyAvatarNode}
+                                      <div className="flex flex-1 flex-col gap-1">
+                                        {replyNameNode}
+                                        <span className="text-xs text-slate-400 dark:text-slate-500">
+                                          {replyCreatedAt.date} · {replyCreatedAt.time}
+                                        </span>
+                                      </div>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                      {reply.status !== "approved" ? (
+                                        <Badge className={replyMeta.className}>{replyMeta.label}</Badge>
+                                      ) : null}
+                                      {isAdmin ? (
+                                        <div className="flex items-center gap-1">
+                                          <Button
+                                            type="button"
+                                            variant="ghost"
+                                            className="h-8 px-2 text-xs transition hover:bg-primary/10 hover:text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary/50"
+                                            disabled={commentReviewMutation.isPending || reply.status === "approved"}
+                                            onClick={() => handleReviewComment(reply.id, "approved")}
+                                          >
+                                            {t("comments.actions.approve")}
+                                          </Button>
+                                          <Button
+                                            type="button"
+                                            variant="ghost"
+                                            className="h-8 px-2 text-xs text-rose-500 transition hover:bg-rose-50 hover:text-rose-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-rose-400 dark:text-rose-200 dark:hover:bg-rose-500/10 dark:hover:text-rose-100"
+                                            disabled={commentReviewMutation.isPending || reply.status === "rejected"}
+                                            onClick={() => handleReviewComment(reply.id, "rejected", reply.review_note ?? "")}
+                                          >
+                                            {t("comments.actions.reject")}
+                                          </Button>
+                                        </div>
+                                      ) : null}
+                                    </div>
+                                  </div>
+                                  <p className="whitespace-pre-wrap text-sm leading-relaxed text-slate-600 dark:text-slate-300">
+                                    {reply.body}
+                                  </p>
+                                  {reply.review_note && isAdmin ? (
+                                    <p className="text-xs text-slate-500 dark:text-slate-400">{reply.review_note}</p>
+                                  ) : null}
+                                  <div className="flex items-center gap-2 text-xs text-slate-400 dark:text-slate-500">
+                                    <button
+                                      type="button"
+                                      className={cn(
+                                        "inline-flex items-center gap-1 rounded-full border px-3 py-1 text-xs font-medium transition",
+                                        reply.is_liked
+                                          ? "border-transparent bg-primary/10 text-primary dark:bg-primary/20"
+                                          : "border-slate-200 text-slate-500 hover:border-primary/30 hover:bg-primary/10 hover:text-primary dark:border-slate-700 dark:text-slate-400 dark:hover:border-primary/30 dark:hover:bg-primary/15",
+                                      )}
+                                      disabled={commentLikeMutation.isPending && commentLikeMutation.variables?.commentId === reply.id}
+                                      onClick={() => handleToggleCommentLike(reply.id, Boolean(reply.is_liked), reply.status)}
+                                    >
+                                      <Heart className="h-3.5 w-3.5" fill={reply.is_liked ? "currentColor" : "none"} strokeWidth={reply.is_liked ? 1.5 : 2} />
+                                      <span>{reply.like_count ?? 0}</span>
+                                    </button>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        ) : null}
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+
+              <PaginationControls
+                page={commentPage}
+                totalPages={commentMeta?.total_pages ?? 1}
+                currentCount={commentMeta?.current_count ?? commentItems.length}
+                onPrev={() => setCommentPage((prev) => Math.max(prev - 1, 1))}
+                onNext={() => setCommentPage((prev) => (commentMeta?.total_pages ? Math.min(prev + 1, commentMeta.total_pages) : prev + 1))}
+                prevLabel={t("publicPrompts.prevPage")}
+                nextLabel={t("publicPrompts.nextPage")}
+                pageLabel={t("comments.pagination", {
+                  page: commentPage,
+                  totalPages: commentMeta?.total_pages ?? 1,
+                  totalItems: commentMeta?.total_items ?? commentItems.length,
+                })}
+                countLabel={t("comments.paginationCount", {
+                  count: commentMeta?.current_count ?? commentItems.length,
+                })}
+              />
             </div>
           </GlassCard>
-        </div>
-          );
-        })()
-      ) : null}
-
-      {selectedId && isLoadingDetail ? (
-        <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-900/40 px-4 py-8 backdrop-blur-sm">
-          <GlassCard className="flex items-center gap-3 border-dashed border-slate-200 bg-white/90 text-sm text-slate-500 dark:border-slate-800/60 dark:bg-slate-900/80 dark:text-slate-300">
-            <LoaderCircle className="h-4 w-4 animate-spin" />
-            {t("publicPrompts.loadingDetail")}
-          </GlassCard>
-        </div>
-      ) : null}
-
+        )}
+      />
       <ConfirmDialog
         open={confirmDeleteId != null}
         title={t("publicPrompts.deleteDialogTitle")}

@@ -5,7 +5,16 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { toast } from "sonner";
-import { History, LoaderCircle, Share2, UploadCloud, X } from "lucide-react";
+import {
+  CornerUpLeft,
+  Edit3,
+  History,
+  LoaderCircle,
+  Share2,
+  SlidersHorizontal,
+  UploadCloud,
+  X,
+} from "lucide-react";
 
 import { PageHeader } from "../components/layout/PageHeader";
 import { GlassCard } from "../components/ui/glass-card";
@@ -14,6 +23,7 @@ import { Badge } from "../components/ui/badge";
 import { Input } from "../components/ui/input";
 import { Textarea } from "../components/ui/textarea";
 import { Select } from "../components/ui/select";
+import { MoreActionsMenu, type MoreActionItem } from "../components/ui/more-actions-menu";
 import {
   fetchPromptDetail,
   fetchPromptVersion,
@@ -529,6 +539,51 @@ const handleOpenSubmit = () => {
     }
   };
 
+  const moreActionsItems: MoreActionItem[] = [
+    {
+      key: "back",
+      label: t("promptDetail.actions.back", { defaultValue: "返回上一页" }),
+      icon: <CornerUpLeft className="h-4 w-4" />,
+      onSelect: handleBack,
+    },
+    {
+      key: "share",
+      label: t("promptDetail.actions.share", { defaultValue: "分享" }),
+      icon: shareMutation.isPending ? (
+        <LoaderCircle className="h-4 w-4 animate-spin" />
+      ) : (
+        <Share2 className="h-4 w-4" />
+      ),
+      onSelect: handleShare,
+      disabled: !detail || shareMutation.isPending,
+    },
+  ];
+
+  if (activeGenerationProfile) {
+    moreActionsItems.push({
+      key: "generationProfile",
+      label: t("promptDetail.actions.viewGenerationProfile", {
+        defaultValue: "查看生成配置",
+      }),
+      icon: <SlidersHorizontal className="h-4 w-4" />,
+      onSelect: () => setProfileDialogOpen(true),
+    });
+  }
+
+  if (canSubmitPublic) {
+    moreActionsItems.push({
+      key: "submitPublic",
+      label: t("promptDetail.actions.submitPublic"),
+      icon: submitMutation.isPending ? (
+        <LoaderCircle className="h-4 w-4 animate-spin" />
+      ) : (
+        <UploadCloud className="h-4 w-4" />
+      ),
+      onSelect: handleOpenSubmit,
+      disabled: submitMutation.isPending || !detail,
+    });
+  }
+
   return (
     <div className="flex h-full flex-col gap-6">
       <PageHeader
@@ -537,61 +592,25 @@ const handleOpenSubmit = () => {
         description={t("promptDetail.subtitle")}
         actions={
           <div className="flex w-full flex-wrap items-center gap-3">
-            <div className="flex flex-1 flex-wrap items-center gap-3">
+            <div className="ml-auto flex flex-wrap items-center gap-3">
               <Button
-                variant="outline"
-                onClick={handleBack}
+                variant="secondary"
+                onClick={handleEdit}
+                disabled={!detail}
                 className="transition-transform hover:-translate-y-0.5"
               >
-                {t("promptDetail.actions.back", { defaultValue: "返回上一页" })}
+                <Edit3 className="mr-2 h-4 w-4" />
+                {t("promptDetail.actions.edit", { defaultValue: "继续编辑" })}
               </Button>
-              <Button
-                variant="outline"
-                onClick={handleShare}
-                disabled={!detail || shareMutation.isPending}
-                className="transition-transform hover:-translate-y-0.5"
-              >
-                {shareMutation.isPending ? (
-                  <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
-                ) : (
-                  <Share2 className="mr-2 h-4 w-4" />
-                )}
-                {t("promptDetail.actions.share", { defaultValue: "分享" })}
-              </Button>
-              {activeGenerationProfile ? (
-                <Button
-                  variant="outline"
-                  onClick={() => setProfileDialogOpen(true)}
-                  className="transition-transform hover:-translate-y-0.5"
-                >
-                  {t("promptDetail.actions.viewGenerationProfile", {
-                    defaultValue: "查看生成配置",
-                  })}
-                </Button>
-              ) : null}
-              {canSubmitPublic ? (
-                <Button
-                  onClick={handleOpenSubmit}
-                  disabled={!detail || submitMutation.isPending}
-                  className="transition-transform hover:-translate-y-0.5"
-                >
-                  {submitMutation.isPending ? (
-                    <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
-                  ) : (
-                    <UploadCloud className="mr-2 h-4 w-4" />
-                  )}
-                  {t("promptDetail.actions.submitPublic")}
-                </Button>
-              ) : null}
+              <MoreActionsMenu
+                triggerLabel={t("promptDetail.moreActionsLabel", {
+                  defaultValue: "更多操作",
+                })}
+                triggerSize="default"
+                triggerClassName="transition-transform hover:-translate-y-0.5"
+                items={moreActionsItems}
+              />
             </div>
-            <Button
-              variant="secondary"
-              onClick={handleEdit}
-              disabled={!detail}
-              className="ml-auto transition-transform hover:-translate-y-0.5"
-            >
-              {t("promptDetail.actions.edit", { defaultValue: "继续编辑" })}
-            </Button>
           </div>
         }
       />

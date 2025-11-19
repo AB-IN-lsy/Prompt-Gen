@@ -23,6 +23,7 @@
   "nav": {
     "dashboard": "Dashboard",
     "myPrompts": "我的 Prompt",
+    "creatorProfile": "个人主页",
     "publicPrompts": "优质 Prompt 库",
     "workbench": "Prompt 工作台",
     "settings": "设置",
@@ -221,11 +222,64 @@
     "qualityScoreLabel": "综合评分 {{score}}",
     "downloadShort": "下载到我的库",
     "deleteShort": "删除",
+    "detail": {
+      "tagsLabel": "标签"
+    },
     "detailHeader": {
       "eyebrow": "精选详情",
       "subtitle": "暂无简介"
     },
-    "subtitleFallback": "暂无简介"
+    "subtitleFallback": "暂无简介",
+    "authorCard": {
+      "title": "投稿人",
+      "viewProfile": "查看主页",
+      "fallback": "这位创作者还没有填写简介。"
+    }
+  },
+  "creatorPage": {
+    "backToList": "返回优质 Prompt",
+    "invalid": "未找到该创作者",
+    "loadError": "加载创作者信息失败",
+    "retry": "重试",
+    "unknownName": "匿名创作者",
+    "fallbackHeadline": "正在打造高能 Prompt 灵感",
+    "emptyBio": "这位创作者还没有填写简介。",
+    "location": "常驻：{{location}}",
+    "website": "访问主页",
+    "allPromptsCta": "浏览全部作品",
+    "stats": {
+      "prompts": "公开 Prompt",
+      "downloads": "累计下载",
+      "likes": "获赞",
+      "visits": "浏览"
+    },
+    "recentPrompts": {
+      "title": "精选作品",
+      "subtitle": "最近更新的 Prompt",
+      "empty": "暂时还没有精选作品。"
+    },
+    "allPromptsTitle": "全部公开 Prompt",
+    "allPromptsSubtitle": "按照更新时间从新到旧排列",
+    "listError": "加载公开 Prompt 列表失败，请稍后再试。",
+    "gridEmpty": "暂无公开 Prompt。",
+    "promptCard": {
+      "tapHint": "点击查看详情"
+    },
+    "detail": {
+      "eyebrow": "Prompt 预览",
+      "summaryFallback": "这个 Prompt 暂无简介。",
+      "loading": "正在加载 Prompt…",
+      "loadError": "加载 Prompt 详情失败",
+      "retry": "重试",
+      "close": "关闭",
+      "tagsLabel": "标签",
+      "keywordsLabel": "关键词",
+      "positiveLabel": "正向",
+      "negativeLabel": "负向",
+      "emptyKeywords": "暂无关键词",
+      "instructionsLabel": "补充说明",
+      "bodyLabel": "Prompt 正文"
+    }
   },
   "comments": {
     "title": "评论区",
@@ -233,6 +287,8 @@
     "placeholder": "请输入评论内容…",
     "replyPlaceholder": "请输入回复内容…",
     "submit": "发布评论",
+    "submitReply": "提交回复",
+    "reset": "清空表单",
     "reply": "回复",
     "cancelReply": "取消回复",
     "empty": "暂时还没有评论，快来抢沙发吧！",
@@ -250,9 +306,11 @@
     "rejectedBadge": "已驳回",
     "actions": {
       "approve": "通过",
-      "reject": "驳回"
+      "reject": "驳回",
+      "reply": "回复"
     },
     "pagination": "第 {{page}} / {{totalPages}} 页，共 {{totalItems}} 条评论",
+    "paginationCount": "本页包含 {{count}} 条评论",
     "total": "共有 {{count}} 条评论",
     "replyCount": "共有 {{count}} 条回复",
     "anonymous": "匿名用户",
@@ -915,6 +973,7 @@
       "copyMarkdown": "复制 Markdown",
       "submitPublic": "投稿到公共库"
     },
+    "moreActionsLabel": "更多操作",
     "share": {
       "title": "分享此 Prompt",
       "description": "复制下方分享串，粘贴到另一台 PromptGen 客户端即可导入。",
@@ -1041,9 +1100,22 @@
     },
     "profileCard": {
       "title": "个人资料",
-      "description": "修改用户名、邮箱、偏好模型等信息。",
+      "description": "修改用户名、邮箱、主页文案以及偏好模型等信息。",
       "username": "用户名",
       "email": "邮箱",
+      "headline": "主页标语",
+      "headlinePlaceholder": "展示在头像下的一句话介绍",
+      "headlineHint": "建议不超过 40 个字，用一句话概括你的风格或领域。",
+      "location": "所在城市",
+      "locationPlaceholder": "如 北京 / 远程",
+      "bio": "个人简介",
+      "bioPlaceholder": "介绍你的背景、擅长方向或代表作品",
+      "bioHint": "支持换行，留空则在主页隐藏该区块。",
+      "website": "个人链接",
+      "websitePlaceholder": "https://example.com",
+      "banner": "顶部横幅",
+      "bannerPlaceholder": "https://cdn.example.com/banner.png",
+      "bannerHint": "可选，填入 16:9 图片链接，会展示在主页背景。",
       "preferredModel": "偏好模型",
       "preferredModelPlaceholder": "例如 deepseek、volcengine 等",
       "preferredModelReadonlyHint": "偏好模型由模型凭据或工作台设置，这里仅提供查看。",

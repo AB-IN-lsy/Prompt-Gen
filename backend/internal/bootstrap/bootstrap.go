@@ -227,6 +227,10 @@ func BuildApplication(ctx context.Context, logger *zap.SugaredLogger, resources 
 	publicPromptListCfg := loadPublicPromptListConfig(logger)
 	publicPromptService := publicpromptsvc.NewServiceWithConfig(publicPromptRepo, resources.DBConn(), logger, !isLocalMode, publicPromptListCfg, resources.Redis)
 	publicPromptHandler := handler.NewPublicPromptHandler(publicPromptService, publicPromptLimiter, publicPromptRate)
+	var creatorHandler *handler.CreatorHandler
+	if publicPromptService != nil {
+		creatorHandler = handler.NewCreatorHandler(publicPromptService)
+	}
 
 	// IP 防护中间件也是可选的，且强依赖 Redis。
 	ipGuardCfg := loadIPGuardConfig(logger)
@@ -279,6 +283,7 @@ func BuildApplication(ctx context.Context, logger *zap.SugaredLogger, resources 
 	router := server.NewRouter(server.RouterOptions{
 		AuthHandler:          authHandler,
 		UserHandler:          userHandler,
+		CreatorHandler:       creatorHandler,
 		UploadHandler:        uploadHandler,
 		ModelHandler:         modelHandler,
 		ChangelogHandler:     changelogHandler,

@@ -271,6 +271,11 @@ export default function SettingsPage() {
     avatar_url: profile?.user.avatar_url ?? "",
     preferred_model: profile?.settings.preferred_model ?? "",
     enable_animations: profile?.settings.enable_animations ?? true,
+    profile_headline: profile?.user.profile_headline ?? "",
+    profile_bio: profile?.user.profile_bio ?? "",
+    profile_location: profile?.user.profile_location ?? "",
+    profile_website: profile?.user.profile_website ?? "",
+    profile_banner_url: profile?.user.profile_banner_url ?? "",
   });
 
   const [profileErrors, setProfileErrors] = useState<{
@@ -307,6 +312,11 @@ export default function SettingsPage() {
       avatar_url: profile?.user.avatar_url ?? "",
       preferred_model: profile?.settings.preferred_model ?? "",
       enable_animations: profile?.settings.enable_animations ?? true,
+      profile_headline: profile?.user.profile_headline ?? "",
+      profile_bio: profile?.user.profile_bio ?? "",
+      profile_location: profile?.user.profile_location ?? "",
+      profile_website: profile?.user.profile_website ?? "",
+      profile_banner_url: profile?.user.profile_banner_url ?? "",
     });
     setProfileErrors({ username: undefined, email: undefined });
     setVerificationTargetEmail(profile?.user.email ?? "");
@@ -677,6 +687,11 @@ export default function SettingsPage() {
       preferred_model: profileForm.preferred_model.trim() || undefined,
       enable_animations: profileForm.enable_animations,
     };
+    payload.profile_headline = profileForm.profile_headline.trim();
+    payload.profile_bio = profileForm.profile_bio.trim();
+    payload.profile_location = profileForm.profile_location.trim();
+    payload.profile_website = profileForm.profile_website.trim();
+    payload.profile_banner_url = profileForm.profile_banner_url.trim();
 
     const initialAvatar = profile?.user.avatar_url ?? "";
     if (profileForm.avatar_url !== initialAvatar) {
@@ -1195,6 +1210,110 @@ export default function SettingsPage() {
                   </p>
                 </>
               )}
+            </div>
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-2">
+              <label
+                className="text-sm font-medium text-slate-700 dark:text-slate-200"
+                htmlFor="profile-headline"
+              >
+                {t("settings.profileCard.headline")}
+              </label>
+              <Input
+                id="profile-headline"
+                value={profileForm.profile_headline}
+                placeholder={t("settings.profileCard.headlinePlaceholder") ?? ""}
+                onChange={(event) => {
+                  const value = event.target.value;
+                  setProfileForm((prev) => ({ ...prev, profile_headline: value }));
+                }}
+              />
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                {t("settings.profileCard.headlineHint")}
+              </p>
+            </div>
+            <div className="space-y-2">
+              <label
+                className="text-sm font-medium text-slate-700 dark:text-slate-200"
+                htmlFor="profile-location"
+              >
+                {t("settings.profileCard.location")}
+              </label>
+              <Input
+                id="profile-location"
+                value={profileForm.profile_location}
+                placeholder={t("settings.profileCard.locationPlaceholder") ?? ""}
+                onChange={(event) => {
+                  const value = event.target.value;
+                  setProfileForm((prev) => ({ ...prev, profile_location: value }));
+                }}
+              />
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <label
+              className="text-sm font-medium text-slate-700 dark:text-slate-200"
+              htmlFor="profile-bio"
+            >
+              {t("settings.profileCard.bio")}
+            </label>
+            <Textarea
+              id="profile-bio"
+              rows={4}
+              value={profileForm.profile_bio}
+              placeholder={t("settings.profileCard.bioPlaceholder") ?? ""}
+              onChange={(event) => {
+                const value = event.target.value;
+                setProfileForm((prev) => ({ ...prev, profile_bio: value }));
+              }}
+            />
+            <p className="text-xs text-slate-500 dark:text-slate-400">
+              {t("settings.profileCard.bioHint")}
+            </p>
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-2">
+              <label
+                className="text-sm font-medium text-slate-700 dark:text-slate-200"
+                htmlFor="profile-website"
+              >
+                {t("settings.profileCard.website")}
+              </label>
+              <Input
+                id="profile-website"
+                type="url"
+                value={profileForm.profile_website}
+                placeholder={t("settings.profileCard.websitePlaceholder") ?? ""}
+                onChange={(event) => {
+                  const value = event.target.value;
+                  setProfileForm((prev) => ({ ...prev, profile_website: value }));
+                }}
+              />
+            </div>
+            <div className="space-y-2">
+              <label
+                className="text-sm font-medium text-slate-700 dark:text-slate-200"
+                htmlFor="profile-banner"
+              >
+                {t("settings.profileCard.banner")}
+              </label>
+              <Input
+                id="profile-banner"
+                type="url"
+                value={profileForm.profile_banner_url}
+                placeholder={t("settings.profileCard.bannerPlaceholder") ?? ""}
+                onChange={(event) => {
+                  const value = event.target.value;
+                  setProfileForm((prev) => ({ ...prev, profile_banner_url: value }));
+                }}
+              />
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                {t("settings.profileCard.bannerHint")}
+              </p>
             </div>
           </div>
 

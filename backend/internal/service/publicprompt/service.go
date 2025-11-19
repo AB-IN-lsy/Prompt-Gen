@@ -2,6 +2,7 @@ package publicprompt
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"math"
@@ -10,6 +11,7 @@ import (
 	"time"
 
 	promptdomain "electron-go-app/backend/internal/domain/prompt"
+	userdomain "electron-go-app/backend/internal/domain/user"
 	"electron-go-app/backend/internal/repository"
 
 	"github.com/google/uuid"
@@ -32,6 +34,9 @@ var ErrPromptNotApproved = errors.New("公共 Prompt 尚未通过审核")
 
 // ErrLikeNotAvailable 表示当前公共 Prompt 无法执行点赞操作（缺少源 Prompt）。
 var ErrLikeNotAvailable = errors.New("当前公共 Prompt 暂不支持点赞")
+
+// ErrAuthorNotFound 表示需要展示的创作者不存在或尚未公开资料。
+var ErrAuthorNotFound = errors.New("创作者不存在")
 
 // DefaultListPageSize 定义公共库列表默认每页条目数。
 const DefaultListPageSize = 9
@@ -77,6 +82,7 @@ const (
 	defaultScoreHalfLife          = 24 * time.Hour
 	defaultScoreRefreshInterval   = 5 * time.Minute
 	defaultScoreRefreshBatchLimit = 200
+	defaultCreatorShowcaseLimit   = 6
 )
 
 // normaliseScoreConfig 负责为评分配置补全默认值，避免缺失参数导致评分流程失效。
@@ -144,6 +150,7 @@ type Config struct {
 // Service 封装公共 Prompt 库相关的业务逻辑。
 type Service struct {
 	repo            *repository.PublicPromptRepository
+	users           *repository.UserRepository
 	db              *gorm.DB
 	prompts         *repository.PromptRepository
 	logger          *zap.SugaredLogger
@@ -184,6 +191,7 @@ func NewServiceWithConfig(repo *repository.PublicPromptRepository, db *gorm.DB, 
 	scoreEnabled := cfg.Score.Enabled
 	return &Service{
 		repo:            repo,
+		users:           repository.NewUserRepository(db),
 		db:              db,
 		prompts:         repository.NewPromptRepository(db),
 		logger:          logger,
@@ -227,6 +235,21 @@ type LikeResult struct {
 	Liked     bool
 }
 
+// AuthorStats 汇总创作者在公共库中的可见指标。
+type AuthorStats struct {
+	PromptCount    int64  `json:"prompt_count"`
+	TotalDownloads uint64 `json:"total_downloads"`
+	TotalLikes     uint64 `json:"total_likes"`
+	TotalVisits    uint64 `json:"total_visits"`
+}
+
+// AuthorProfile 组合创作者的公开资料与精选 Prompt。
+type AuthorProfile struct {
+	Author        *promptdomain.UserBrief     `json:"author"`
+	Stats         AuthorStats                 `json:"stats"`
+	RecentPrompts []promptdomain.PublicPrompt `json:"recent_prompts"`
+}
+
 // List 返回公共库列表数据。
 func (s *Service) List(ctx context.Context, filter ListFilter) (*ListResult, error) {
 	if filter.Page <= 0 {
@@ -258,6 +281,9 @@ func (s *Service) List(ctx context.Context, filter ListFilter) (*ListResult, err
 	if err := s.fillVisitSnapshot(ctx, items); err != nil {
 		return nil, err
 	}
+	if err := s.attachAuthors(ctx, toPromptPointers(items)); err != nil {
+		return nil, err
+	}
 	totalPages := 0
 	if filter.PageSize > 0 {
 		totalPages = int((total + int64(filter.PageSize) - 1) / int64(filter.PageSize))
@@ -268,6 +294,36 @@ func (s *Service) List(ctx context.Context, filter ListFilter) (*ListResult, err
 		PageSize:   filter.PageSize,
 		Total:      total,
 		TotalPages: totalPages,
+	}, nil
+}
+
+// AuthorProfile 汇总创作者的公开资料与精选列表。
+func (s *Service) AuthorProfile(ctx context.Context, authorID uint, viewerUserID uint) (*AuthorProfile, error) {
+	if authorID == 0 {
+		return nil, ErrAuthorNotFound
+	}
+	if s.users == nil {
+		return nil, ErrAuthorNotFound
+	}
+	user, err := s.users.FindByID(ctx, authorID)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, ErrAuthorNotFound
+		}
+		return nil, fmt.Errorf("query author: %w", err)
+	}
+	stats, err := s.aggregateAuthorStats(ctx, authorID)
+	if err != nil {
+		return nil, err
+	}
+	recent, err := s.recentPromptsByAuthor(ctx, authorID, viewerUserID)
+	if err != nil {
+		return nil, err
+	}
+	return &AuthorProfile{
+		Author:        convertUserToBrief(user),
+		Stats:         stats,
+		RecentPrompts: recent,
 	}, nil
 }
 
@@ -293,6 +349,9 @@ func (s *Service) Get(ctx context.Context, id uint, viewerUserID uint) (*promptd
 		return nil, err
 	}
 	s.trackVisit(ctx, entity, viewerUserID)
+	if err := s.attachAuthors(ctx, []*promptdomain.PublicPrompt{entity}); err != nil {
+		return nil, err
+	}
 	return entity, nil
 }
 
@@ -400,6 +459,46 @@ func (s *Service) Submit(ctx context.Context, input SubmitInput) (*promptdomain.
 		return nil, err
 	}
 	return entity, nil
+}
+
+// toPromptPointers 将公共 Prompt 列表转换为指针列表，便于批量处理。
+func toPromptPointers(items []promptdomain.PublicPrompt) []*promptdomain.PublicPrompt {
+	pointers := make([]*promptdomain.PublicPrompt, 0, len(items))
+	for i := range items {
+		pointers = append(pointers, &items[i])
+	}
+	return pointers
+}
+
+// attachAuthors 批量补齐公共 Prompt 的创作者资料，减少前端额外查询。
+func (s *Service) attachAuthors(ctx context.Context, prompts []*promptdomain.PublicPrompt) error {
+	if len(prompts) == 0 || s.users == nil {
+		return nil
+	}
+	ids := make([]uint, 0, len(prompts))
+	for _, item := range prompts {
+		if item == nil || item.AuthorUserID == 0 {
+			continue
+		}
+		ids = append(ids, item.AuthorUserID)
+	}
+	ids = uniqueAuthorIDs(ids)
+	if len(ids) == 0 {
+		return nil
+	}
+	userMap, err := s.users.ListByIDs(ctx, ids)
+	if err != nil {
+		return fmt.Errorf("load author profiles: %w", err)
+	}
+	for _, item := range prompts {
+		if item == nil {
+			continue
+		}
+		if user := userMap[item.AuthorUserID]; user != nil {
+			item.Author = convertUserToBrief(user)
+		}
+	}
+	return nil
 }
 
 // populateLikeSnapshot 填充单条公共 Prompt 的点赞数量与当前用户点赞态度。
@@ -515,6 +614,94 @@ func (s *Service) calculateQualityScore(downloads uint, likes uint, visits uint6
 		}
 	}
 	return score
+}
+
+// aggregateAuthorStats 统计创作者在公共库中的基础指标。
+func (s *Service) aggregateAuthorStats(ctx context.Context, authorID uint) (AuthorStats, error) {
+	var row struct {
+		PromptCount    int64
+		TotalDownloads sql.NullInt64
+		TotalLikes     sql.NullInt64
+		TotalVisits    sql.NullInt64
+	}
+	if err := s.db.WithContext(ctx).
+		Table("public_prompts").
+		Select("COUNT(*) AS prompt_count, COALESCE(SUM(download_count),0) AS total_downloads, COALESCE(SUM(p.like_count),0) AS total_likes, COALESCE(SUM(p.visit_count),0) AS total_visits").
+		Joins("LEFT JOIN prompts p ON p.id = public_prompts.source_prompt_id").
+		Where("public_prompts.author_user_id = ? AND public_prompts.status = ?", authorID, promptdomain.PublicPromptStatusApproved).
+		Scan(&row).Error; err != nil {
+		return AuthorStats{}, fmt.Errorf("aggregate author stats: %w", err)
+	}
+	return AuthorStats{
+		PromptCount:    row.PromptCount,
+		TotalDownloads: nullInt64ToUint64(row.TotalDownloads),
+		TotalLikes:     nullInt64ToUint64(row.TotalLikes),
+		TotalVisits:    nullInt64ToUint64(row.TotalVisits),
+	}, nil
+}
+
+// recentPromptsByAuthor 返回创作者最近更新的公共 Prompt。
+func (s *Service) recentPromptsByAuthor(ctx context.Context, authorID uint, viewerUserID uint) ([]promptdomain.PublicPrompt, error) {
+	var items []promptdomain.PublicPrompt
+	if err := s.db.WithContext(ctx).
+		Where("author_user_id = ? AND status = ?", authorID, promptdomain.PublicPromptStatusApproved).
+		Order("updated_at DESC").
+		Limit(defaultCreatorShowcaseLimit).
+		Find(&items).Error; err != nil {
+		return nil, fmt.Errorf("list author prompts: %w", err)
+	}
+	if err := s.fillLikeSnapshot(ctx, viewerUserID, items); err != nil {
+		return nil, err
+	}
+	if err := s.fillVisitSnapshot(ctx, items); err != nil {
+		return nil, err
+	}
+	if err := s.attachAuthors(ctx, toPromptPointers(items)); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+// nullInt64ToUint64 将 sql.NullInt64 转换为 uint64，空值或负值均视为 0。
+func nullInt64ToUint64(v sql.NullInt64) uint64 {
+	if !v.Valid || v.Int64 <= 0 {
+		return 0
+	}
+	return uint64(v.Int64)
+}
+
+// uniqueAuthorIDs 对作者 ID 去重，避免重复数据库查询。
+func uniqueAuthorIDs(values []uint) []uint {
+	set := make(map[uint]struct{}, len(values))
+	for _, v := range values {
+		if v == 0 {
+			continue
+		}
+		set[v] = struct{}{}
+	}
+	result := make([]uint, 0, len(set))
+	for v := range set {
+		result = append(result, v)
+	}
+	return result
+}
+
+// convertUserToBrief 将用户实体裁剪为前端所需的公开字段。
+func convertUserToBrief(user *userdomain.User) *promptdomain.UserBrief {
+	if user == nil {
+		return nil
+	}
+	return &promptdomain.UserBrief{
+		ID:        user.ID,
+		Username:  user.Username,
+		Email:     user.Email,
+		AvatarURL: user.AvatarURL,
+		Headline:  user.ProfileHeadline,
+		Bio:       user.ProfileBio,
+		Location:  user.ProfileLocation,
+		Website:   user.ProfileWebsite,
+		BannerURL: user.ProfileBannerURL,
+	}
 }
 
 // trackVisit 在详情接口被访问时自增访问次数，仅在在线模式启用，并结合 Redis 做去重缓冲。
