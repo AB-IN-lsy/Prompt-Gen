@@ -26,7 +26,7 @@ import { PromptDetailModal } from "../components/public-prompts/PromptDetailModa
 import { Button } from "../components/ui/button";
 import { Badge } from "../components/ui/badge";
 import { PaginationControls } from "../components/ui/pagination-controls";
-import { cn, clampTextWithOverflow, formatOverflowLabel } from "../lib/utils";
+import { cn, clampTextWithOverflow, formatOverflowLabel, resolveAssetUrl } from "../lib/utils";
 import { toast } from "sonner";
 
 const CREATOR_LIST_PAGE_SIZE = 6;
@@ -106,6 +106,7 @@ export default function CreatorProfilePage(): JSX.Element {
 
   const profile = profileQuery.data;
   const creator: PublicPromptAuthor | null = profile?.creator ?? null;
+  const heroAvatarUrl = resolveAssetUrl(creator?.avatar_url ?? null);
   const stats = profile?.stats;
   const heroBio =
     creator?.bio && creator.bio.trim().length > 0
@@ -218,9 +219,9 @@ export default function CreatorProfilePage(): JSX.Element {
               <div className="flex flex-col gap-6 md:flex-row md:items-center">
                 <div className="relative">
                   <div className="h-32 w-32 overflow-hidden rounded-3xl border border-white/20 bg-white/90 shadow-2xl">
-                    {creator?.avatar_url ? (
+                    {heroAvatarUrl ? (
                       <img
-                        src={creator.avatar_url}
+                        src={heroAvatarUrl}
                         alt={creator?.username ?? "creator avatar"}
                         className="h-full w-full object-cover"
                       />
